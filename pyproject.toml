@@ -26,3 +26,6 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.codespell]
 ignore-words-list = "basf"
+
+[tool.ruff.lint]
+select = ["I", "F", "E", "C", "W"]
