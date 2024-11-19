@@ -1,4 +1,6 @@
-import ase
+import pathlib
+
+import ase.io
 import ase.optimize as opt
 import numpy as np
 import pandas as pd
@@ -11,12 +13,14 @@ from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer
 class StructureOptimization(zntrack.Node):
     """Structure optimization Node.
 
-    Relax the geometry for each `ase.Atoms` provided.
+    Relax the geometry for the selected `ase.Atoms`.
 
-    Attributes
+    Parameters
     ----------
     data : list[ase.Atoms]
         Atoms to relax.
+    data_id: int, default=-1
+        The index of the ase.Atoms in `data` to optimize.
     optimizer : Optimizer
         Optimizer to use.
     model : NodeWithCalculator
@@ -33,77 +37,81 @@ class StructureOptimization(zntrack.Node):
     """
 
     data: list[ase.Atoms] = zntrack.deps()
+    data_id: int = zntrack.params(-1)
     optimizer: Optimizer = zntrack.params(Optimizer.LBFGS.value)
     model: NodeWithCalculator = zntrack.deps()
     fmax: float = zntrack.params(0.05)
     steps: int = zntrack.params(100_000_000)
     plots: pd.DataFrame = zntrack.plots(y=["energy", "fmax"], x="step")
 
-    trajectory_path: str = zntrack.outs_path(zntrack.nwd / "trajectories")
+    frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.traj")
 
     def run(self):
         optimizer = getattr(opt, self.optimizer)
         calc = self.model.get_calculator()
-        self.trajectory_path.mkdir(parents=True, exist_ok=True)
+
+        atoms = self.data[self.data_id]
+        self.frames_path.parent.mkdir(exist_ok=True)
 
         energies = []
         fmax = []
 
-        for idx, atoms in enumerate(self.data):
+        def metrics_callback():
+            energies.append(atoms.get_potential_energy())
+            fmax.append(np.linalg.norm(atoms.get_forces(), axis=-1).max())
 
-            def metrics_callback():
-                energies.append(atoms.get_potential_energy())
-                fmax.append(np.linalg.norm(atoms.get_forces(), axis=-1).max())
-
-            atoms.calc = calc
-            trajectory_path = self.trajectory_path / f"trajectory_{idx}.traj"
-            dyn = optimizer(
-                atoms,
-                trajectory=trajectory_path.as_posix(),
-            )
-            dyn.attach(metrics_callback)
-            dyn.run(fmax=self.fmax, steps=self.steps)
+        atoms.calc = calc
+        dyn = optimizer(
+            atoms,
+            trajectory=self.frames_path.as_posix(),
+        )
+        dyn.attach(metrics_callback)
+        dyn.run(fmax=self.fmax, steps=self.steps)
 
         self.plots = pd.DataFrame({"energy": energies, "fmax": fmax})
         self.plots.index.name = "step"
 
     @property
-    def trajectories(self) -> list[list[ase.Atoms]]:
-        frames_list = []
-        trajectories = list(
-            self.state.fs.glob((self.trajectory_path / "trajectory_*.traj").as_posix())
-        )
-        for trajectory in trajectories:
-            with self.state.fs.open(trajectory, "rb") as f:
-                frames_list.append(list(ase.io.iread(f, format="traj")))
-        return frames_list
-
-    @property
     def frames(self) -> list[ase.Atoms]:
-        return sum(self.trajectories, [])
+        with self.state.fs.open(self.frames_path, "rb") as f:
+            return list(ase.io.iread(f, format="traj"))
 
     @property
     def figures(self) -> dict[str, go.Figure]:
         figure = go.Figure()
-        offset = 0
-        for idx, trajectory in enumerate(self.trajectories):
-            energies = [atoms.get_potential_energy() for atoms in trajectory]
-            figure.add_trace(
-                go.Scatter(
-                    x=list(range(len(energies))),
-                    y=energies,
-                    mode="lines+markers",
-                    name=f"trajectory_{idx}",
-                    customdata=np.stack([np.arange(len(energies)) + offset], axis=1),
-                )
+
+        energies = [atoms.get_potential_energy() for atoms in self.frames]
+        figure.add_trace(
+            go.Scatter(
+                x=list(range(len(energies))),
+                y=energies,
+                mode="lines+markers",
+                customdata=np.stack([np.arange(len(energies))], axis=1),
             )
-            offset += len(energies)
+        )
+
         figure.update_layout(
             title="Energy vs. Steps",
-            xaxis_title="Steps",
+            xaxis_title="Step",
             yaxis_title="Energy",
         )
-        return {"energy_vs_steps": figure}
+
+        ffigure = go.Figure()
+        ffigure.add_trace(
+            go.Scatter(
+                x=self.plots.index,
+                y=self.plots["fmax"],
+                mode="lines+markers",
+                customdata=np.stack([np.arange(len(energies))], axis=1),
+            )
+        )
+
+        ffigure.update_layout(
+            title="Fmax vs. Steps",
+            xaxis_title="Step",
+            yaxis_title="Maximum force",
+        )
+        return {"energy_vs_steps": figure, "fmax_vs_steps": ffigure}
 
     @staticmethod
     def compare(*nodes: "StructureOptimization") -> ComparisonResults:
@@ -117,12 +125,43 @@ class StructureOptimization(zntrack.Node):
                     x=list(range(len(energies))),
                     y=energies,
                     mode="lines+markers",
-                    name=node.name,
+                    name=node.name.replace(f"_{node.__class__.__name__}", ""),
                     customdata=np.stack([np.arange(len(energies)) + offset], axis=1),
                 )
             )
             offset += len(energies)
+
+        fig.update_layout(
+            title="Energy vs. Steps",
+            xaxis_title="Step",
+            yaxis_title="Energy",
+        )
+
+        # now adjusted
+
+        offset = 0
+        fig_adjusted = go.Figure()
+        for idx, node in enumerate(nodes):
+            energies = np.array([atoms.get_potential_energy() for atoms in node.frames])
+            energies -= energies[0]
+            fig_adjusted.add_trace(
+                go.Scatter(
+                    x=list(range(len(energies))),
+                    y=energies,
+                    mode="lines+markers",
+                    name=node.name.replace(f"_{node.__class__.__name__}", ""),
+                    customdata=np.stack([np.arange(len(energies)) + offset], axis=1),
+                )
+            )
+            offset += len(energies)
+
+        fig_adjusted.update_layout(
+            title="Adjusted energy vs. Steps",
+            xaxis_title="Step",
+            yaxis_title="Adjusted energy",
+        )
+
         return ComparisonResults(
             frames=frames,
-            figures={"energy_vs_steps": fig},
+            figures={"energy_vs_steps": fig, "adjusted_energy_vs_steps": fig_adjusted},
         )

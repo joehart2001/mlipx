@@ -1,12 +1,20 @@
+import fnmatch
+import json
 import uuid
+import webbrowser
 
+import dvc.api
 import typer
 import zntrack
 from tqdm import tqdm
 from typing_extensions import Annotated
 from zndraw import ZnDraw
 
+from mlipx import benchmark, recipes
+
 app = typer.Typer()
+app.add_typer(recipes.app, name="recipes")
+app.add_typer(benchmark.app, name="benchmark")
 
 
 @app.command()
@@ -15,7 +23,7 @@ def main():
 
 
 @app.command()
-def compare(
+def compare(  # noqa C901
     nodes: Annotated[list[str], typer.Argument(help="Path to the node to compare")],
     zndraw_url: Annotated[
         str,
@@ -26,27 +34,47 @@ def compare(
     ],
     kwarg: Annotated[list[str], typer.Option("--kwarg", "-k")] = None,
     token: Annotated[str, typer.Option("--token")] = None,
+    glob: Annotated[
+        bool, typer.Option("--glob", help="Allow glob patterns to select nodes.")
+    ] = False,
+    convert_nan: Annotated[bool, typer.Option()] = False,
+    browser: Annotated[
+        bool,
+        typer.Option(
+            help="""Whether to open the ZnDraw GUI in the default web browser."""
+        ),
+    ] = True,
 ):
     """Compare mlipx nodes and visualize the results using ZnDraw."""
+    # TODO: allow for glob patterns
     if kwarg is None:
         kwarg = []
     node_names, revs, remotes = [], [], []
-    # TODO support wild cards
+    if glob:
+        fs = dvc.api.DVCFileSystem()
+        with fs.open("zntrack.json", mode="r") as f:
+            all_nodes = list(json.load(f).keys())
+
     for node in nodes:
         # can be name or name@rev or name@remote@rev
         parts = node.split("@")
-        node_names.append(parts[0])
-        if len(parts) == 1:
-            revs.append(None)
-            remotes.append(None)
-        elif len(parts) == 2:
-            revs.append(parts[1])
-            remotes.append(None)
-        elif len(parts) == 3:
-            remotes.append(parts[1])
-            revs.append(parts[2])
+        if glob:
+            filtered_nodes = [x for x in all_nodes if fnmatch.fnmatch(x, parts[0])]
         else:
-            raise ValueError(f"Invalid node format: {node}")
+            filtered_nodes = [parts[0]]
+        for x in filtered_nodes:
+            node_names.append(x)
+            if len(parts) == 1:
+                revs.append(None)
+                remotes.append(None)
+            elif len(parts) == 2:
+                revs.append(parts[1])
+                remotes.append(None)
+            elif len(parts) == 3:
+                remotes.append(parts[1])
+                revs.append(parts[2])
+            else:
+                raise ValueError(f"Invalid node format: {node}")
 
     node_instances = {}
     for node_name, rev, remote in tqdm(
@@ -66,10 +94,12 @@ def compare(
         kwargs[key] = value
     result = node_instances[node_names[0]].compare(*node_instances.values(), **kwargs)
 
-    token = token or uuid.uuid4().hex
-    vis = ZnDraw(zndraw_url, token=token)
+    token = token or str(uuid.uuid4())
+    vis = ZnDraw(zndraw_url, token=token, convert_nan=convert_nan)
+    del vis[:]
     vis.extend(result["frames"])
-    del vis[0]
     vis.figures = result["figures"]
     typer.echo(f"View the results at {zndraw_url}/token/{token}")
+    if browser:
+        webbrowser.open(f"{zndraw_url}/token/{token}")
     vis.socket.sleep(5)
