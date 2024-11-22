@@ -21,62 +21,71 @@ pip install mlipx
 
 ## Quickstart
 
-This section provides a brief overview of the core features of mlipx. For more
-detailed instructions, visit the [documentation](https://mlipx.readthedocs.io).
+This section provides a brief overview of the core features of `mlipx`. For more detailed instructions, visit the [documentation](https://mlipx.readthedocs.io).
 
-### Step 1: Set Up Your Project
+Most recipes support different input formats, such as data file paths, `SMILES` strings, or Materials Project structure IDs.
 
-Create a new directory and initialize a GIT and DVC repository:
+> [!NOTE]
+> Because `mlipx` uses Git and [DVC](https://dvc.org/doc), you need to create a new project directory to run your experiments in. Here's how to set up your project:
+>
+> ```bash
+> mkdir exp
+> cd exp
+> git init && dvc init
+> ```
+> If you want to use datafiles, it is recommend to track them with `dvc add <file>` instead of `git add <file>`.
+> ```bash
+> cp /your/data/file.xyz .
+> dvc add file.xyz
+> ```
+
+### Energy-Volume Curve
+
+Compute an energy-volume curve using the `mp-1143` structure from the Materials Project and MLIPs such as `mace-mp`, `sevennet`, and `orb_v2`:
 
 ```bash
-mkdir relax
-cd relax
-git init && dvc init
-cp /your/data/file.xyz .
-dvc add file.xyz
-```
-
-### Step 2: Define Your MLIPs
-
-Create a `models.py` file to specify the MLIPs you want to evaluate. For the
-[MACE-MP-0](https://github.com/ACEsuit/mace?tab=readme-ov-file#mace-mp-materials-project-force-fields) model this could look like this
-
-```python
-import mlipx
-
-mace_mp = mlipx.GenericASECalculator(
-    module="mace.calculators",
-    class_name="mace_mp",
-    device="auto",
-    kwargs={
-        "model": "medium",
-    },
-)
-
-MODELS = {"mace_mp": mace_mp}
+mlipx recipes ev --models mace_mp,sevennet,orb_v2 --material-ids=mp-1143 --repro
+mlipx compare --glob "*EnergyVolumeCurve"
 ```
 
 > [!NOTE]
 > `mlipx` utilizes [ASE](https://wiki.fysik.dtu.dk/ase/index.html),
 > meaning any ASE-compatible calculator for your MLIP can be used.
-
-### Step 3: Run an Example Recipe
-
-Choose from one of the many
-[recipes](https://mlipx.readthedocs.io/en/latest/recipes.html). For example, to
-perform a structure optimization, run:
-
-```bash
-mlipx recipes relax --datapath file.xyz --repro
-mlipx compare --glob '*StructureOptimization'
-```
-
-### Visualization Example
+> If we do not provide a preset for your model, you can either adapt the `models.py` file, raise an [issue](https://github.com/basf/mlipx/issues/new) to request support, or submit a pull request to add your model directly.
 
 Below is an example of the resulting comparison:
 
-![ZnDraw UI](https://github.com/user-attachments/assets/18159cf5-613c-4779-8d52-7c5e37e2a32f#gh-dark-mode-only "ZnDraw UI")
-![ZnDraw UI](https://github.com/user-attachments/assets/0d673ef4-0131-4b74-892c-0b848d0669f7#gh-light-mode-only "ZnDraw UI")
+![ZnDraw UI](https://github.com/user-attachments/assets/2036e6d9-3342-4542-9ddb-bbc777d2b093#gh-dark-mode-only "ZnDraw UI")
+![ZnDraw UI](https://github.com/user-attachments/assets/c2479d17-c443-4550-a641-c513ede3be02#gh-light-mode-only "ZnDraw UI")
+
+> [!NOTE]
+> Set your default visualizer path using: `export ZNDRAW_URL=http://localhost:1234`.
+
+### Structure Optimization
+
+Compare the performance of different models in optimizing multiple molecular structures from `SMILES` representations:
+
+```bash
+mlipx recipes relax --models mace_mp,sevennet,orb_v2 --smiles "CCO,C1=CC2=C(C=C1O)C(=CN2)CCN" --repro
+mlipx compare --glob "*0_StructureOptimization"
+mlipx compare --glob "*1_StructureOptimization"
+```
+
+![ZnDraw UI](https://github.com/user-attachments/assets/7e26a502-3c59-4498-9b98-af8e17a227ce#gh-dark-mode-only "ZnDraw UI")
+![ZnDraw UI](https://github.com/user-attachments/assets/a68ac9f5-e3fe-438d-ad4e-88b60499b79e#gh-light-mode-only "ZnDraw UI")
+
+### Nudged Elastic Band (NEB)
+
+Run and compare nudged elastic band (NEB) calculations for a given start and end structure:
+
+```bash
+mlipx recipes neb --models mace_mp,sevennet,orb_v2 --datapath ../data/neb_end_p.xyz --repro
+mlipx compare --glob "*NEBs"
+```
+
+![ZnDraw UI](https://github.com/user-attachments/assets/a2e80caf-dd86-4f14-9101-6d52610b9c34#gh-dark-mode-only "ZnDraw UI")
+![ZnDraw UI](https://github.com/user-attachments/assets/0c1eb681-a32c-41c2-a15e-2348104239dc#gh-light-mode-only "ZnDraw UI")
+
 
 ## Python API
 
