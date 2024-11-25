@@ -136,6 +136,3 @@ project.repro()
 print(relax.frames)
 # >>> [ase.Atoms(...), ...]
 ```
-
-
-# TODO share env variable
