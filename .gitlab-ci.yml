@@ -12,6 +12,7 @@ pages:
     - cd examples
     - poetry run dvc remote modify origin endpointurl $AWS_ENDPOINT_URL
     - poetry run dvc pull --allow-missing
+    - cd ..
     - cd docs
     - poetry run sphinx-build -M html source build/
     - cd ..
