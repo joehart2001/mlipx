@@ -1,10 +1,16 @@
 MLIPX Documentation
 ===================
 
-:code:`mlipx` is a Python library for the evaluation of machine-learned interatomic potentials (:term:`MLIP`).
-It provides you with an ever-growing set of evaluation methods accompanied by comprehensive visualization and comparison tools.
+:code:`mlipx` is a Python library for the evaluation and benchmarking of machine-learned interatomic potentials (:term:`MLIP`). MLIPs are advanced computational models that use machine learning techniques to describe complex atomic interactions accurately and efficiently. They significantly accelerate traditional quantum mechanical modeling workflows, making them invaluable for simulating a wide range of physical phenomena, from chemical reactions to materials properties and phase transitions. MLIP testing requires more than static cross-validation protocols. While these protocols are essential, they are just the beginning. Evaluating energy and force prediction accuracies on a test set is only the first step. To determine the real-world usability of an ML model, more comprehensive testing is needed.
+
+:code:`mlipx` addresses this need by providing systematically designed testing recipes to assess the strengths and weaknesses of rapidly developing growing flavours of MLIP models. These recipes help ensure that models are robust and applicable to a wide range of scenarios. :code:`mlipx` provides you with an ever-growing set of evaluation methods accompanied by comprehensive visualization and comparison tools.
+
 The goal of this project is to provide a common platform for the evaluation of MLIPs and to facilitate the exchange of evaluation results between researchers.
 Ultimately, you should be able to determine the applicability of a given MLIP for your specific research question and to compare it to other MLIPs.
+
+By offering these capabilities, MLIPX helps researchers determine the applicability of MLIPs for specific research questions and compare them effectively while developing from scratch or finetuning universal models. This collaborative tool promotes transparency and reproducibility in MLIP evaluations.
+
+Join us in using and improving MLIPX to advance the field of machine-learned interatomic potentials. Your contributions and feedback are invaluable.
 
 .. note::
 

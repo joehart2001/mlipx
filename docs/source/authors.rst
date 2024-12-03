@@ -15,6 +15,7 @@ The creation of ``mlipx`` began during Fabian Zills internship at BASF SE, where
 - Shuang Han
 - Srishti Gupta
 - Tiago Joao Ferreira Goncalves
+- Edvin Fako
 
 
 Contribution Guidelines
