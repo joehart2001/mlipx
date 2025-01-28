@@ -1,0 +1,63 @@
+import mlipx
+import zntrack
+
+from models import MODELS
+
+project = zntrack.Project()
+
+frames = []
+
+# define different ways to initialize the data e.g. from a file, from a material id, from a smiles string
+{% if datapath %}
+with project.group("initialize"):
+    for path in {{ datapath }}:
+        frames.append(mlipx.LoadDataFile(path=path))
+{% endif %}{% if material_ids %}
+with project.group("initialize"):
+    for material_id in {{ material_ids }}:
+        frames.append(mlipx.MPRester(search_kwargs={"material_ids": [material_id]}))
+{% endif %}{% if smiles %}
+with project.group("initialize"):
+    for smiles in {{ smiles }}:
+        frames.append(mlipx.Smiles2Conformers(smiles=smiles, num_confs=1))
+{% endif %}
+
+for model_name, model in MODELS.items():
+    with project.group(model_name):
+        phon = mlipx.PhononSpectrum(
+            data=frames,
+            model=model,
+            special_points={'Γ': [0., 0., 0.],
+                            'H': [0.5, -0.5, 0.5],
+                            'N': [0., 0., 0.5],
+                            'P': [0.25, 0.25, 0.25]},
+            path_segments=['Γ', 'H', 'N', 'Γ', 'P', 'H', 'P', 'N'],
+            path_labels=['Γ', 'H', 'N', 'Γ', 'P', 'H', 'P', 'N'],
+            npoints=100,
+            supercell=(3,3,3),
+            delta=0.05,
+            fmax=0.00001,
+        )
+
+project.build()
+
+
+
+        # phon = mlipx.PhononSpectrum(
+        #     data=frames,
+        #     model=model,
+        #     special_points={{ special_points }},
+        #     path_segments={{ path_segments }},
+        #     path_labels={{ path_labels }},
+        #     npoints={{ npoints }},
+        #     supercell={{ supercell }},
+        #     delta={{ delta }},
+        #     fmax={{ fmax }},
+        # )
+
+    path_segments: list[str] = zntrack.params(['Γ', 'H', 'N', 'Γ', 'P', 'H', 'P', 'N'])
+    path_labels: list[str] = zntrack.params(['Γ', 'H', 'N', 'Γ', 'P', 'H', 'P', 'N'])
+    npoints: int = zntrack.params(100) # Number of k-points sampled along the path in the Brillouin zone.
+    supercell: tuple[int, int, int] = zntrack.params((3, 3, 3))
+    delta: float = zntrack.params(0.05) # Displacement distance in Angstroms for finite difference calculation.
+    fmax: float = zntrack.params(0.01)

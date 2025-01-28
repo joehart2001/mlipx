@@ -330,3 +330,25 @@ def adsorption(
         smiles=smiles,
         slab_config=slab_config,
     )
+
+
+@app.command()
+def phonon(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run phonon calculations."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "phonon.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+    )
