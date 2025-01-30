@@ -291,10 +291,12 @@ class VibrationalAnalysis(zntrack.Node):
 
     @staticmethod
     def compare(*nodes: "VibrationalAnalysis") -> ComparisonResults:
+
         frames = sum([node.frames for node in nodes], [])
         offset = 0
         fig = go.Figure()  # px.scatter()
         for i, node in enumerate(nodes):
+    
             fig.add_trace(
                 go.Scatter(
                     x=node.results["Frame"],

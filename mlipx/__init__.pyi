@@ -27,6 +27,8 @@ from .nodes.smiles import BuildBox, Smiles2Conformers
 from .nodes.structure_optimization import StructureOptimization
 from .nodes.updated_frames import UpdateFramesCalc
 from .nodes.vibrational_analysis import VibrationalAnalysis
+from .nodes.phonon_node import PhononSpectrum
+from .nodes.crystal import Crystal
 from .project import Project
 from .version import __version__
 
@@ -64,5 +66,7 @@ __all__ = [
     "BuildASEslab",
     "RelaxAdsorptionConfigs",
     "OrcaSinglePoint",
+    "PhononSpectrum",
+    "Crystal",
     "__version__",
 ]
