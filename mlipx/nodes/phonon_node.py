@@ -24,6 +24,56 @@ from mlipx.abc import ComparisonResults, NodeWithCalculator
 
 
 
+class BuildASEcrystal(zntrack.Node):
+    """Generate a bulk material structure.
+
+    Parameters
+    ----------
+    element: str
+        The chemical symbol of the element.
+    crystal_structure: str
+        The type of crystal structure (e.g., "bcc", "fcc", "hcp").
+    supercell: tuple[int, int, int]
+        The supercell size.
+    a: float
+        The lattice constant.
+    c: float, optional
+        The c/a ratio for hexagonal structures.
+
+    Example
+    -------
+    >>> Crystal(element="W", lattice_type="bcc", a=3.16)
+
+    """
+
+    element: str = zntrack.params()
+    lattice_type: str = zntrack.params()
+    supercell: tuple[int, int, int] = zntrack.params()
+    a: float = zntrack.params()
+    c: float = zntrack.params(default=None)  # Only needed for hcp
+    
+    frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
+    
+    def run(self):
+        if self.lattice_type == "hcp":
+            if self.c is None:
+                raise ValueError("hcp structure requires a c/a ratio (c).")
+            atoms = bulk(self.element, self.lattice_type, a=self.a, c=self.c)
+        else:
+            atoms = bulk(self.element, self.lattice_type, a=self.a)
+
+        ase.io.write(self.frames_path, atoms)
+    
+
+    @property
+    def frames(self) -> list[ase.Atoms]:
+        with self.state.fs.open(self.frames_path, "r") as f:
+            return list(ase.io.iread(f, format="extxyz"))
+
+
+
+
+
 class PhononSpectrum(zntrack.Node):
     """Performs structure relaxation and Computes the phonon spectrum of a given structure.
 
@@ -35,7 +85,8 @@ class PhononSpectrum(zntrack.Node):
         Model node with calculator for phonon spectrum calculation.
     """
     
-    data: list[ase.Atoms] = zntrack.deps()
+    #data: list[ase.Atoms] = zntrack.deps()
+    data: ase.Atoms = zntrack.deps()
     model: NodeWithCalculator = zntrack.deps()
     #model: t.Any = zntrack.deps()
 
@@ -57,11 +108,11 @@ class PhononSpectrum(zntrack.Node):
     fmax: float = zntrack.params(0.01)
     
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
-    phonon_cache: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_cache")
+    #phonon_cache: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_cache")
     phonon_spectrum_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_spectrum.csv")
-    phonon_plot_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_spectrum.png")
+    #phonon_plot_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_spectrum.png")
     results: pd.DataFrame = zntrack.plots(y="Energy [eV]", x="Wave Vector")
-    phonon_plot: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_spectrum.png")
+    #phonon_plot: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_spectrum.png")
     
     
     system: t.Literal["bulk", "molecule", "surface", "other"] = zntrack.params("bulk")
@@ -69,27 +120,23 @@ class PhononSpectrum(zntrack.Node):
 
     def run(self):
         calc = self.model.get_calculator()
-        atoms = self.data
+        atoms = self.data[0]
+        print(atoms)
+        frames = []
         results = []
         
         self.frames_path.parent.mkdir(exist_ok=True)
         
         
-        #for current_frame, atoms in tqdm(enumerate(self.data)): not looping over frames as only one structure is passed
-            # type/molecule checkes copied from vibrational_analysis.py
-        
-        if self.system is None:
-            self.system = "bulk" # Default to bulk if not specified
+        #for current_frame, atoms in tqdm(enumerate(self.data)):
+
         if self.system not in ["bulk", "molecule", "surface", "other"]:
             raise ValueError(f"Invalid system type: {self.system}")
         print(f"System type: {self.system}")
         
-        if self.calc_type is None:
-            if "calc_type" in atoms.info:
-                self.calc_type = "phonons"
-        if self.calc_type not in ["phonons", "relax", "static"]:
-            raise ValueError(f"Invalid calculation type: {self.calc_type}")
-        print(f"Calculation type: {self.calc_type}")
+        # if self.calc_type not in ["phonons", "relax", "static"]:
+        #     raise ValueError(f"Invalid calculation type: {self.calc_type}")
+        # print(f"Calculation type: {self.calc_type}")
 
         atoms.calc = calc
         
@@ -97,13 +144,12 @@ class PhononSpectrum(zntrack.Node):
         optimizer = LBFGS(atoms)
         optimizer.run(fmax = self.fmax)
         # Save relaxed structure to cache
-        relaxed_structure_path = self.phonon_cache / "relaxed_structure.xyz"
-        ase.io.write(relaxed_structure_path, atoms, format="extxyz")  # Fixed
-        print(f"Relaxed structure saved to: {relaxed_structure_path}")
+        # relaxed_structure_path = self.phonon_cache / "relaxed_structure.xyz"
+        # ase.io.write(relaxed_structure_path, atoms, format="extxyz")  # Fixed
+        # print(f"Relaxed structure saved to: {relaxed_structure_path}")
         
         
         # Phonon spectrum calculation
-        
         ph = Phonons(atoms, calc, supercell=self.supercell, delta=self.delta)
         ph.clean()  # Clean previous results to avoid caching
         ph.run() # run phonon displcaement calculation
@@ -113,7 +159,9 @@ class PhononSpectrum(zntrack.Node):
         # Define the path through the Brillouin zone
         path = bandpath(self.path_segments, atoms.cell, npoints=self.npoints, special_points=self.special_points)
         bands = ph.get_band_structure(path)
-        frequencies = bands.energies.T
+        frequencies = np.array(bands.energies.T).squeeze()
+        #print("frequencies shape:", frequencies.shape)
+        #print("frequency:", frequencies)
     
         
         if not self.phonon_spectrum_path.parent.exists():
@@ -126,8 +174,9 @@ class PhononSpectrum(zntrack.Node):
             json.dump(band_data, f)
         print(f"Phonon spectrum saved to: {self.phonon_spectrum_path}")
         
-        ase.io.write(self.frames_path, atoms, append=True)
+        
         #ase.io.write(self.frames_path, atoms, format="extxyz")
+        ase.io.write(self.frames_path, atoms, format="xyz")
         print(f"Frames saved at {self.frames_path}")
         
         for k_idx, k_point in enumerate(path.kpts):
@@ -138,7 +187,6 @@ class PhononSpectrum(zntrack.Node):
                     "Mode": mode_idx,
                     "Frequency (eV)": frequency
                 }) # and "Frame": current_frame,  # If iterating over multiple structures
-
 
 
         self.results = pd.DataFrame(results)
@@ -156,10 +204,6 @@ class PhononSpectrum(zntrack.Node):
         
     @property
     def phonon_data(self) -> dict:
-        """Load the phonon spectrum data from the saved JSON file."""
-        if not self.phonon_spectrum_path.exists():
-            raise FileNotFoundError(f"Phonon spectrum data not found at {self.phonon_spectrum_path}")
-        
         with self.phonon_spectrum_path.open("r") as f:
             return json.load(f)
         
@@ -180,18 +224,29 @@ class PhononSpectrum(zntrack.Node):
     def compare(*nodes: "PhononSpectrum") -> ComparisonResults:
         frames = sum([node.frames for node in nodes], [])
         fig = go.Figure()
-        print(node.phonon_data["frequencies"])
+
         for i, node in enumerate(nodes):
-            for freq in node.phonon_data["frequencies"]:
-                fig.add_trace(go.Scatter(
-                    x=node.phonon_data["path"][0],
-                    y=freq,
-                    mode="lines",
-                    name=node.name.replace(f"_{node.__class__.__name__}", ""), # remove class name from node name
-                ))
+            # check that the phonon spectrum data exists
+            if not node.phonon_spectrum_path.exists():
+                raise FileNotFoundError(f"Phonon spectrum data not found at {node.phonon_spectrum_path}")
+
+            df = pd.read_csv(node.phonon_spectrum_path)
+            frequencies = df["Frequency (eV)"].values
+            wave_vector = df["Wave Vector"].values
+
+            print(f"Loaded {len(frequencies)} frequencies for {node.name}")
+
+            fig.add_trace(go.Scatter(
+                x=wave_vector,
+                y=frequencies,
+                mode="lines",
+                name=node.name.replace(f"_{node.__class__.__name__}", ""),
+            ))
+
         fig.update_layout(
             title="Phonon Spectrum Comparison",
             xaxis_title="Wave Vector",
             yaxis_title="Energy (eV)"
         )
-        return ComparisonResults(frames=frames, figures={"Phonon Comparison": fig})
+
+        return ComparisonResults(frames=frames, figures={"Phonons": fig})
