@@ -28,7 +28,10 @@ from .nodes.structure_optimization import StructureOptimization
 from .nodes.updated_frames import UpdateFramesCalc
 from .nodes.vibrational_analysis import VibrationalAnalysis
 from .nodes.phonon_node import PhononSpectrum, BuildASEcrystal
-from .nodes.crystal import Crystal
+#from .nodes.crystal import Crystal
+from .nodes.phonon_fc2_node import PhononForceConstants
+from .nodes.phonon_dispersion_node import PhononDispersion
+from .nodes.phonon_benchmark import PhononBenchmark
 from .project import Project
 from .version import __version__
 
@@ -69,5 +72,8 @@ __all__ = [
     "PhononSpectrum",
     "Crystal",
     "BuildASEcrystal",
+    "PhononForceConstants",
+    "PhononDispersion",
+    "PhononBenchmark",
     "__version__",
 ]

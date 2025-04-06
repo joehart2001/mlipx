@@ -90,10 +90,10 @@ class PhononSpectrum(zntrack.Node):
     model: NodeWithCalculator = zntrack.deps()
     #model: t.Any = zntrack.deps()
 
-    special_points: dict[str, list[float]] = zntrack.params({'Γ': [0., 0., 0.],
-                                                             'H': [0.5, -0.5, 0.5],
-                                                             'N': [0., 0., 0.5],
-                                                             'P': [0.25, 0.25, 0.25]})
+    # special_points: dict[str, list[float]] = zntrack.params({'Γ': [0., 0., 0.],
+    #                                                          'H': [0.5, -0.5, 0.5],
+    #                                                          'N': [0., 0., 0.5],
+    #                                                          'P': [0.25, 0.25, 0.25]})
     special_points: dict[str, list[float]] = zntrack.params(
         default_factory=lambda: {'Γ': [0., 0., 0.],
                                     'H': [0.5, -0.5, 0.5],
@@ -105,7 +105,7 @@ class PhononSpectrum(zntrack.Node):
     npoints: int = zntrack.params(100) # Number of k-points sampled along the path in the Brillouin zone.
     supercell: tuple[int, int, int] = zntrack.params((3, 3, 3))
     delta: float = zntrack.params(0.05) # Displacement distance in Angstroms for finite difference calculation.
-    fmax: float = zntrack.params(0.01)
+    fmax: float = zntrack.params(0.00001)
     
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
     #phonon_cache: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_cache")
@@ -154,6 +154,7 @@ class PhononSpectrum(zntrack.Node):
         ph.clean()  # Clean previous results to avoid caching
         ph.run() # run phonon displcaement calculation
         ph.read(acoustic=True) # read vibrational modes
+        
         
         
         # Define the path through the Brillouin zone
@@ -221,8 +222,9 @@ class PhononSpectrum(zntrack.Node):
         return {"Phonon Spectrum": fig}
 
     @staticmethod
-    def compare(*nodes: "PhononSpectrum") -> ComparisonResults:
+    def compare(*nodes: "PhononSpectrum", selected_models: t.Optional[list[str]] = None) -> ComparisonResults:
         frames = sum([node.frames for node in nodes], [])
+        print("frames:", frames)
         fig = go.Figure()
 
         for i, node in enumerate(nodes):
@@ -230,6 +232,12 @@ class PhononSpectrum(zntrack.Node):
             if not node.phonon_spectrum_path.exists():
                 raise FileNotFoundError(f"Phonon spectrum data not found at {node.phonon_spectrum_path}")
 
+            model_name = node.name.replace(f"_{node.__class__.__name__}", "")
+            print(f"Model name: {model_name}")
+            # skips the rest of the loop if specific models have been specified and the current model is not in the selected_models list
+            if selected_models is not None and model_name not in selected_models:
+                continue
+            
             df = pd.read_csv(node.phonon_spectrum_path)
             frequencies = df["Frequency (eV)"].values
             wave_vector = df["Wave Vector"].values
@@ -239,14 +247,46 @@ class PhononSpectrum(zntrack.Node):
             fig.add_trace(go.Scatter(
                 x=wave_vector,
                 y=frequencies,
-                mode="lines",
+                #mode="lines",
+                mode="markers",
                 name=node.name.replace(f"_{node.__class__.__name__}", ""),
             ))
 
+
+
+        special_points = nodes[0].special_points
+        path_segments = nodes[0].path_segments
+        npoints = nodes[0].npoints
+    
+        x_positions = [0]
+        for i in range(len(path_segments) - 1):
+            k1 = special_points[path_segments[i]]
+            k2 = special_points[path_segments[i + 1]]
+            x_positions.append(x_positions[-1] + np.linalg.norm(np.array(k1) - np.array(k2)))
+        
+        # Normalize x_positions to match the number of points
+        x_positions = np.array(x_positions) * (npoints - 1) / max(x_positions)
+        path_labels = path_segments  # Labels should match path_segments
+        
+        # Add vertical lines for special points
+        for x in x_positions:
+            fig.add_trace(go.Scatter(
+                x=[x, x], y=[0, max(frequencies.flatten())],
+                mode="lines",
+                line=dict(color="black", dash="dash", width=1),
+                showlegend=False  # Hide from legend
+            ))
+
+        # Update layout with x-axis ticks and labels
         fig.update_layout(
             title="Phonon Spectrum Comparison",
-            xaxis_title="Wave Vector",
-            yaxis_title="Energy (eV)"
+            xaxis=dict(
+                title="Wave Vector",
+                tickmode="array",
+                tickvals=x_positions,
+                ticktext=path_labels
+            ),
+            yaxis=dict(title="Energy (eV)"),
+            showlegend=True
         )
-
         return ComparisonResults(frames=frames, figures={"Phonons": fig})
