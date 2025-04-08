@@ -31,7 +31,7 @@ from .nodes.phonon_node import PhononSpectrum, BuildASEcrystal
 #from .nodes.crystal import Crystal
 from .nodes.phonon_fc2_node import PhononForceConstants
 from .nodes.phonon_dispersion_node import PhononDispersion
-from .nodes.phonon_benchmark import PhononBenchmark
+from .nodes.phonon_ref_to_node import PhononRefToNode
 from .project import Project
 from .version import __version__
 
@@ -74,6 +74,6 @@ __all__ = [
     "BuildASEcrystal",
     "PhononForceConstants",
     "PhononDispersion",
-    "PhononBenchmark",
+    "PhononRefToNode",
     "__version__",
 ]

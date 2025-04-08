@@ -95,6 +95,50 @@ def init_phonopy(
     return phonons
 
 
+
+def init_phonopy_from_ref(
+    atoms: Atoms,
+    fc2_supercell: np.ndarray | None = None,  
+    primitive_matrix: Any = "auto",
+    log: str | Path | bool = True,
+    symprec: float = 1e-5,
+    displacement_dataset: dict | None = None,
+    **kwargs: Any,
+) -> tuple[Phonopy, list[Any]]:
+    """Calculate fc2 and fc3 force lists from phonopy.
+
+    """
+    if not log:
+        log_level = 0
+    elif log is not None:
+        log_level = 1
+
+    if fc2_supercell is not None :
+        _fc2_supercell = fc2_supercell
+    else:
+        if "fc2_supercell" in atoms.info.keys() :
+            _fc2_supercell = atoms.info["fc2_supercell"]
+        else:
+            raise ValueError(f'{atoms.get_chemical_formula(mode="metal")=} "fc2_supercell" was not found in atoms.info and was not provided as an argument when calculating force sets.')
+
+
+    # Initialise Phonopy object
+    phonons = aseatoms2phonopy(
+        atoms,
+        fc2_supercell=_fc2_supercell,
+        primitive_matrix=primitive_matrix,
+        symprec=symprec,
+        log_level=log_level,
+        **kwargs,
+    )
+    
+    # set the displacement dataset
+    phonons.dataset = displacement_dataset
+
+
+    return phonons
+
+
 def get_fc2_and_freqs(
     phonons: Phonopy,
     calculator: Calculator | None = None,

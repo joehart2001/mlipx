@@ -50,6 +50,10 @@ class StructureOptimization(zntrack.Node):
         optimizer = getattr(opt, self.optimizer)
         calc = self.model.get_calculator()
 
+        if not self.data:
+            print(f"[StructureOptimization] No input data provided. Skipping: {self.name}")
+            return # added as alexandria database has mp-ids that have been removed from MP
+        
         atoms = self.data[self.data_id]
         self.frames_path.parent.mkdir(exist_ok=True)
 
