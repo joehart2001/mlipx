@@ -26,6 +26,7 @@ import matplotlib.pyplot as plt
 from matplotlib import gridspec
 import pickle
 import glob
+import re
 
 
 from scipy.stats import gaussian_kde
@@ -42,7 +43,7 @@ from phonopy.phonon.band_structure import get_band_qpoints_by_seekpath
 import os
 import plotly.express as px
 import dash
-from dash import dcc, html, Input, Output
+from dash import dcc, html, Input, Output, State, MATCH
 import base64
 
 import warnings
@@ -384,282 +385,11 @@ class PhononDispersion(zntrack.Node):
 
 
 
-    @staticmethod
-    def compare_reference_old(node, reference_dir, mp_id):
-        
-        # ----------setup ticks using node------------
-        fig = plt.figure(figsize=(9, 5))
-        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
-        ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])  # band structure
-        ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])  # DOS
-
-        
-        band_structure = node.band_structure
-        distances = band_structure["distances"]
-        frequencies = band_structure["frequencies"]
-        
-        phonons = load_phonopy(node.phonon_obj_path)
-        phonons.auto_band_structure()
-        phonons.auto_total_dos()
-        dos = phonons.get_total_dos_dict()
-        dos_freqs = dos["frequency_points"]
-        dos_values = dos["total_dos"]
-        
-        labels = phonons.band_structure.labels
-        connections = phonons.band_structure.path_connections
-        connections = [True] + connections
-
-        xticks = []
-        xticklabels = []
-        cumulative_dist = 0.0
-        i = 0
-
-        for segment_dist, connected in zip(distances, connections):
-            start_label = labels[i]
-            end_label = labels[i + 1]
-
-            start_pos = cumulative_dist
-            end_pos = cumulative_dist + (segment_dist[-1] - segment_dist[0])
-
-            if not connected:
-                merged_label = f"{start_label}|{end_label}"
-                xticks.append(start_pos)
-                xticklabels.append(merged_label)
-                i += 2
-            else:
-                xticks.append(start_pos)
-                xticklabels.append(start_label)
-                i += 1
-
-            cumulative_dist = end_pos
-
-        xticks.append(cumulative_dist)
-        xticklabels.append(labels[-1])
-        
-        
-        
-        # -------------reference data----------------
-        # reference file layed out as e.g. mp-1234-formuala-bands.json and mp-1234-formuala-dos.json
-        reference_dir = pathlib.Path(reference_dir)
-        band_file = None
-        dos_file = None
-
-        for file in reference_dir.glob(f"mp-{mp_id}-*-bands.json"):
-            band_file = file
-        for file in reference_dir.glob(f"mp-{mp_id}-*-dos.json"):
-            dos_file = file
-
-        if not band_file or not dos_file:
-            raise FileNotFoundError(f"Reference files for {mp_id} not found in {reference_dir}")
-
-        with open(band_file, "r") as f:
-            ref_bands = json.load(f)
-
-        with open(dos_file, "r") as f:
-            ref_dos = json.load(f)
-            
-            
-        ref_band_data = (ref_bands['bands'])
-        ref_dos_densities, ref_dos_freq = ref_dos['densities'], ref_dos['frequencies']
-        
-        #-----------------------normalise reference data-----------------------
-        # normalise the x-axis to match the node's distance for each segment
-        segment_lengths = [segment[-1] - segment[0] for segment in distances]
-        n_segments = len(segment_lengths)
-        ref_bands = np.array(ref_bands['bands'])  # shape (n_bands, total_kpoints)
-        total_kpoints = ref_bands.shape[1]
-
-        if total_kpoints % n_segments != 0:
-            raise ValueError("Cannot evenly split reference bands into same number of segments as computed data.")
-
-        ref_points_per_segment = total_kpoints // n_segments
-
-        ref_band_data_x = []
-        cumulative = 0.0
-
-        for seg_len in segment_lengths:
-            segment_x = np.linspace(cumulative, cumulative + seg_len, ref_points_per_segment, endpoint=False)
-            ref_band_data_x.append(segment_x)
-            cumulative += seg_len
-
-        ref_band_data_x = np.concatenate(ref_band_data_x)
-        
-
-        #-----------------------plotting-----------------------
-        # node band structure
-        model = node.name.split("/")[0]
-        for dist_segment, freq_segment in zip(distances, frequencies):
-            for band in freq_segment.T:
-                ax1.plot(dist_segment, band, lw=1, linestyle='--', label=model, color='red')
-
-        ax2.plot(dos_values, dos_freqs, lw=1.2, color="red")
-        
-        # reference band structure
-        for band in ref_band_data:
-            ax1.plot(ref_band_data_x, band, lw=1, label="Reference", color="blue")
-            
-        ax2.plot(ref_dos_densities, ref_dos_freq, lw=1.2, color="blue")
-            
-        
-
-        for x in xticks:
-            ax1.axvline(x=x, color='k', linewidth=1)
-        
-        ax1.axhline(0, color='k', linewidth=1)
-        ax2.axhline(0, color='k', linewidth=1)
-        
-        ax1.set_xticks(xticks, xticklabels)
-        ax1.set_xlim(xticks[0], xticks[-1])
-        ax1.set_ylabel("Frequency (THz)")
-        ax1.set_xlabel("Wave Vector")
-        
-        comp_freqs = np.concatenate(band_structure["frequencies"]).flatten()
-        ref_freqs = np.array(ref_band_data).flatten()
-        all_freqs = np.concatenate([comp_freqs, ref_freqs])
-
-        ax1.set_ylim(all_freqs.min() - 0.4, all_freqs.max() + 0.4)
-        ax2.set_ylim(ax1.get_ylim())
-                
-        plt.setp(ax2.get_yticklabels(), visible=False)
-        ax2.set_ylim(ax1.get_ylim())
-        ax2.set_xlabel("DOS")
-        
-        handles, labels = ax1.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        ax1.legend(by_label.values(), by_label.keys())
-        
-        ax1.grid(True, linestyle=':', linewidth=0.5)
-        ax2.grid(True, linestyle=':', linewidth=0.5)
-        plt.tight_layout()
-        plt.show()
-        return phonons
     
     
 
 
 
-    #@staticmethod
-    def compare_reference(self, node_pred, node_ref, correlation_plot_mode = False, model_name = None):
-        
-        # ----------setup ticks using node------------
-        fig = plt.figure(figsize=(9, 5))
-        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
-        ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])  # band structure
-        ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])  # DOS
-
-        phonons_pred = load_phonopy(node_pred.phonon_obj_path)
-        phonons_ref = load_phonopy(node_ref.phonon_obj_path)
-
-        band_structure_pred = node_pred.band_structure
-        distances_pred = band_structure_pred["distances"]
-        frequencies_pred = band_structure_pred["frequencies"]
-        dos_freqs_pred, dos_values_pred = node_pred.dos
-        
-
-        
-        band_structure_ref = node_ref.band_structure
-        distances_ref = band_structure_ref["distances"]
-        frequencies_ref = band_structure_ref["frequencies"]
-        dos_freqs_ref, dos_values_ref = node_ref.dos
-
-        # print("distances pred", len(distances_pred[0]))
-        # print("distances ref", len(distances_ref[0]))
-        
-        
-        labels = node_ref.labels
-        connections = node_ref.connections
-        connections = [True] + connections
-        
-        xticks, xticklabels = self._build_xticks(distances_ref, labels, connections)
-        
-
-        #-----------------------plotting-----------------------
-        # pred band structure
-        model = node_pred.name.split("/")[0]
-        for dist_segment, freq_segment in zip(distances_pred, frequencies_pred):
-            for band in freq_segment.T:
-                ax1.plot(dist_segment, band, lw=1, linestyle='--', label=model, color='red')
-
-        ax2.plot(dos_values_pred, dos_freqs_pred, lw=1.2, color="red", linestyle='--')
-        
-        # reference band structure
-        for dist_segment, freq_segment in zip(distances_ref, frequencies_ref):
-            for band in freq_segment.T:
-                ax1.plot(dist_segment, band, lw=1, linestyle='-', label="PBE", color='blue')
-            
-        ax2.plot(dos_values_ref, dos_freqs_ref, lw=1.2, color="blue")
-            
-        
-
-        for x in xticks:
-            ax1.axvline(x=x, color='k', linewidth=1)
-        
-        ax1.axhline(0, color='k', linewidth=1)
-        ax2.axhline(0, color='k', linewidth=1)
-        
-        ax1.set_xticks(xticks, xticklabels)
-        ax1.set_xlim(xticks[0], xticks[-1])
-        ax1.set_ylabel("Frequency (THz)")
-        ax1.set_xlabel("Wave Vector")
-        
-        pred_freqs_flat = np.concatenate(frequencies_pred).flatten()
-        ref_freqs_flat = np.concatenate(frequencies_ref).flatten()
-        all_freqs = np.concatenate([pred_freqs_flat, ref_freqs_flat])
-
-        
-        ax1.set_ylim(all_freqs.min() - 0.4, all_freqs.max() + 0.4)
-        ax2.set_ylim(ax1.get_ylim())
-                
-        plt.setp(ax2.get_yticklabels(), visible=False)
-        ax2.set_ylim(ax1.get_ylim())
-        ax2.set_xlabel("DOS")
-        
-        handles, labels = ax1.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        fig.legend(
-                    by_label.values(),
-                    by_label.keys(),
-                    loc='upper center',
-                    bbox_to_anchor=(0.8, 1.02),  # Right of center title
-                    frameon=False,
-                    ncol=2,
-                    fontsize=14,    
-                    )
-        
-        ax1.grid(True, linestyle=':', linewidth=0.5)
-        ax2.grid(True, linestyle=':', linewidth=0.5)
-        
-        chemical_formula = get_chemical_formula(phonons_ref)
-        mp_id = node_ref.name.split("_")[1]
-        plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
-            
-            
-        
-        if correlation_plot_mode:
-            
-            if not os.path.exists(f"nodes/{model_name}/phonons-dispersion/phonon_plots"):
-                os.makedirs(f"nodes/{model_name}/phonons-dispersion/phonon_plots")
-            
-            phonon_plot_path = f"nodes/{model_name}/phonons-dispersion/phonon_plots/dispersion_{model_name}_{mp_id}.png"
-            fig.savefig(phonon_plot_path, bbox_inches='tight')
-            plt.close(fig)
-            return phonon_plot_path
-        
-        else:
-            plt.show()
-            
-        return
-    
-    
-
-        
-        
-        
-
-        
-        
-    
-    
     def _plot_phonons(self, band_structure, dos, labels, connections, reference_phonons, ref_dos, mp_id, chemical_formula, model_name):
 
         phonons_freq = band_structure["frequencies"]
@@ -758,10 +488,10 @@ class PhononDispersion(zntrack.Node):
         
         plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
         
-        if not os.path.exists(f"nodes/{model_name}/phonons-dispersion/phonon_plots"):
-            os.makedirs(f"nodes/{model_name}/phonons-dispersion/phonon_plots")
+        if not os.path.exists(f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots"):
+            os.makedirs(f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots")
         
-        phonon_plot_path = f"nodes/{model_name}/phonons-dispersion/phonon_plots/dispersion_{model_name}_{mp_id}.png"
+        phonon_plot_path = f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots/dispersion_{model_name}_{mp_id}.png"
         fig.savefig(phonon_plot_path, bbox_inches='tight')
         plt.close(fig)
         
@@ -770,368 +500,390 @@ class PhononDispersion(zntrack.Node):
     
     
     
+    def prettify_chemical_formula(self, formula: str) -> str:
+        """
+        Converts a chemical formula into a prettier format for matplotlib titles.
 
-    #@property
-    def max_freq_benchmark_interactive_old(self, phonon_dict, reference_dir, model):
+        Examples:
+            "Al2O3"   -> "Al$_2$O$_3$"
+            "Fe12O19" -> "Fe$_{12}$O$_{19}$"
+            "NaCl"    -> "NaCl"
+        """
+        
+        parts = re.findall(r"([A-Z][a-z]*)(\d*)", formula)
+        pretty = ""
+        for element, count in parts:
+            if count == "":
+                pretty += element
+            else:
+                pretty += f"{element}$_{{{count}}}$"  # use curly braces for multi-digit numbers
+        return pretty
+
+    
+    
+    
+    
+    
+
+
+    #@staticmethod
+    def compare_reference(self, node_pred, node_ref, correlation_plot_mode = False, model_name = None):
+        
+        # ----------setup ticks using node------------
+        fig = plt.figure(figsize=(9, 5))
+        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
+        ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])  # band structure
+        ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])  # DOS
+
+        phonons_pred = load_phonopy(node_pred.phonon_obj_path)
+        phonons_ref = load_phonopy(node_ref.phonon_obj_path)
+
+        band_structure_pred = node_pred.band_structure
+        distances_pred = band_structure_pred["distances"]
+        frequencies_pred = band_structure_pred["frequencies"]
+        dos_freqs_pred, dos_values_pred = node_pred.dos
+        
+
+        
+        band_structure_ref = node_ref.band_structure
+        distances_ref = band_structure_ref["distances"]
+        frequencies_ref = band_structure_ref["frequencies"]
+        dos_freqs_ref, dos_values_ref = node_ref.dos
+
+        # print("distances pred", len(distances_pred[0]))
+        # print("distances ref", len(distances_ref[0]))
         
         
-        band_strucuture_dict = {}
-        for mp_id in phonon_dict.keys():
-            for model_name, phonon in phonon_dict[mp_id].items():
-                band_strucuture_dict.setdefault(mp_id, {})[model_name] = phonon.band_structure
+        labels = node_ref.labels
+        connections = node_ref.connections
+        connections = [True] + connections
+        
+        xticks, xticklabels = self._build_xticks(distances_ref, labels, connections)
+        
+
+        #-----------------------plotting-----------------------
+        # pred band structure
+        model = node_pred.name.split("_")[0]
+        for dist_segment, freq_segment in zip(distances_pred, frequencies_pred):
+            for band in freq_segment.T:
+                ax1.plot(dist_segment, band, lw=1, linestyle='--', label=model, color='red')
+
+        ax2.plot(dos_values_pred, dos_freqs_pred, lw=1.2, color="red", linestyle='--')
+        
+        # reference band structure
+        for dist_segment, freq_segment in zip(distances_ref, frequencies_ref):
+            for band in freq_segment.T:
+                ax1.plot(dist_segment, band, lw=1, linestyle='-', label="PBE", color='blue')
+            
+        ax2.plot(dos_values_ref, dos_freqs_ref, lw=1.2, color="blue")
+            
+        
+
+        for x in xticks:
+            ax1.axvline(x=x, color='k', linewidth=1)
+        
+        ax1.axhline(0, color='k', linewidth=1)
+        ax2.axhline(0, color='k', linewidth=1)
+        
+        ax1.set_xticks(xticks, xticklabels)
+        ax1.set_xlim(xticks[0], xticks[-1])
+        ax1.set_ylabel("Frequency (THz)")
+        ax1.set_xlabel("Wave Vector")
+        
+        pred_freqs_flat = np.concatenate(frequencies_pred).flatten()
+        ref_freqs_flat = np.concatenate(frequencies_ref).flatten()
+        all_freqs = np.concatenate([pred_freqs_flat, ref_freqs_flat])
+
+        
+        ax1.set_ylim(all_freqs.min() - 0.4, all_freqs.max() + 0.4)
+        ax2.set_ylim(ax1.get_ylim())
                 
-
-
+        plt.setp(ax2.get_yticklabels(), visible=False)
+        ax2.set_ylim(ax1.get_ylim())
+        ax2.set_xlabel("DOS")
         
-        # -------------reference data----------------
-        # reference file layed out as e.g. mp-1234-formuala-bands.json and mp-1234-formuala-dos.json
-        reference_dir = pathlib.Path(reference_dir)
-        ref_band_data_dict = {}
-        ref_benchmarks_dict = {}
-        phonon_plot_paths = {}
-        benchmark_dict_calc = {}
-        point_index_to_id = [] # for plotting later
-
-        for mp_id in phonon_dict.keys():
-            ref_benchmarks_dict[mp_id] = {}
-            ref_band_data_dict[mp_id] = {}
+        handles, labels = ax1.get_legend_handles_labels()
+        by_label = dict(zip(labels, handles))
+        fig.legend(
+                    by_label.values(),
+                    by_label.keys(),
+                    loc='upper center',
+                    bbox_to_anchor=(0.8, 1.02),  # Right of center title
+                    frameon=False,
+                    ncol=2,
+                    fontsize=14,    
+                    )
         
-            band_file = None
-            dos_file = None
+        ax1.grid(True, linestyle=':', linewidth=0.5)
+        ax2.grid(True, linestyle=':', linewidth=0.5)
+        
+        chemical_formula = get_chemical_formula(phonons_ref)
+        chemical_formula = self.prettify_chemical_formula(chemical_formula)
+        mp_id = node_ref.name.split("_")[-1]
+        plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
             
             
-            for file in reference_dir.glob(f"{mp_id}-*-bands.json"):
-                band_file = file
-            for file in reference_dir.glob(f"{mp_id}-*-dos.json"):
-                dos_file = file
-
-            if not band_file or not dos_file:
-                raise FileNotFoundError(f"Reference files for {mp_id} not found in {reference_dir}")
-
-            with open(band_file, "r") as f:
-                ref_bands = json.load(f)
-
-            with open(dos_file, "r") as f:
-                ref_dos = json.load(f)
-                
-                
-            ref_band_data = (ref_bands['bands'])
-            ref_band_data_dict[mp_id] = ref_band_data
+        
+        if correlation_plot_mode:
             
+            if not os.path.exists(f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots"):
+                os.makedirs(f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots")
             
-            # calculate dos dependent benchmarks
-            ref_dos_densities, ref_dos_freq = ref_dos['densities'], ref_dos['frequencies']
-            ref_benchmarks_dict[mp_id]['max_freq'] = np.max(ref_dos_freq)
+            phonon_plot_path = f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots/dispersion_{model_name}_{mp_id}.png"
+            fig.savefig(phonon_plot_path, bbox_inches='tight')
+            plt.close(fig)
+            return phonon_plot_path
+        
+        else:
+            plt.show()
             
-            phonon_plot_paths[mp_id] = {}
-            for model_name in phonon_dict[mp_id].keys():
-                
-                # phonon plots
-                band_structure, dos, phonon = self._load_band_and_dos(phonon_dict[mp_id][model].phonon_obj_path)
-                chemical_formula = get_chemical_formula(phonon)
-
-                # max freq from models
-                benchmark_dict_calc[mp_id] = {}
-                for model_name in band_strucuture_dict[mp_id].keys():
-                    benchmark_dict_calc[mp_id][model_name] = {}
-                    benchmark_dict_calc[mp_id][model_name]['max_freq'] = np.max(dos['frequency_points'])
-                
-                labels = phonon.band_structure.labels
-                connections = phonon.band_structure.path_connections
-                connections = [True] + connections
-                
-                phonon_plot_path = self._plot_phonons(band_structure, dos,
-                                labels, connections,
-                                ref_band_data_dict[mp_id], ref_dos,
-                                mp_id,
-                                chemical_formula,
-                                model_name)
-
-                phonon_plot_paths[mp_id][model_name] = phonon_plot_path
-                point_index_to_id.append((mp_id, model_name))
-            
-
+        return
+    
 
         
-        #------------------------pair plot---------------------
-        
-        # # create array for plotting
-        max_freqs_calc = []
-        max_freqs_ref = []
-        for (mp_id, model_name) in point_index_to_id:
-            max_freqs_calc.append(benchmark_dict_calc[mp_id][model_name]['max_freq'])
-            max_freqs_ref.append(ref_benchmarks_dict[mp_id]['max_freq'])
-        
-
-        hover_labels = [f"{mp_id} ({model_name})" for (mp_id, model_name) in point_index_to_id]
-        max_val = max(max(max_freqs_calc), max(max_freqs_ref)) * 1.05
-
-        scatter_fig = px.scatter(
-            x=max_freqs_ref,
-            y=max_freqs_calc,
-            hover_name=hover_labels,
-            labels={
-                'x': 'Reference Max Frequency (THz)',
-                'y': 'Calculated Max Frequency (THz)'
-            }
-        )
-
-        scatter_fig.add_trace(go.Scatter(
-            x=[0, max_val],
-            y=[0, max_val],
-            mode='lines',
-            name='y = x',
-            line=dict(color='black', dash='dash')
-        ))
-
-        scatter_fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font_color='black',
-            xaxis=dict(range=[0, max_val], showgrid=True, gridcolor='lightgray'),
-            yaxis=dict(range=[0, max_val], showgrid=True, gridcolor='lightgray')
-        )
-
-        # --- Dash app ---
-        app = dash.Dash(__name__)
-
-        app.layout = html.Div([
-            html.H2("Pair Correlation Plot: Max Frequency vs Reference", style={"color": "black"}),
-
-            html.Div([
-                dcc.Graph(
-                    id='pair-correlation-plot',
-                    figure=scatter_fig,
-                    style={"width": "45vw", "height": "80vh", "paddingBottom": "40px"}
-                ),
-                html.Div(
-                    id='phonon-plot-display',
-                    style={
-                        "width": "50vw",
-                        "height": "80vh",
-                        "marginLeft": "2vw",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                        "border": "1px solid #ccc",
-                        "padding": "10px",
-                        "backgroundColor": "#f9f9f9"
-                    }
-                )
-            ], style={
-                "display": "flex",
-                "flexDirection": "row",
-                "alignItems": "center",
-                "justifyContent": "space-between"
-            })
-        ], style={"backgroundColor": "white", "padding": "20px"})
-
-        @app.callback(
-            Output('phonon-plot-display', 'children'),
-            Input('pair-correlation-plot', 'clickData')
-        )
-        def display_phonon_plot(clickData):
-            if clickData is None:
-                return html.Div("Click on a point to view its phonon dispersion plot.")
-
-            point_index = clickData['points'][0]['pointIndex']
-            mp_id, model_name = point_index_to_id[point_index]
-            img_path = phonon_plot_paths[mp_id][model_name]
-
-            encoded_img = base64.b64encode(open(img_path, 'rb').read()).decode()
-
-            return html.Img(
-                src=f'data:image/png;base64,{encoded_img}',
-                style={
-                    "width": "80%",
-                    "height": "80%",
-                    "objectFit": "contain",
-                    "border": "2px solid black"
-                }
-            )
-
-        def run_app(app):
-            app.run(debug=True, port=8051)
-
-        return run_app(app)
-
-            
+    
+    
 
 
 
 
 
 
-        
-        
-        
-        
     def max_freq_benchmark_interactive(self, pred_node_dict, ref_node_dict, model):
-        
-        
-        band_strucuture_dict_pred = {}
+
+        band_structure_dict_pred = {}
         for mp_id in pred_node_dict.keys():
             for model_name, phonon in pred_node_dict[mp_id].items():
-                band_strucuture_dict_pred.setdefault(mp_id, {})[model_name] = phonon.band_structure
-        
-        
-        # band_structure_pred = node_pred.band_structure
-        # distances_pred = band_structure_pred["distances"]
-        # frequencies_pred = band_structure_pred["frequencies"]
-        # dos_freqs_pred, dos_values_pred = node_pred.dos
-        
-        # band_structure_ref = node_ref.band_structure
-        # distances_ref = band_structure_ref["distances"]
-        # frequencies_ref = band_structure_ref["frequencies"]
-        # dos_freqs_ref, dos_values_ref = node_ref.dos
+                band_structure_dict_pred.setdefault(mp_id, {})[model_name] = phonon.band_structure
 
-
-        
-        # -------------reference data----------------
         ref_band_data_dict = {}
         ref_benchmarks_dict = {}
         pred_benchmarks_dict = {}
+        model_plotting_data = {}     # model_name -> {property -> {ref, pred}, hover, point_map, img_paths}
         phonon_plot_paths = {}
-        point_index_to_id = [] # for plotting later
+        point_index_to_id = []
+        
+        benchmarks = ['max_freq', 'min_freq']
+        model_benchmarks_dict = {} # max_freq, min_freq ...
+
+        plot_stats_dict = {}
+    
 
         for mp_id in pred_node_dict.keys():
             ref_benchmarks_dict[mp_id] = {}
             ref_band_data_dict[mp_id] = {}
             pred_benchmarks_dict[mp_id] = {}
-            
+
             node_ref = ref_node_dict[mp_id]
             band_structure_ref = node_ref.band_structure
             ref_band_data_dict[mp_id] = band_structure_ref
-            distances_ref, frequencies_ref = band_structure_ref["distances"], band_structure_ref["frequencies"]
             dos_freqs_ref, dos_values_ref = node_ref.dos
-                
-                
-            
-            # calculate dos dependent benchmarks
-            ref_dos_freq, ref_dos_densities = node_ref.dos
-            ref_benchmarks_dict[mp_id]['max_freq'] = np.max(ref_dos_freq)
-            
-            
-            # thermal properties
-            
-            
-            
+
+            # Reference benchmarks
+            ref_benchmarks_dict[mp_id]['max_freq'] = np.max(dos_freqs_ref)
+            ref_benchmarks_dict[mp_id]['min_freq'] = np.min(dos_freqs_ref)
+
             phonon_plot_paths[mp_id] = {}
             for model_name in pred_node_dict[mp_id].keys():
-                
                 dos_freqs_pred, dos_values_pred = pred_node_dict[mp_id][model_name].dos
-                
-                # max freq from models
-                
-                for model_name in band_strucuture_dict_pred[mp_id].keys():
-                    pred_benchmarks_dict[mp_id][model_name] = {}
-                    pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(dos_freqs_pred)
-                
-                # labels = phonon.band_structure.labels
-                # connections = phonon.band_structure.path_connections
-                # connections = [True] + connections
-                
+
+                pred_benchmarks_dict[mp_id][model_name] = {}
+                pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(dos_freqs_pred)
+                pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(dos_freqs_pred)
+
                 phonon_plot_path = self.compare_reference(
-                                    node_pred=pred_node_dict[mp_id][model_name],
-                                    node_ref=ref_node_dict[mp_id],
-                                    correlation_plot_mode=True,
-                                    model_name=model_name
-                                )
-                
+                    node_pred=pred_node_dict[mp_id][model_name],
+                    node_ref=ref_node_dict[mp_id],
+                    correlation_plot_mode=True,
+                    model_name=model_name
+                )
 
                 phonon_plot_paths[mp_id][model_name] = phonon_plot_path
                 point_index_to_id.append((mp_id, model_name))
-            
 
-
+                
+                
+                
+                model_benchmarks_dict.setdefault(model_name, {b: {'ref': [], 'pred': []} for b in benchmarks})
+                
+                for benchmark in benchmarks:
+                    model_benchmarks_dict[model_name][benchmark]['ref'].append(ref_benchmarks_dict[mp_id][benchmark])
+                    model_benchmarks_dict[model_name][benchmark]['pred'].append(pred_benchmarks_dict[mp_id][model_name][benchmark])
+                
+                
+                
+                
+                plot_stats_dict.setdefault(model_name, {b: {'RMSE': [], 'MAE': [], 'R2': []} for b in benchmarks})
+                
+                for benchmark in benchmarks:
+                    rmse = np.sqrt(np.mean((np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.array(model_benchmarks_dict[model_name][benchmark]['pred']))**2))
+                    mae = np.mean(np.abs(np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.array(model_benchmarks_dict[model_name][benchmark]['pred'])))
+                    r2 = 1 - (np.sum((np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.array(model_benchmarks_dict[model_name][benchmark]['pred']))**2) / np.sum((np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.mean(np.array(model_benchmarks_dict[model_name][benchmark]['ref'])))**2))
+                    
+                    plot_stats_dict[model_name][benchmark]['RMSE'].append(rmse)
+                    plot_stats_dict[model_name][benchmark]['MAE'].append(mae)
+                    plot_stats_dict[model_name][benchmark]['R2'].append(r2)
+                
+                
+                # update dict for plotting
+                model_plotting_data.setdefault(model_name, {'hover': [], 'point_map': [], 'img_paths': {}})
+                model_plotting_data[model_name]['hover'].append(f"{mp_id} ({model_name})")
+                model_plotting_data[model_name]['point_map'].append((mp_id, model_name))
+                model_plotting_data[model_name]['img_paths'][mp_id] = phonon_plot_path
         
-        #------------------------pair plot---------------------
         
-        # # create array for plotting
-        max_freqs_calc = []
-        max_freqs_ref = []
-        for (mp_id, model_name) in point_index_to_id:
-            max_freqs_calc.append(pred_benchmarks_dict[mp_id][model_name]['max_freq'])
-            max_freqs_ref.append(ref_benchmarks_dict[mp_id]['max_freq'])
         
 
-        hover_labels = [f"{mp_id} ({model_name})" for (mp_id, model_name) in point_index_to_id]
-        max_val = max(max(max_freqs_calc), max(max_freqs_ref)) * 1.05
+        # Function to generate graphs based on selected property
+        def create_model_graphs(selected_property):
+            model_graphs = []
+            for (model_name, plotting_data), (_, data) in zip(model_plotting_data.items(), model_benchmarks_dict.items()):
+                ref_vals = data[selected_property]['ref']
+                pred_vals = data[selected_property]['pred']
 
-        scatter_fig = px.scatter(
-            x=max_freqs_ref,
-            y=max_freqs_calc,
-            hover_name=hover_labels,
-            labels={
-                'x': 'Reference Max Frequency (THz)',
-                'y': 'Calculated Max Frequency (THz)'
-            }
-        )
+                # Get axis ranges (allowing asymmetric but slightly padded)
+                x_min, x_max = min(ref_vals), max(ref_vals)
+                y_min, y_max = min(pred_vals), max(pred_vals)
+                x_range = [x_min - 0.05 * abs(x_min), x_max + 0.05 * abs(x_max)]
+                y_range = [y_min - 0.05 * abs(y_min), y_max + 0.05 * abs(y_max)]
+                
+                # stats to go in legend
+                stats = plot_stats_dict[model_name][selected_property]
+                metrics_text = (
+                    f"RMSE: {stats['RMSE'][-1]:.2f}<br>"
+                    f"MAE: {stats['MAE'][-1]:.2f}<br>"
+                    f"R²: {stats['R2'][-1]:.2f}"
+                )
+                
 
-        scatter_fig.add_trace(go.Scatter(
-            x=[0, max_val],
-            y=[0, max_val],
-            mode='lines',
-            name='y = x',
-            line=dict(color='black', dash='dash')
-        ))
+                scatter_fig = px.scatter(
+                    x=ref_vals,
+                    y=pred_vals,
+                    hover_name=plotting_data['hover'],
+                    labels={
+                        'x': f'Reference {selected_property.replace("_", " ").title()} ({units})',
+                        'y': f'Calculated {selected_property.replace("_", " ").title() ({units})}'
+                    }
+                )
 
-        scatter_fig.update_layout(
-            plot_bgcolor='white',
-            paper_bgcolor='white',
-            font_color='black',
-            xaxis=dict(range=[0, max_val], showgrid=True, gridcolor='lightgray'),
-            yaxis=dict(range=[0, max_val], showgrid=True, gridcolor='lightgray')
-        )
+                scatter_fig.add_trace(go.Scatter(
+                    x=[min(x_min, y_min), max(x_max, y_max)],
+                    y=[min(x_min, y_min), max(x_max, y_max)],
+                    mode='lines',
+                    name='y = x',
+                    line=dict(color='black', dash='dash')
+                ))
 
-        # --- Dash app ---
+                scatter_fig.update_layout(
+                    plot_bgcolor='white',
+                    paper_bgcolor='white',
+                    font_color='black',
+                    margin=dict(t=40, r=30, b=40, l=50),
+                    xaxis=dict(
+                        range=x_range,
+                        showgrid=True,
+                        gridcolor='lightgray',
+                        scaleanchor='y',  # makes plot square
+                        scaleratio=1
+                    ),
+                    yaxis=dict(
+                        range=y_range,
+                        showgrid=True,
+                        gridcolor='lightgray'
+                    ),
+                )
+                
+                scatter_fig.add_annotation(
+                    xref="paper", yref="paper",
+                    x=0.02, y=0.98,  # top-left corner
+                    text=metrics_text,
+                    showarrow=False,
+                    align="left",
+                    font=dict(size=12, color="black"),
+                    bordercolor="black",
+                    borderwidth=1,
+                    borderpad=4,
+                    bgcolor="white",
+                    opacity=0.8
+                )
+
+                model_graphs.append(
+                    html.Div([
+                        html.H4(f"{model_name} - {selected_property.replace('_', ' ').title()}", style={"color": "black"}),
+                        html.Div([
+                            dcc.Graph(
+                                id={'type': 'pair-plot', 'index': model_name},
+                                figure=scatter_fig,
+                                style={"width": "45vw", "height": "60vh"}
+                            ),
+                            html.Div(
+                                id={'type': 'plot-display', 'index': model_name},
+                                style={
+                                    "width": "50vw",
+                                    "height": "60vh",
+                                    "marginLeft": "2vw",
+                                    "display": "flex",
+                                    "alignItems": "center",
+                                    "justifyContent": "center",
+                                    "border": "1px solid #ccc",
+                                    "padding": "10px",
+                                    "backgroundColor": "#f9f9f9"
+                                }
+                            )
+                        ], style={
+                            "display": "flex",
+                            "flexDirection": "row",
+                            "alignItems": "center",
+                            "justifyContent": "space-between",
+                            "marginBottom": "40px"
+                        })
+                    ])
+                )
+            return model_graphs
+
+        # Dash app
         app = dash.Dash(__name__)
 
         app.layout = html.Div([
-            html.H2("Pair Correlation Plot: Max Frequency vs Reference", style={"color": "black"}),
+            html.H2("Pair Correlation Plot: Benchmark vs Reference", style={"color": "black"}),
 
-            html.Div([
-                dcc.Graph(
-                    id='pair-correlation-plot',
-                    figure=scatter_fig,
-                    style={"width": "45vw", "height": "80vh", "paddingBottom": "40px"}
-                ),
-                html.Div(
-                    id='phonon-plot-display',
-                    style={
-                        "width": "50vw",
-                        "height": "80vh",
-                        "marginLeft": "2vw",
-                        "display": "flex",
-                        "alignItems": "center",
-                        "justifyContent": "center",
-                        "border": "1px solid #ccc",
-                        "padding": "10px",
-                        "backgroundColor": "#f9f9f9"
-                    }
-                )
-            ], style={
-                "display": "flex",
-                "flexDirection": "row",
-                "alignItems": "center",
-                "justifyContent": "space-between"
-            })
+            html.Label("Select property to compare:", style={"fontWeight": "bold"}),
+            dcc.Dropdown(
+                id="property-dropdown",
+                options=[
+                    {"label": "Max Frequency", "value": "max_freq"},
+                    {"label": "Min Frequency", "value": "min_freq"}
+                ],
+                value="max_freq",
+                clearable=False,
+                style={"width": "300px", "marginBottom": "30px"}
+            ),
+
+            html.Div(id="model-graphs-container")
         ], style={"backgroundColor": "white", "padding": "20px"})
 
         @app.callback(
-            Output('phonon-plot-display', 'children'),
-            Input('pair-correlation-plot', 'clickData')
+            Output("model-graphs-container", "children"),
+            Input("property-dropdown", "value")
         )
-        def display_phonon_plot(clickData):
+        def update_graphs(selected_property):
+            return create_model_graphs(selected_property)
+
+        @app.callback(
+            Output({'type': 'plot-display', 'index': MATCH}, 'children'),
+            Input({'type': 'pair-plot', 'index': MATCH}, 'clickData'),
+            State({'type': 'pair-plot', 'index': MATCH}, 'id')
+        )
+        def display_phonon_plot(clickData, graph_id):
+            model_name = graph_id['index']
             if clickData is None:
                 return html.Div("Click on a point to view its phonon dispersion plot.")
 
             point_index = clickData['points'][0]['pointIndex']
-            mp_id, model_name = point_index_to_id[point_index]
-            img_path = phonon_plot_paths[mp_id][model_name]
+            mp_id, _ = model_plotting_data[model_name]['point_map'][point_index]
+            img_path = model_plotting_data[model_name]['img_paths'][mp_id]
 
             encoded_img = base64.b64encode(open(img_path, 'rb').read()).decode()
-
             return html.Img(
                 src=f'data:image/png;base64,{encoded_img}',
                 style={

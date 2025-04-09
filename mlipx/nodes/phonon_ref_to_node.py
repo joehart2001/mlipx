@@ -64,5 +64,15 @@ class PhononRefToNode(zntrack.Node):
     def run(self):        
         
         phonons = load_phonopy(str(self.phonopy_yaml_path))
-        phonons.save(filename=self.force_constants_path, settings={"force_constants": True})
+        phonons.save(
+            filename=self.force_constants_path,
+            settings={
+                "force_constants": True,
+                "supercell_matrix": True,
+                "primitive_matrix": True,
+                "unitcell": True,
+                "displacement_dataset": True,
+            },
+        )
+        #phonons.save(filename=self.force_constants_path, settings={"force_constants": True})
         print(f"Force constants saved to: {self.force_constants_path}")

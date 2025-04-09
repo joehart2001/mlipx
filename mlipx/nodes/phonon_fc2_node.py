@@ -22,6 +22,7 @@ from ase.calculators.calculator import Calculator
 from tqdm import tqdm
 from phonopy.api_phonopy import Phonopy
 import yaml
+from typing import Union
 
 
 from scipy.stats import gaussian_kde
@@ -29,7 +30,7 @@ from scipy.stats import gaussian_kde
 from mlipx.abc import ComparisonResults, NodeWithCalculator
 
 
-from mlipx.phonons_utils import get_fc2_and_freqs, init_phonopy
+from mlipx.phonons_utils import *
 from phonopy import load as load_phonopy
 
 
@@ -46,12 +47,14 @@ class PhononForceConstants(zntrack.Node):
     
     # inputs
     #data: ase.Atoms = zntrack.deps() # input dependency
-    data: list[ase.Atoms] = zntrack.deps()
+    #data: list[ase.Atoms] = zntrack.deps()
+    
+    # can either be a phonopy.yaml file or a list of (geometry optimised) atoms
+    data: Union[pathlib.Path, list[Atoms]] = zntrack.deps()
     model: NodeWithCalculator = zntrack.deps()
     
     # parameters
     material_idx: int = zntrack.params(0)
-    data_type: str = zntrack.params("MP")
     N_q_mesh: int = zntrack.params(20)
     supercell: int = zntrack.params(3)
     delta: float = zntrack.params(0.05) # displacement for finite difference calculation
@@ -60,30 +63,60 @@ class PhononForceConstants(zntrack.Node):
     # outputs
     # nwd: ZnTrack's node working directory for saving files
     force_constants_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "force_constants.yaml")
-    frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
+    #frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
 
 
 
     def run(self):
-        atoms = self.data[0]
-
+        
         calc = self.model.get_calculator()
-        print(atoms)
-        frames = []
         
-        self.frames_path.parent.mkdir(exist_ok=True)
-    
-        atoms.calc = calc
+        if isinstance(self.data, list):
+            atoms = self.data[self.material_idx]
+                    
+            atoms.calc = calc
+            
+            # initialize Phonopy with displacements
+            phonons = init_phonopy(
+                atoms=atoms,
+                fc2_supercell=np.diag([self.supercell] * 3),
+                primitive_matrix="auto",
+                displacement_distance=self.delta,
+                symprec=1e-5
+            )
+            print("Phonopy initialized")
+            
+            
+            
+            
+        elif isinstance(self.data, pathlib.Path):
+            phonons = load_phonopy(str(self.data))
+            displacement_dataset = phonons.dataset
+            atoms = phonopy2aseatoms(phonons)
+            atoms.calc = calc
+            
+            # primitive matrix not always available in reference data e.g. mp-30056
+            if "primitive_matrix" in atoms.info.keys():
+                primitive_matrix = atoms.info["primitive_matrix"]
+            else:
+                primitive_matrix = "auto"
+                print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
         
-        # initialize Phonopy with displacements
-        phonons = init_phonopy(
-            atoms=atoms,
-            fc2_supercell=np.diag([self.supercell] * 3),
-            primitive_matrix="auto",
-            displacement_distance=self.delta,
-            symprec=1e-5
-        )
-        print("Phonopy initialized")
+            phonons = init_phonopy_from_ref(
+                atoms=atoms,
+                fc2_supercell=atoms.info['fc2_supercell'],
+                primitive_matrix=primitive_matrix,
+                displacement_dataset=displacement_dataset,
+                symprec=1e-5
+            )
+            
+            print("Phonopy initialized from reference")
+
+        else:
+            raise TypeError(
+                f"Unsupported `data` format: {type(self.data)}. Expected list[Atoms] or phonopy.yaml path."
+            )
+
 
         # compute FC2 (2nd order force constants, 2nd dervative of energy) and phonon frequencies on mesh
         phonons, _, _ = get_fc2_and_freqs(
@@ -98,19 +131,15 @@ class PhononForceConstants(zntrack.Node):
         phonons.save(filename=self.force_constants_path, settings={"force_constants": True})
         print(f"Force constants saved to: {self.force_constants_path}")
         
-        print("Forces shape:", atoms.get_forces().shape)
-        print("Number of atoms:", len(atoms))
+        #print("Forces shape:", atoms.get_forces().shape)
+        #print("Number of atoms:", len(atoms))
 
         #ase.io.write(self.frames_path, atoms, append=True) use this for a list of atoms
-        ase.io.write(self.frames_path, atoms)
-        print(f"Relaxed structure saved to: {self.frames_path}")
+        #ase.io.write(self.frames_path, atoms)
+        #print(f"Relaxed structure saved to: {self.frames_path}")
 
 
 
-    @property
-    def frames(self) -> list[ase.Atoms]:
-        with self.state.fs.open(self.frames_path, "r") as f:
-            return list(ase.io.iread(f, format="extxyz"))
 
     @property
     def phonons_obj_dict(self) -> dict:
