@@ -27,6 +27,10 @@ from matplotlib import gridspec
 import pickle
 import glob
 import re
+import pandas as pd
+from dash.exceptions import PreventUpdate
+from dash import dash_table
+
 
 
 from scipy.stats import gaussian_kde
@@ -57,6 +61,7 @@ class PhononDispersion(zntrack.Node):
     """
     # inputs
     phonopy_yaml_path: pathlib.Path = zntrack.deps()
+    thermal_properties_path: pathlib.Path = zntrack.deps()
     
     # qpoints: list[np.ndarray] = zntrack.deps(None)
     # labels: list[str] = zntrack.deps(None)
@@ -64,6 +69,8 @@ class PhononDispersion(zntrack.Node):
     qpoints_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
     labels_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
     connections_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
+    
+
 
     # outputs
     # nwd: ZnTrack's node working directory for saving files
@@ -73,6 +80,8 @@ class PhononDispersion(zntrack.Node):
     qpoints_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "qpoints.pkl")
     labels_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "labels.json")
     connections_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "connections.json")
+    thermal_properties_path_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "thermal_properties.json")
+    
     
 
 
@@ -80,6 +89,7 @@ class PhononDispersion(zntrack.Node):
     def run(self):        
         
         phonons = load_phonopy(str(self.phonopy_yaml_path))
+
         
         if self.qpoints_input_path:
             # calculate phonon structure along the reference path to ensure a valid comparison
@@ -96,6 +106,7 @@ class PhononDispersion(zntrack.Node):
             #print(len(phonons.get_band_structure_dict()["distances"][0]))
 
             phonons.auto_band_structure()
+            
 
             # save, zntrack requires each output declared to be an output
             with open(self.qpoints_path, "wb") as f:
@@ -104,6 +115,7 @@ class PhononDispersion(zntrack.Node):
                 json.dump(labels, f)
             with open(self.connections_path, "w") as f:
                 json.dump(connections, f)
+
                 
                             
         else:
@@ -118,10 +130,6 @@ class PhononDispersion(zntrack.Node):
                 labels=labels,
                 path_connections=connections,
             )
-
-            # qpoints = phonons.band_structure.qpoints
-            # labels = phonons.band_structure.labels
-            # connections = phonons.band_structure.path_connections
             
             with open(self.qpoints_path, "wb") as f:
                 pickle.dump(qpoints, f)
@@ -129,6 +137,7 @@ class PhononDispersion(zntrack.Node):
                 json.dump(labels, f)
             with open(self.connections_path, "w") as f:
                 json.dump(connections, f)
+
                 
             
 
@@ -145,7 +154,12 @@ class PhononDispersion(zntrack.Node):
             pickle.dump(dos, f)
         
         phonons.save(filename=self.phonon_obj_path, settings={"force_constants": True})
-
+        
+        # open thermal properties and resave it 
+        with open(self.thermal_properties_path, "r") as f:
+            thermal_properties = json.load(f)
+        with open(self.thermal_properties_path_output, "w") as f:
+            json.dump(thermal_properties, f)
         
 
     @property
@@ -161,6 +175,11 @@ class PhononDispersion(zntrack.Node):
     @property
     def connections(self):
         with open(self.connections_path, "r") as f:
+            return json.load(f)
+    
+    @property
+    def get_thermal_properties(self):
+        with open(self.thermal_properties_path_output, "r") as f:
             return json.load(f)
         
     @property
@@ -649,7 +668,7 @@ class PhononDispersion(zntrack.Node):
 
 
 
-    def max_freq_benchmark_interactive(self, pred_node_dict, ref_node_dict, model):
+    def max_freq_benchmark_interactive(self, pred_node_dict, ref_node_dict):
 
         band_structure_dict_pred = {}
         for mp_id in pred_node_dict.keys():
@@ -663,7 +682,28 @@ class PhononDispersion(zntrack.Node):
         phonon_plot_paths = {}
         point_index_to_id = []
         
-        benchmarks = ['max_freq', 'min_freq']
+        benchmarks = [
+            'max_freq', 
+            'S',
+            'F',
+            'C_V',
+        ]
+        benchmark_units = {
+            'max_freq': 'THz', 
+            'S': '[J/K/mol]',
+            'F': '[kJ/mol]',
+            'C_V': '[J/K/mol]',
+        }
+        
+        pretty_benchmark_labels = {
+            'max_freq': 'ω_max [THz]',
+            'S': 'S [J/mol·K]',
+            'F': 'F [kJ/mol]',
+            'C_V': 'C_V [J/mol·K]'
+        }
+        label_to_key = {v: k for k, v in pretty_benchmark_labels.items()}
+
+        
         model_benchmarks_dict = {} # max_freq, min_freq ...
 
         plot_stats_dict = {}
@@ -680,8 +720,11 @@ class PhononDispersion(zntrack.Node):
             dos_freqs_ref, dos_values_ref = node_ref.dos
 
             # Reference benchmarks
+            T_300K_index = node_ref.get_thermal_properties['temperatures'].index(300)
             ref_benchmarks_dict[mp_id]['max_freq'] = np.max(dos_freqs_ref)
-            ref_benchmarks_dict[mp_id]['min_freq'] = np.min(dos_freqs_ref)
+            ref_benchmarks_dict[mp_id]['S'] = node_ref.get_thermal_properties['entropy'][T_300K_index]
+            ref_benchmarks_dict[mp_id]['F'] = node_ref.get_thermal_properties['free_energy'][T_300K_index]
+            ref_benchmarks_dict[mp_id]['C_V'] = node_ref.get_thermal_properties['heat_capacity'][T_300K_index]
 
             phonon_plot_paths[mp_id] = {}
             for model_name in pred_node_dict[mp_id].keys():
@@ -689,8 +732,10 @@ class PhononDispersion(zntrack.Node):
 
                 pred_benchmarks_dict[mp_id][model_name] = {}
                 pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(dos_freqs_pred)
-                pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(dos_freqs_pred)
-
+                pred_benchmarks_dict[mp_id][model_name]['S'] = pred_node_dict[mp_id][model_name].get_thermal_properties['entropy'][T_300K_index]
+                pred_benchmarks_dict[mp_id][model_name]['F'] = pred_node_dict[mp_id][model_name].get_thermal_properties['free_energy'][T_300K_index]
+                pred_benchmarks_dict[mp_id][model_name]['C_V'] = pred_node_dict[mp_id][model_name].get_thermal_properties['heat_capacity'][T_300K_index]
+                
                 phonon_plot_path = self.compare_reference(
                     node_pred=pred_node_dict[mp_id][model_name],
                     node_ref=ref_node_dict[mp_id],
@@ -713,16 +758,18 @@ class PhononDispersion(zntrack.Node):
                 
                 
                 
-                plot_stats_dict.setdefault(model_name, {b: {'RMSE': [], 'MAE': [], 'R2': []} for b in benchmarks})
+                plot_stats_dict.setdefault(model_name, {b: {'RMSE': [], 'MAE': []} for b in benchmarks})
                 
                 for benchmark in benchmarks:
                     rmse = np.sqrt(np.mean((np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.array(model_benchmarks_dict[model_name][benchmark]['pred']))**2))
                     mae = np.mean(np.abs(np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.array(model_benchmarks_dict[model_name][benchmark]['pred'])))
-                    r2 = 1 - (np.sum((np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.array(model_benchmarks_dict[model_name][benchmark]['pred']))**2) / np.sum((np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.mean(np.array(model_benchmarks_dict[model_name][benchmark]['ref'])))**2))
+                    #r2 = 1 - (np.sum((np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.array(model_benchmarks_dict[model_name][benchmark]['pred']))**2) / np.sum((np.array(model_benchmarks_dict[model_name][benchmark]['ref']) - np.mean(np.array(model_benchmarks_dict[model_name][benchmark]['ref'])))**2))
                     
                     plot_stats_dict[model_name][benchmark]['RMSE'].append(rmse)
                     plot_stats_dict[model_name][benchmark]['MAE'].append(mae)
-                    plot_stats_dict[model_name][benchmark]['R2'].append(r2)
+                    #plot_stats_dict[model_name][benchmark]['R2'].append(r2)
+                    
+                    
                 
                 
                 # update dict for plotting
@@ -732,143 +779,158 @@ class PhononDispersion(zntrack.Node):
                 model_plotting_data[model_name]['img_paths'][mp_id] = phonon_plot_path
         
         
+        mae_summary_df = pd.DataFrame.from_dict({
+            model_name: {pretty_benchmark_labels[benchmark]: round(plot_stats_dict[model_name][benchmark]['MAE'][-1], 3) for benchmark in benchmarks}
+            for model_name in plot_stats_dict
+        }, orient='index')
+        mae_summary_df.index.name = 'Model'
+        mae_summary_df.reset_index(inplace=True)
         
-
-        # Function to generate graphs based on selected property
-        def create_model_graphs(selected_property):
-            model_graphs = []
-            for (model_name, plotting_data), (_, data) in zip(model_plotting_data.items(), model_benchmarks_dict.items()):
-                ref_vals = data[selected_property]['ref']
-                pred_vals = data[selected_property]['pred']
-
-                # Get axis ranges (allowing asymmetric but slightly padded)
-                x_min, x_max = min(ref_vals), max(ref_vals)
-                y_min, y_max = min(pred_vals), max(pred_vals)
-                x_range = [x_min - 0.05 * abs(x_min), x_max + 0.05 * abs(x_max)]
-                y_range = [y_min - 0.05 * abs(y_min), y_max + 0.05 * abs(y_max)]
-                
-                # stats to go in legend
-                stats = plot_stats_dict[model_name][selected_property]
-                metrics_text = (
-                    f"RMSE: {stats['RMSE'][-1]:.2f}<br>"
-                    f"MAE: {stats['MAE'][-1]:.2f}<br>"
-                    f"R²: {stats['R2'][-1]:.2f}"
-                )
-                
-
-                scatter_fig = px.scatter(
-                    x=ref_vals,
-                    y=pred_vals,
-                    hover_name=plotting_data['hover'],
-                    labels={
-                        'x': f'Reference {selected_property.replace("_", " ").title()} ({units})',
-                        'y': f'Calculated {selected_property.replace("_", " ").title() ({units})}'
-                    }
-                )
-
-                scatter_fig.add_trace(go.Scatter(
-                    x=[min(x_min, y_min), max(x_max, y_max)],
-                    y=[min(x_min, y_min), max(x_max, y_max)],
-                    mode='lines',
-                    name='y = x',
-                    line=dict(color='black', dash='dash')
-                ))
-
-                scatter_fig.update_layout(
-                    plot_bgcolor='white',
-                    paper_bgcolor='white',
-                    font_color='black',
-                    margin=dict(t=40, r=30, b=40, l=50),
-                    xaxis=dict(
-                        range=x_range,
-                        showgrid=True,
-                        gridcolor='lightgray',
-                        scaleanchor='y',  # makes plot square
-                        scaleratio=1
-                    ),
-                    yaxis=dict(
-                        range=y_range,
-                        showgrid=True,
-                        gridcolor='lightgray'
-                    ),
-                )
-                
-                scatter_fig.add_annotation(
-                    xref="paper", yref="paper",
-                    x=0.02, y=0.98,  # top-left corner
-                    text=metrics_text,
-                    showarrow=False,
-                    align="left",
-                    font=dict(size=12, color="black"),
-                    bordercolor="black",
-                    borderwidth=1,
-                    borderpad=4,
-                    bgcolor="white",
-                    opacity=0.8
-                )
-
-                model_graphs.append(
-                    html.Div([
-                        html.H4(f"{model_name} - {selected_property.replace('_', ' ').title()}", style={"color": "black"}),
-                        html.Div([
-                            dcc.Graph(
-                                id={'type': 'pair-plot', 'index': model_name},
-                                figure=scatter_fig,
-                                style={"width": "45vw", "height": "60vh"}
-                            ),
-                            html.Div(
-                                id={'type': 'plot-display', 'index': model_name},
-                                style={
-                                    "width": "50vw",
-                                    "height": "60vh",
-                                    "marginLeft": "2vw",
-                                    "display": "flex",
-                                    "alignItems": "center",
-                                    "justifyContent": "center",
-                                    "border": "1px solid #ccc",
-                                    "padding": "10px",
-                                    "backgroundColor": "#f9f9f9"
-                                }
-                            )
-                        ], style={
-                            "display": "flex",
-                            "flexDirection": "row",
-                            "alignItems": "center",
-                            "justifyContent": "space-between",
-                            "marginBottom": "40px"
-                        })
-                    ])
-                )
-            return model_graphs
 
         # Dash app
         app = dash.Dash(__name__)
 
         app.layout = html.Div([
-            html.H2("Pair Correlation Plot: Benchmark vs Reference", style={"color": "black"}),
+            html.H2("MAE Summary Table (300 K)", style={"color": "black"}),
 
-            html.Label("Select property to compare:", style={"fontWeight": "bold"}),
-            dcc.Dropdown(
-                id="property-dropdown",
-                options=[
-                    {"label": "Max Frequency", "value": "max_freq"},
-                    {"label": "Min Frequency", "value": "min_freq"}
+            dash_table.DataTable(
+                id='mae-summary-table',
+                columns=[{"name": col, "id": col} for col in mae_summary_df.columns],
+                data=mae_summary_df.to_dict('records'),
+                style_cell={'textAlign': 'center'},
+                style_header={'fontWeight': 'bold'},
+                style_data_conditional=[
+                    {
+                        'if': {'row_index': 'odd'},
+                        'backgroundColor': 'rgb(248, 248, 248)'
+                    }
                 ],
-                value="max_freq",
-                clearable=False,
-                style={"width": "300px", "marginBottom": "30px"}
+                cell_selectable=True
             ),
+
+            html.Br(),
+
+            #html.H2("Pair Correlation Plot: Predicted vs Reference", style={"color": "black"}),
 
             html.Div(id="model-graphs-container")
         ], style={"backgroundColor": "white", "padding": "20px"})
 
+        # Callback to generate plot for a single model/property cell
         @app.callback(
             Output("model-graphs-container", "children"),
-            Input("property-dropdown", "value")
+            Input("mae-summary-table", "active_cell"),
+            State("mae-summary-table", "data")
         )
-        def update_graphs(selected_property):
-            return create_model_graphs(selected_property)
+        def update_single_model_plot(active_cell, table_data):
+            if active_cell is None:
+                raise PreventUpdate
 
+            col = active_cell['column_id']
+            row = active_cell['row']
+            if col == 'Model':
+                raise PreventUpdate
+
+            model_name = table_data[row]['Model']
+            selected_property = label_to_key.get(col)
+            if selected_property is None:
+                return html.Div("Invalid property selected.")
+
+            # Gather data
+            plotting_data = model_plotting_data[model_name]
+            data = model_benchmarks_dict[model_name]
+
+            ref_vals = data[selected_property]['ref']
+            pred_vals = data[selected_property]['pred']
+
+            x_min, x_max = min(ref_vals), max(ref_vals)
+            y_min, y_max = min(pred_vals), max(pred_vals)
+            x_range = [x_min - 0.05 * abs(x_min), x_max + 0.05 * abs(x_max)]
+            y_range = [y_min - 0.05 * abs(y_min), y_max + 0.05 * abs(y_max)]
+
+            combined_min = min(min(ref_vals), min(pred_vals), 0)
+            combined_max = max(max(ref_vals), max(pred_vals))
+
+            stats = plot_stats_dict[model_name][selected_property]
+            metrics_text = (
+                f"RMSE: {stats['RMSE'][-1]:.2f}<br>"
+                f"MAE: {stats['MAE'][-1]:.2f}<br>"
+            )
+
+            units = benchmark_units.get(selected_property, "")
+
+            scatter_fig = px.scatter(
+                x=ref_vals,
+                y=pred_vals,
+                hover_name=plotting_data['hover'],
+                labels={
+                    'x': f'Reference {selected_property.replace("_", " ").title()} {units}',
+                    'y': f'Predicted {selected_property.replace("_", " ").title()} {units}'
+                }
+            )
+            scatter_fig.add_shape(
+                type="line",
+                x0=combined_min, y0=combined_min,
+                x1=combined_max, y1=combined_max,
+                xref='x', yref='y',
+                line=dict(color="black", dash="dash"),
+                name="y = x"
+            )
+
+            scatter_fig.update_layout(
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                font_color='black',
+                margin=dict(t=40, r=30, b=40, l=50),
+                xaxis=dict(range=x_range, showgrid=True, gridcolor='lightgray', scaleanchor='y', scaleratio=1),
+                yaxis=dict(range=y_range, showgrid=True, gridcolor='lightgray')
+            )
+
+            scatter_fig.add_annotation(
+                xref="paper", yref="paper",
+                x=0.02, y=0.98,
+                text=metrics_text,
+                showarrow=False,
+                align="left",
+                font=dict(size=12, color="black"),
+                bordercolor="black",
+                borderwidth=1,
+                borderpad=4,
+                bgcolor="white",
+                opacity=0.8
+            )
+
+            return html.Div([
+                html.H4(f"{model_name} - {selected_property.replace('_', ' ').title()}", style={"color": "black"}),
+                html.Div([
+                    dcc.Graph(
+                        id={'type': 'pair-plot', 'index': model_name},
+                        figure=scatter_fig,
+                        style={"width": "45vw", "height": "60vh"}
+                    ),
+                    html.Div(
+                        id={'type': 'plot-display', 'index': model_name},
+                        style={
+                            "width": "50vw",
+                            "height": "60vh",
+                            "marginLeft": "2vw",
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "center",
+                            "border": "1px solid #ccc",
+                            "padding": "10px",
+                            "backgroundColor": "#f9f9f9"
+                        }
+                    )
+                ], style={
+                    "display": "flex",
+                    "flexDirection": "row",
+                    "alignItems": "center",
+                    "justifyContent": "space-between",
+                    "marginBottom": "40px"
+                })
+            ])
+
+        # Callback to show phonon dispersion image on scatter click
         @app.callback(
             Output({'type': 'plot-display', 'index': MATCH}, 'children'),
             Input({'type': 'pair-plot', 'index': MATCH}, 'clickData'),

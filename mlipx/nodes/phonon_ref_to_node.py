@@ -58,6 +58,7 @@ class PhononRefToNode(zntrack.Node):
     
     # outputs
     force_constants_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "force_constants.yaml")
+    thermal_properties_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "thermal_properties.json")
 
 
 
@@ -74,5 +75,40 @@ class PhononRefToNode(zntrack.Node):
                 "displacement_dataset": True,
             },
         )
-        #phonons.save(filename=self.force_constants_path, settings={"force_constants": True})
         print(f"Force constants saved to: {self.force_constants_path}")
+        
+        
+
+        
+        # thermal properties from yaml
+        with open(self.phonopy_yaml_path) as f:
+            thermal_properties = yaml.safe_load(f)
+            
+        thermal_properties_dict = {
+            "temperatures": [],
+            "free_energy": [],
+            "entropy": [],
+            "heat_capacity": []
+        }
+        
+        for temp, free_energy, entropy, heat_capacity in zip(
+            thermal_properties["temperatures"],
+            thermal_properties["free_e"],
+            thermal_properties["entropy"],
+            thermal_properties["heat_capacity"]
+        ):
+            thermal_properties_dict["temperatures"].append(temp)
+            thermal_properties_dict["free_energy"].append(free_energy)
+            thermal_properties_dict["entropy"].append(entropy)
+            thermal_properties_dict["heat_capacity"].append(heat_capacity)
+            
+            
+        with open(self.thermal_properties_path, "w") as f:
+            json.dump(thermal_properties_dict, f)
+            
+        print(f"Thermal properties saved to: {self.thermal_properties_path}")
+    
+
+    @property
+    def get_thermal_properties_path(self) -> str:
+        return self.thermal_properties_path

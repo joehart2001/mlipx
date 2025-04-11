@@ -1,0 +1,60 @@
+import mlipx
+import zntrack
+
+from models import MODELS
+
+project = zntrack.Project()
+
+
+
+alex_subset_mpids = ['mp-149', 'mp-406']
+
+# datapath = [path] so need first element (only element)
+
+{% if datapath %}
+dict_ref = {}
+with project.group("reference", "phonons-ref-to-node"):
+    for mp_id in alex_subset_mpids:
+        phonon = mlipx.PhononRefToNode(
+            phonopy_yaml_path=f"{{ datapath[0] }}{mp_id}.yaml",
+            name=f"PhononRefToNode_{mp_id}")
+        dict_ref[mp_id] = phonon
+{% endif %}
+
+fc2_dict = {}
+for mp_id, node in dict_ref.items():
+    for model_name, model in MODELS.items():
+        with project.group(model_name, "phonons-fc2"):
+            fc2 = mlipx.PhononForceConstants(
+                data=node.force_constants_path, 
+                model=model,
+                name=f"PhononForceConstants_{mp_id}"
+            )
+            fc2_dict.setdefault(mp_id, {})[model_name] = fc2
+
+
+# Alex's yaml files -> phonon dispersions
+alex_dir = "alexandria_phonons/alex_data/"
+phonon_dict_ref = {}
+with project.group("reference", "phonons-dispersion-ref"):
+    for mp_id in alex_subset_mpids:
+        phonon = mlipx.PhononDispersion(
+            phonopy_yaml_path=dict_ref[mp_id].force_constants_path,
+            name=f"PhononDispersion_{mp_id}")
+        phonon_dict_ref[mp_id] = phonon
+
+
+# calculated yaml files for models -> phonon dispersions
+phonon_dict_pred = {}
+for mp_id in fc2_dict.keys():
+    for (model_name, fc2), (_, ref_phonon) in zip(fc2_dict[mp_id].items(), phonon_dict_ref.items()):
+        with project.group(model_name, "phonons-dispersion-pred"):
+
+            phonon = mlipx.PhononDispersion(
+                phonopy_yaml_path=fc2.force_constants_path,
+                qpoints_input_path= ref_phonon.qpoints_path,
+                labels_input_path= ref_phonon.labels_path,
+                connections_input_path= ref_phonon.connections_path,
+                name=f"PhononDispersion_{mp_id}"
+            )
+            phonon_dict_pred.setdefault(mp_id, {})[model_name] = phonon

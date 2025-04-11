@@ -59,11 +59,14 @@ class PhononForceConstants(zntrack.Node):
     supercell: int = zntrack.params(3)
     delta: float = zntrack.params(0.05) # displacement for finite difference calculation
     fmax: float = zntrack.params(0.0001) # max force on atoms for relaxation
+    thermal_properties_temperatures: t.Optional[t.List[float]] = zntrack.params(
+        default_factory=lambda: [0, 75, 150, 300, 600]
+    )
     
     # outputs
     # nwd: ZnTrack's node working directory for saving files
     force_constants_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "force_constants.yaml")
-    #frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
+    thermal_properties_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "thermal_properties.json")
 
 
 
@@ -131,6 +134,20 @@ class PhononForceConstants(zntrack.Node):
         phonons.save(filename=self.force_constants_path, settings={"force_constants": True})
         print(f"Force constants saved to: {self.force_constants_path}")
         
+        # thermal properties
+        phonons.run_mesh([20, 20, 20])
+        phonons.run_thermal_properties(temperatures=self.thermal_properties_temperatures)
+        thermal_properties_dict = phonons.get_thermal_properties_dict()
+        
+        thermal_properties_dict_safe = {
+            key: value.tolist() if isinstance(value, np.ndarray) else value
+            for key, value in thermal_properties_dict.items()
+        }
+
+        with open(self.thermal_properties_path, "w") as f:
+            json.dump(thermal_properties_dict_safe, f)
+        print(f"Thermal properties saved to: {self.thermal_properties_path}")
+        
         #print("Forces shape:", atoms.get_forces().shape)
         #print("Number of atoms:", len(atoms))
 
@@ -155,4 +172,6 @@ class PhononForceConstants(zntrack.Node):
     def fc2_path(self) -> str:
         return self.force_constants_path
     
-
+    @property
+    def get_thermal_properties_path(self) -> str:
+        return self.thermal_properties_path
