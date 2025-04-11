@@ -16,18 +16,19 @@ keywords=["data-version-control", "machine-learning", "reproducibility", "collab
 dependencies = [
     "ase>=3.24.0",
     "lazy-loader>=0.4",
-    "mp-api>=0.45.2",
+    "mp-api>=0.45.3",
     "plotly>=6.0.0",
     "rdkit2ase>=0.1.4",
     "typer>=0.15.1",
     "zndraw>=0.5.10",
     "znh5md>=0.4.4",
-    "zntrack>=0.8.3",
+    "zntrack>=0.8.4",
+    "dvc-s3>=3.2.0",
+    "mpcontribs-client>=5.10.2",
 ]
 
 [dependency-groups]
 docs = [
-    "dvc-s3>=3.2.0",
     "furo>=2024.8.6",
     "jupyter-sphinx>=0.5.3",
     "nbsphinx>=0.9.6", # https://github.com/sphinx-doc/sphinx/issues/13352
@@ -35,6 +36,7 @@ docs = [
     "sphinx-copybutton>=0.5.2",
     "sphinx-design>=0.6.1",
     "sphinx-hoverxref>=1.4.2",
+    "sphinx-mdinclude>=0.6.2",
     "sphinxcontrib-bibtex>=2.6.3",
     "sphinxcontrib-mermaid>=1.0.0",
 ]
@@ -52,24 +54,33 @@ mlipx = "mlipx.cli.main:app"
 [tool.uv]
 conflicts = [
     [
-      { extra = "models" },
+      { extra = "mace" },
       { extra = "mattersim" },
     ],
+    [
+      { extra = "mace" },
+      { extra = "sevenn" },
+    ]
 ]
 
 [project.optional-dependencies]
-models = [
+chgnet = [
     "chgnet>=0.4.0",
-    "mace-torch>=0.3.10",
-    "sevenn>=0.10.4",
+]
+mace = [
+    "mace-torch>=0.3.12",
+]
+sevenn = [
+    "sevenn>=0.11.0",
 ]
 orb = [
-    "orb-models>=0.4.2",
-    "pynanoflann",
-    "cmake>=3.31.4",
+    "orb-models>=0.5.0"
 ]
 mattersim = [
-    "mattersim>=1.1.1",
+    "mattersim>=1.1.2",
+]
+grace = [
+    "tensorpotential>=0.5.1",
 ]
 
 
@@ -83,6 +94,3 @@ skip = "*.svg,*.lock,*.json"
 
 [tool.ruff.lint]
 select = ["I", "F", "E", "C", "W"]
-
-[tool.uv.sources]
-pynanoflann = { git = "https://github.com/dwastberg/pynanoflann" }
