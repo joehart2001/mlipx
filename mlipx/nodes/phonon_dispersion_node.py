@@ -30,7 +30,8 @@ import re
 import pandas as pd
 from dash.exceptions import PreventUpdate
 from dash import dash_table
-
+import socket
+import time
 
 
 from scipy.stats import gaussian_kde
@@ -223,8 +224,8 @@ class PhononDispersion(zntrack.Node):
         phonons.auto_total_dos()
         return phonons.get_band_structure_dict(), phonons.get_total_dos_dict(), phonons
 
-
-    def _build_xticks(self, distances, labels, connections):
+    @staticmethod
+    def _build_xticks(distances, labels, connections):
         # begins with _ as this is a private method only for internal use
         xticks, xticklabels = [], []
         cumulative_dist, i = 0.0, 0
@@ -301,106 +302,106 @@ class PhononDispersion(zntrack.Node):
 
 
 
-    @staticmethod
-    def compare_models(node_dict, selected_models=None):
+    # @staticmethod
+    # def compare_models(node_dict, selected_models=None):
 
-        if selected_models is not None:
-            node_dict = {k: v for k, v in node_dict.items() if k in selected_models}
+    #     if selected_models is not None:
+    #         node_dict = {k: v for k, v in node_dict.items() if k in selected_models}
 
-        # ---- Setup subplot grid ----
-        fig = plt.figure(figsize=(9, 5))
-        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
-        ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])  # band structure
-        ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])  # DOS
+    #     # ---- Setup subplot grid ----
+    #     fig = plt.figure(figsize=(9, 5))
+    #     gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
+    #     ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])  # band structure
+    #     ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])  # DOS
 
-        # Load tick info from the first node
-        first_node = next(iter(node_dict.values()))
-        band_structure = first_node.band_structure
-        distances = band_structure["distances"]
+    #     # Load tick info from the first node
+    #     first_node = next(iter(node_dict.values()))
+    #     band_structure = first_node.band_structure
+    #     distances = band_structure["distances"]
 
-        phonons = load_phonopy(first_node.phonon_obj_path)
-        phonons.auto_band_structure()
-        phonons.auto_total_dos()
+    #     phonons = load_phonopy(first_node.phonon_obj_path)
+    #     phonons.auto_band_structure()
+    #     phonons.auto_total_dos()
 
-        labels = phonons.band_structure.labels
-        connections = phonons.band_structure.path_connections
-        connections = [True] + connections
+    #     labels = phonons.band_structure.labels
+    #     connections = phonons.band_structure.path_connections
+    #     connections = [True] + connections
 
-        # ---- X-tick Construction ----
-        xticks = []
-        xticklabels = []
-        cumulative_dist = 0.0
-        i = 0
+    #     # ---- X-tick Construction ----
+    #     xticks = []
+    #     xticklabels = []
+    #     cumulative_dist = 0.0
+    #     i = 0
 
-        for segment_dist, connected in zip(distances, connections):
-            start_label = labels[i]
-            end_label = labels[i + 1]
+    #     for segment_dist, connected in zip(distances, connections):
+    #         start_label = labels[i]
+    #         end_label = labels[i + 1]
 
-            start_pos = cumulative_dist
-            end_pos = cumulative_dist + (segment_dist[-1] - segment_dist[0])
+    #         start_pos = cumulative_dist
+    #         end_pos = cumulative_dist + (segment_dist[-1] - segment_dist[0])
 
-            if not connected:
-                merged_label = f"{start_label}|{end_label}"
-                xticks.append(start_pos)
-                xticklabels.append(merged_label)
-                i += 2
-            else:
-                xticks.append(start_pos)
-                xticklabels.append(start_label)
-                i += 1
+    #         if not connected:
+    #             merged_label = f"{start_label}|{end_label}"
+    #             xticks.append(start_pos)
+    #             xticklabels.append(merged_label)
+    #             i += 2
+    #         else:
+    #             xticks.append(start_pos)
+    #             xticklabels.append(start_label)
+    #             i += 1
 
-            cumulative_dist = end_pos
+    #         cumulative_dist = end_pos
 
-        xticks.append(cumulative_dist)
-        xticklabels.append(labels[-1])
+    #     xticks.append(cumulative_dist)
+    #     xticklabels.append(labels[-1])
 
-        # ---- Plot each model ----
-        for idx, (model_name, node) in enumerate(node_dict.items()):
-            color = f"C{idx}"
-            band_structure = node.band_structure
-            distances = band_structure["distances"]
-            frequencies = band_structure["frequencies"]
+    #     # ---- Plot each model ----
+    #     for idx, (model_name, node) in enumerate(node_dict.items()):
+    #         color = f"C{idx}"
+    #         band_structure = node.band_structure
+    #         distances = band_structure["distances"]
+    #         frequencies = band_structure["frequencies"]
 
-            # Plot band structure
-            for dist_segment, freq_segment in zip(distances, frequencies):
-                for band in freq_segment.T:
-                    ax1.plot(dist_segment, band, lw=1, label=model_name, color=color)
+    #         # Plot band structure
+    #         for dist_segment, freq_segment in zip(distances, frequencies):
+    #             for band in freq_segment.T:
+    #                 ax1.plot(dist_segment, band, lw=1, label=model_name, color=color)
 
-            # Plot DOS using each node’s phonon object
-            phonons = load_phonopy(node.phonon_obj_path)
-            phonons.auto_total_dos()
-            dos = phonons.get_total_dos_dict()
-            dos_freqs = dos["frequency_points"]
-            dos_values = dos["total_dos"]
+    #         # Plot DOS using each node’s phonon object
+    #         phonons = load_phonopy(node.phonon_obj_path)
+    #         phonons.auto_total_dos()
+    #         dos = phonons.get_total_dos_dict()
+    #         dos_freqs = dos["frequency_points"]
+    #         dos_values = dos["total_dos"]
 
-            ax2.plot(dos_values, dos_freqs, lw=1.2, color=color)
+    #         ax2.plot(dos_values, dos_freqs, lw=1.2, color=color)
 
-        # ---- Decorations ----
-        for x in xticks:
-            ax1.axvline(x=x, color='k', linewidth=1)
-        ax1.axhline(0, color='k', linewidth=1)
-        ax2.axhline(0, color='k', linewidth=1)
+    #     # ---- Decorations ----
+    #     for x in xticks:
+    #         ax1.axvline(x=x, color='k', linewidth=1)
+    #     ax1.axhline(0, color='k', linewidth=1)
+    #     ax2.axhline(0, color='k', linewidth=1)
 
-        ax1.set_xticks(xticks)
-        ax1.set_xticklabels(xticklabels)
-        ax1.set_xlim(xticks[0], xticks[-1])
-        ax1.set_ylabel("Frequency (THz)")
-        ax1.set_xlabel("Wave Vector")
+    #     ax1.set_xticks(xticks)
+    #     ax1.set_xticklabels(xticklabels)
+    #     ax1.set_xlim(xticks[0], xticks[-1])
+    #     ax1.set_ylabel("Frequency (THz)")
+    #     ax1.set_xlabel("Wave Vector")
 
-        plt.setp(ax2.get_yticklabels(), visible=False)
-        ax2.set_ylim(ax1.get_ylim())
-        ax2.set_xlabel("DOS")
+    #     plt.setp(ax2.get_yticklabels(), visible=False)
+    #     ax2.set_ylim(ax1.get_ylim())
+    #     ax2.set_xlabel("DOS")
 
-        ax1.grid(True, linestyle=':', linewidth=0.5)
-        ax2.grid(True, linestyle=':', linewidth=0.5)
+    #     ax1.grid(True, linestyle=':', linewidth=0.5)
+    #     ax2.grid(True, linestyle=':', linewidth=0.5)
 
-        # Clean legend (no duplicates)
-        handles, labels = ax1.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        ax1.legend(by_label.values(), by_label.keys())
+    #     # Clean legend (no duplicates)
+    #     handles, labels = ax1.get_legend_handles_labels()
+    #     by_label = dict(zip(labels, handles))
+    #     ax1.legend(by_label.values(), by_label.keys())
 
-        plt.tight_layout()
-        plt.show()
+    #     plt.tight_layout()
+    #     plt.show()
 
 
 
@@ -409,117 +410,117 @@ class PhononDispersion(zntrack.Node):
 
 
 
-    def _plot_phonons(self, band_structure, dos, labels, connections, reference_phonons, ref_dos, mp_id, chemical_formula, model_name):
+    # def _plot_phonons(self, band_structure, dos, labels, connections, reference_phonons, ref_dos, mp_id, chemical_formula, model_name):
 
-        phonons_freq = band_structure["frequencies"]
-        phonons_dist = band_structure["distances"]
-        dos_freqs = dos["frequency_points"]
-        dos_values = dos["total_dos"]
+    #     phonons_freq = band_structure["frequencies"]
+    #     phonons_dist = band_structure["distances"]
+    #     dos_freqs = dos["frequency_points"]
+    #     dos_values = dos["total_dos"]
         
-        ref_dos_densities, ref_dos_freq = ref_dos['densities'], ref_dos['frequencies']
+    #     ref_dos_densities, ref_dos_freq = ref_dos['densities'], ref_dos['frequencies']
         
-        #-----------------------normalise reference data-----------------------
-        # normalise the x-axis to match the node's distance for each segment
-        segment_lengths = [segment[-1] - segment[0] for segment in phonons_dist]
-        n_segments = len(segment_lengths)
-        ref_bands = np.array(reference_phonons)  # shape (n_bands, total_kpoints)
-        total_kpoints = ref_bands.shape[1]
+    #     #-----------------------normalise reference data-----------------------
+    #     # normalise the x-axis to match the node's distance for each segment
+    #     segment_lengths = [segment[-1] - segment[0] for segment in phonons_dist]
+    #     n_segments = len(segment_lengths)
+    #     ref_bands = np.array(reference_phonons)  # shape (n_bands, total_kpoints)
+    #     total_kpoints = ref_bands.shape[1]
 
-        if total_kpoints % n_segments != 0:
-            print(f"{mp_id} Remainder:", total_kpoints % n_segments)
-            #raise ValueError("Cannot evenly split reference bands into same number of segments as computed data.")
-            return
+    #     if total_kpoints % n_segments != 0:
+    #         print(f"{mp_id} Remainder:", total_kpoints % n_segments)
+    #         #raise ValueError("Cannot evenly split reference bands into same number of segments as computed data.")
+    #         return
 
-        ref_points_per_segment = total_kpoints // n_segments
+    #     ref_points_per_segment = total_kpoints // n_segments
 
-        ref_band_data_x = []
-        cumulative = 0.0
+    #     ref_band_data_x = []
+    #     cumulative = 0.0
 
-        for seg_len in segment_lengths:
-            segment_x = np.linspace(cumulative, cumulative + seg_len, ref_points_per_segment, endpoint=False)
-            ref_band_data_x.append(segment_x)
-            cumulative += seg_len
+    #     for seg_len in segment_lengths:
+    #         segment_x = np.linspace(cumulative, cumulative + seg_len, ref_points_per_segment, endpoint=False)
+    #         ref_band_data_x.append(segment_x)
+    #         cumulative += seg_len
 
-        ref_band_data_x = np.concatenate(ref_band_data_x)
+    #     ref_band_data_x = np.concatenate(ref_band_data_x)
         
 
-        #-----------------------plotting-----------------------
-        # node band structure
-        #model = node.name.split("/")[0]
+    #     #-----------------------plotting-----------------------
+    #     # node band structure
+    #     #model = node.name.split("/")[0]
         
-        fig = plt.figure(figsize=(9, 5))
-        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
-        ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])
-        ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])  # DOS
+    #     fig = plt.figure(figsize=(9, 5))
+    #     gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
+    #     ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])
+    #     ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])  # DOS
         
-        for dist_segment, freq_segment in zip(phonons_dist, phonons_freq):
-            for band in freq_segment.T:
-                ax1.plot(dist_segment, band, lw=1, linestyle='--', color='red', label = model_name)
+    #     for dist_segment, freq_segment in zip(phonons_dist, phonons_freq):
+    #         for band in freq_segment.T:
+    #             ax1.plot(dist_segment, band, lw=1, linestyle='--', color='red', label = model_name)
 
-        ax2.plot(dos_values, dos_freqs, lw=1.2, color="red", linestyle='--')
+    #     ax2.plot(dos_values, dos_freqs, lw=1.2, color="red", linestyle='--')
         
-        # reference band structure
-        for band in reference_phonons:
-            ax1.plot(ref_band_data_x, band, lw=1, label="Reference", color="blue")
+    #     # reference band structure
+    #     for band in reference_phonons:
+    #         ax1.plot(ref_band_data_x, band, lw=1, label="Reference", color="blue")
             
-        ax2.plot(ref_dos_densities, ref_dos_freq, lw=1.2, color="blue")
+    #     ax2.plot(ref_dos_densities, ref_dos_freq, lw=1.2, color="blue")
             
-        #print("phonons_dist", phonons_dist)
-        #print("labels", labels)
-        #print("connections", connections)
-        xticks, xticklabels = self._build_xticks(phonons_dist, labels, connections)
+    #     #print("phonons_dist", phonons_dist)
+    #     #print("labels", labels)
+    #     #print("connections", connections)
+    #     xticks, xticklabels = self._build_xticks(phonons_dist, labels, connections)
 
-        for x in xticks:
-            ax1.axvline(x=x, color='k', linewidth=1)
+    #     for x in xticks:
+    #         ax1.axvline(x=x, color='k', linewidth=1)
         
-        ax1.axhline(0, color='k', linewidth=1)
-        ax2.axhline(0, color='k', linewidth=1)
+    #     ax1.axhline(0, color='k', linewidth=1)
+    #     ax2.axhline(0, color='k', linewidth=1)
         
-        ax1.set_xticks(xticks, xticklabels)
-        ax1.set_xlim(xticks[0], xticks[-1])
-        ax1.set_ylabel("Frequency (THz)", fontsize = 14)
-        ax1.set_xlabel("Wave Vector", fontsize = 14)
+    #     ax1.set_xticks(xticks, xticklabels)
+    #     ax1.set_xlim(xticks[0], xticks[-1])
+    #     ax1.set_ylabel("Frequency (THz)", fontsize = 14)
+    #     ax1.set_xlabel("Wave Vector", fontsize = 14)
         
-        comp_freqs = np.concatenate(phonons_freq).flatten()
-        ref_freqs = np.array(reference_phonons).flatten()
-        all_freqs = np.concatenate([comp_freqs, ref_freqs])
+    #     comp_freqs = np.concatenate(phonons_freq).flatten()
+    #     ref_freqs = np.array(reference_phonons).flatten()
+    #     all_freqs = np.concatenate([comp_freqs, ref_freqs])
 
-        ax1.set_ylim(all_freqs.min() - 0.4, all_freqs.max() + 0.4)
-        ax2.set_ylim(ax1.get_ylim())
+    #     ax1.set_ylim(all_freqs.min() - 0.4, all_freqs.max() + 0.4)
+    #     ax2.set_ylim(ax1.get_ylim())
                 
-        plt.setp(ax2.get_yticklabels(), visible=False)
-        ax2.set_xlabel("DOS", fontsize = 14)
+    #     plt.setp(ax2.get_yticklabels(), visible=False)
+    #     ax2.set_xlabel("DOS", fontsize = 14)
         
-        handles, labels = ax1.get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        fig.legend(
-                    by_label.values(),
-                    by_label.keys(),
-                    loc='upper center',
-                    bbox_to_anchor=(0.8, 1.02),  # Right of center title
-                    frameon=False,
-                    ncol=2,
-                    fontsize=14,    
-                    )
+    #     handles, labels = ax1.get_legend_handles_labels()
+    #     by_label = dict(zip(labels, handles))
+    #     fig.legend(
+    #                 by_label.values(),
+    #                 by_label.keys(),
+    #                 loc='upper center',
+    #                 bbox_to_anchor=(0.8, 1.02),  # Right of center title
+    #                 frameon=False,
+    #                 ncol=2,
+    #                 fontsize=14,    
+    #                 )
         
-        ax1.grid(True, linestyle=':', linewidth=0.5)
-        ax2.grid(True, linestyle=':', linewidth=0.5)
+    #     ax1.grid(True, linestyle=':', linewidth=0.5)
+    #     ax2.grid(True, linestyle=':', linewidth=0.5)
         
-        plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
+    #     plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
         
-        if not os.path.exists(f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots"):
-            os.makedirs(f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots")
+    #     if not os.path.exists(f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots"):
+    #         os.makedirs(f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots")
         
-        phonon_plot_path = f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots/dispersion_{model_name}_{mp_id}.png"
-        fig.savefig(phonon_plot_path, bbox_inches='tight')
-        plt.close(fig)
+    #     phonon_plot_path = f"nodes/{model_name}/phonons-dispersion-pred/phonon_plots/dispersion_{model_name}_{mp_id}.png"
+    #     fig.savefig(phonon_plot_path, bbox_inches='tight')
+    #     plt.close(fig)
         
-        return phonon_plot_path
+    #     return phonon_plot_path
     
     
     
-    
-    def prettify_chemical_formula(self, formula: str) -> str:
+    @staticmethod
+    def prettify_chemical_formula(formula: str) -> str:
         """
         Converts a chemical formula into a prettier format for matplotlib titles.
 
@@ -545,8 +546,8 @@ class PhononDispersion(zntrack.Node):
     
 
 
-    #@staticmethod
-    def compare_reference(self, node_pred, node_ref, correlation_plot_mode = False, model_name = None):
+    @staticmethod
+    def compare_reference(node_pred, node_ref, correlation_plot_mode = False, model_name = None):
         
         # ----------setup ticks using node------------
         fig = plt.figure(figsize=(9, 5))
@@ -577,7 +578,7 @@ class PhononDispersion(zntrack.Node):
         connections = node_ref.connections
         connections = [True] + connections
         
-        xticks, xticklabels = self._build_xticks(distances_ref, labels, connections)
+        xticks, xticklabels = PhononDispersion._build_xticks(distances_ref, labels, connections)
         
 
         #-----------------------plotting-----------------------
@@ -637,7 +638,7 @@ class PhononDispersion(zntrack.Node):
         ax2.grid(True, linestyle=':', linewidth=0.5)
         
         chemical_formula = get_chemical_formula(phonons_ref)
-        chemical_formula = self.prettify_chemical_formula(chemical_formula)
+        chemical_formula = PhononDispersion.prettify_chemical_formula(chemical_formula)
         mp_id = node_ref.name.split("_")[-1]
         plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
             
@@ -667,8 +668,8 @@ class PhononDispersion(zntrack.Node):
 
 
 
-
-    def max_freq_benchmark_interactive(self, pred_node_dict, ref_node_dict):
+    @staticmethod
+    def benchmark_interactive(pred_node_dict, ref_node_dict, browser = True, use_popup = False):
 
         band_structure_dict_pred = {}
         for mp_id in pred_node_dict.keys():
@@ -736,7 +737,7 @@ class PhononDispersion(zntrack.Node):
                 pred_benchmarks_dict[mp_id][model_name]['F'] = pred_node_dict[mp_id][model_name].get_thermal_properties['free_energy'][T_300K_index]
                 pred_benchmarks_dict[mp_id][model_name]['C_V'] = pred_node_dict[mp_id][model_name].get_thermal_properties['heat_capacity'][T_300K_index]
                 
-                phonon_plot_path = self.compare_reference(
+                phonon_plot_path = PhononDispersion.compare_reference(
                     node_pred=pred_node_dict[mp_id][model_name],
                     node_ref=ref_node_dict[mp_id],
                     correlation_plot_mode=True,
@@ -786,6 +787,66 @@ class PhononDispersion(zntrack.Node):
         mae_summary_df.index.name = 'Model'
         mae_summary_df.reset_index(inplace=True)
         
+        
+        
+        # -------------------------------- saving plots --------------------------------
+        
+        model_figures_dict = {}
+        results_dir = Path("phonon-dispersion-stats")
+        results_dir.mkdir(exist_ok=True)
+            
+        for model_name in model_plotting_data:
+            model_figures_dict[model_name] = {}
+            
+
+            model_dir = results_dir / model_name
+            model_dir.mkdir(exist_ok=True)
+
+            for b in ["max_freq", "S", "F", "C_V"]:
+                ref_vals = model_benchmarks_dict[model_name][b]["ref"]
+                pred_vals = model_benchmarks_dict[model_name][b]["pred"]
+                # save plot data to csv
+                pd.DataFrame({"Reference": ref_vals, "Predicted": pred_vals}).to_csv(model_dir / f"{b}.csv", index=False)
+                        
+                rmse = plot_stats_dict[model_name][b]['RMSE'][-1]
+                mae = plot_stats_dict[model_name][b]['MAE'][-1]
+                
+                combined_min = min(min(ref_vals), min(pred_vals), 0)
+                combined_max = max(max(ref_vals), max(pred_vals))
+
+                fig = px.scatter(
+                    x=ref_vals,
+                    y=pred_vals,
+                    labels={
+                        "x": f"Reference {pretty_benchmark_labels[b]}",
+                        "y": f"Predicted {pretty_benchmark_labels[b]}",
+                    },
+                    title=f"{model_name} - {pretty_benchmark_labels[b]}",
+                )
+                fig.add_shape(
+                    type="line", x0=combined_min, y0=combined_min, x1=combined_max, y1=combined_max,
+                    xref='x', yref='y', line=dict(color="black", dash="dash")
+                )
+                fig.update_layout(plot_bgcolor="white", paper_bgcolor="white", font_color="black",
+                    xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1), yaxis=dict(showgrid=True, gridcolor="lightgray"))
+                fig.add_annotation(xref="paper", yref="paper", x=0.02, y=0.98, text=f"RMSE: {rmse:.3f}<br>MAE: {mae:.3f}", showarrow=False, align="left", font=dict(size=12, color="black"), bordercolor="black", borderwidth=1, borderpad=4, bgcolor="white", opacity=0.8)
+
+                model_figures_dict[model_name][b] = fig
+                fig.write_image(model_dir / f"{b}.png")
+                
+
+
+        # save summary table to csv
+        mae_summary_df.to_csv(results_dir / "mae_summary.csv", index=False)
+        
+
+
+
+                
+        
+        
+        
+        # --------------------------------- Dash app ---------------------------------
 
         # Dash app
         app = dash.Dash(__name__)
@@ -955,8 +1016,45 @@ class PhononDispersion(zntrack.Node):
                     "border": "2px solid black"
                 }
             )
+            
+            
+        def get_free_port():
+            """Find an unused local port."""
+            s = socket.socket()
+            s.bind(('', 0))  # let OS pick a free port
+            port = s.getsockname()[1]
+            s.close()
+            return port
 
-        def run_app(app):
-            app.run(debug=True, port=8051)
+        def run_app(app, browser=True, use_popup=False):
+            port = get_free_port()
+            url = f"http://localhost:{port}"
 
-        return run_app(app)
+            def _run_server():
+                app.run(debug=True, use_reloader=False, port=port)
+
+            if use_popup:
+                import threading
+                import webview
+                # Start Dash app in background
+                threading.Thread(target=_run_server, daemon=True).start()
+                time.sleep(1.5)  # Give it time to start
+
+                # Open popup window with pywebview
+                webview.create_window("Phonon Benchmark Viewer", url)
+                webview.start()
+            elif browser:
+                import webbrowser
+                threading.Thread(target=_run_server, daemon=True).start()
+                time.sleep(1.5)
+                webbrowser.open(url)
+            else:
+                # Blocking run for CLI
+                _run_server()
+
+            print(f"Dash app running at {url}")
+        
+        return run_app(app, browser=browser, use_popup=use_popup)
+
+
+

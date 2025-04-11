@@ -1,4 +1,6 @@
 import dataclasses
+from pathlib import Path
+import yaml
 
 import mlipx
 from mlipx.nodes.generic_ase import Device
@@ -69,6 +71,19 @@ MODELS["orca"] = mlipx.OrcaSinglePoint(
     orcablocks ="%pal nprocs 8 end",
     orca_shell="{{ orcashell }}",
 )
+{% elif model.endswith(".yaml") %}
+# Load all models from registry file
+with open(Path(__file__).parent / "{{ model }}", "r") as f:
+    _registry = yaml.safe_load(f)
+
+for _name, _cfg in _registry.items():
+    print(f"Loading model: {_name}")
+    MODELS[_name] = mlipx.GenericASECalculator(
+        module=_cfg["module"],
+        class_name=_cfg["class_name"],
+        device=_cfg.get("device", "auto"),
+        kwargs=_cfg.get("kwargs", {})
+    )
 {% endif %}
 {% endfor %}
 

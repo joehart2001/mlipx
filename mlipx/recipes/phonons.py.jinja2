@@ -40,21 +40,25 @@ with project.group("reference", "phonons-dispersion-ref"):
     for mp_id in alex_subset_mpids:
         phonon = mlipx.PhononDispersion(
             phonopy_yaml_path=dict_ref[mp_id].force_constants_path,
+            thermal_properties_path= dict_ref[mp_id].get_thermal_properties_path,
             name=f"PhononDispersion_{mp_id}")
         phonon_dict_ref[mp_id] = phonon
 
-
-# calculated yaml files for models -> phonon dispersions
+# # calculated yaml files for models -> phonon dispersions
 phonon_dict_pred = {}
-for mp_id in fc2_dict.keys():
-    for (model_name, fc2), (_, ref_phonon) in zip(fc2_dict[mp_id].items(), phonon_dict_ref.items()):
-        with project.group(model_name, "phonons-dispersion-pred"):
+for mp_id in fc2_dict:
+    ref_phonon = phonon_dict_ref[mp_id]
 
+    for model_name, fc2 in fc2_dict[mp_id].items():
+        with project.group(model_name, "phonons-dispersion-pred"):
             phonon = mlipx.PhononDispersion(
                 phonopy_yaml_path=fc2.force_constants_path,
-                qpoints_input_path= ref_phonon.qpoints_path,
-                labels_input_path= ref_phonon.labels_path,
-                connections_input_path= ref_phonon.connections_path,
+                thermal_properties_path=fc2.get_thermal_properties_path,
+                qpoints_input_path=ref_phonon.qpoints_path,
+                labels_input_path=ref_phonon.labels_path,
+                connections_input_path=ref_phonon.connections_path,
                 name=f"PhononDispersion_{mp_id}"
             )
             phonon_dict_pred.setdefault(mp_id, {})[model_name] = phonon
+
+project.build()

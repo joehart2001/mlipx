@@ -74,6 +74,7 @@ class PhononForceConstants(zntrack.Node):
         
         calc = self.model.get_calculator()
         
+        # provided data is a list of atoms
         if isinstance(self.data, list):
             atoms = self.data[self.material_idx]
                     
@@ -91,7 +92,7 @@ class PhononForceConstants(zntrack.Node):
             
             
             
-            
+        # provided data is a reference phonopy.yaml file
         elif isinstance(self.data, pathlib.Path):
             phonons = load_phonopy(str(self.data))
             displacement_dataset = phonons.dataset

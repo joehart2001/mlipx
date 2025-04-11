@@ -4,6 +4,7 @@ import json
 import pathlib
 import uuid
 import webbrowser
+import re
 
 import dvc.api
 import plotly.io as pio
@@ -124,3 +125,74 @@ def compare(  # noqa C901
             pio.write_json(fig, pathlib.Path(figures_path) / f"{desc}.json")
 
     vis.socket.sleep(5)
+
+
+
+
+
+@app.command()
+def phonon_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ):
+    """Launch interactive benchmark for phonon dispersion."""
+    import fnmatch
+    import dvc.api
+    import json
+
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    selected_nodes = []
+    if glob:
+        for pattern in nodes:
+            matched = fnmatch.filter(all_nodes, pattern)
+            for name in matched:
+                model = name.split("_phonons-dispersion")[0]
+                if ("reference" in name or "ref" in name) or (not models or model in models):
+                    selected_nodes.append(name)
+    else:
+        for name in nodes:
+            model = name.split("_phonons-dispersion")[0]
+            if ("reference" in name or "ref" in name) or (not models or model in models):
+                selected_nodes.append(name)
+
+    if not selected_nodes:
+        typer.echo("No matching nodes found.")
+        raise typer.Exit()
+
+    # Instantiate nodes
+    node_objects = {}
+    for name in selected_nodes:
+        node_objects[name] = zntrack.from_rev(name)
+
+    # Group nodes by mp-id and by model
+    pred_node_dict = {}
+    ref_node_dict = {}
+
+    for name, node in node_objects.items():
+        mp_id = name.split("_")[-1]
+        model = name.split("_phonons-dispersion")[0]
+        if "reference" in name or "ref" in name:
+            ref_node_dict[mp_id] = node
+        else:
+            pred_node_dict.setdefault(mp_id, {})[model] = node
+
+    if models:
+        # filter to selected models
+        pred_node_dict = {
+            mp: {m: node for m, node in models_dict.items() if m in models}
+            for mp, models_dict in pred_node_dict.items()
+        }
+
+    # Launch interactive plot
+    from mlipx import PhononDispersion
+    PhononDispersion.benchmark_interactive(
+        pred_node_dict=pred_node_dict,
+        ref_node_dict=ref_node_dict,
+        browser=False,
+        use_popup=True
+    )
