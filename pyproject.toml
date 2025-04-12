@@ -13,7 +13,7 @@ repository = "https://github.com/basf/mlipx"
 
 [tool.poetry.dependencies]
 python = ">=3.10,<4"
-zntrack = "0.8.0"
+zntrack = "0.8.3"
 ase = "^3"
 typer = "^0.13"
 plotly = "^5"
@@ -21,6 +21,11 @@ zndraw = "^0.5.2"
 znh5md = "^0.3.6"
 lazy-loader = "^0.4"
 platformdirs = "3.10"
+seekpath = "2.1.0"
+dash = "3.0.1"
+kaleido = "0.2.1"
+pywebview = "5.4"
+
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.7"

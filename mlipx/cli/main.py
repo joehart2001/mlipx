@@ -193,6 +193,6 @@ def phonon_compare(
     PhononDispersion.benchmark_interactive(
         pred_node_dict=pred_node_dict,
         ref_node_dict=ref_node_dict,
-        browser=False,
-        use_popup=True
+        browser=True,
+        use_popup=False
     )
