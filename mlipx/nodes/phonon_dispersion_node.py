@@ -1045,6 +1045,7 @@ class PhononDispersion(zntrack.Node):
                 webview.start()
             elif browser:
                 import webbrowser
+                import threading
                 threading.Thread(target=_run_server, daemon=True).start()
                 time.sleep(1.5)
                 webbrowser.open(url)
