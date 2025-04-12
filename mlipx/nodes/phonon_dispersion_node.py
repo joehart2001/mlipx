@@ -1032,6 +1032,12 @@ class PhononDispersion(zntrack.Node):
 
             def _run_server():
                 app.run(debug=True, use_reloader=False, port=port)
+                
+            if "SSH_CONNECTION" in os.environ or "SSH_CLIENT" in os.environ:
+                import threading
+                print(f"\n Detected SSH session — skipping browser launch.")
+                threading.Thread(target=_run_server, daemon=True).start()
+                return
 
             if use_popup:
                 import threading
