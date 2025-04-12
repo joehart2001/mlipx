@@ -5,14 +5,16 @@ from models import MODELS
 
 project = zntrack.Project()
 
-with open("../phonons/alexandria_phonons/mp_ids.txt", "r") as f:
-    mp_ids = [line.strip() for line in f.readlines()]
 
-mp_ids = mp_ids[:2]  # for testing
 
 # datapath = [path] so need first element (only element)
 
 {% if datapath %}
+with open("{{ datapath[0] }}/../mp_ids.txt", "r") as f:
+    mp_ids = [line.strip() for line in f.readlines()]
+
+mp_ids = mp_ids[:2]  # for testing
+
 dict_ref = {}
 with project.group("reference", "phonons-ref-to-node"):
     for mp_id in mp_ids:
