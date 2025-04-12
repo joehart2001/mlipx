@@ -1048,7 +1048,7 @@ class PhononDispersion(zntrack.Node):
                 import threading
                 threading.Thread(target=_run_server, daemon=True).start()
                 time.sleep(1.5)
-                webbrowser.open(url)
+                #webbrowser.open(url)
             else:
                 # Blocking run for CLI
                 _run_server()
