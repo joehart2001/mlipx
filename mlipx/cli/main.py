@@ -128,13 +128,15 @@ def compare(  # noqa C901
 
 
 
-
+from typer import Option, Argument
 
 @app.command()
 def phonon_compare(
     nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+
     ):
     """Launch interactive benchmark for phonon dispersion."""
     import fnmatch
@@ -188,11 +190,16 @@ def phonon_compare(
             for mp, models_dict in pred_node_dict.items()
         }
 
-    # Launch interactive plot
+
+    if ui not in {None, "browser", "popup"}:
+        typer.echo("Invalid UI mode. Choose from: none, browser, popup.")
+        raise typer.Exit(1)
+
+    print('\n UI = ', ui)
+
     from mlipx import PhononDispersion
     PhononDispersion.benchmark_interactive(
         pred_node_dict=pred_node_dict,
         ref_node_dict=ref_node_dict,
-        browser=True,
-        use_popup=False
+        ui = ui,
     )

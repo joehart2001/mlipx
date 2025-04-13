@@ -669,7 +669,7 @@ class PhononDispersion(zntrack.Node):
 
 
     @staticmethod
-    def benchmark_interactive(pred_node_dict, ref_node_dict, browser = True, use_popup = False):
+    def benchmark_interactive(pred_node_dict, ref_node_dict, ui = None):
 
         band_structure_dict_pred = {}
         for mp_id in pred_node_dict.keys():
@@ -838,8 +838,8 @@ class PhononDispersion(zntrack.Node):
 
         # save summary table to csv
         mae_summary_df.to_csv(results_dir / "mae_summary.csv", index=False)
-        
-
+        if ui is None:
+            return
 
 
                 
@@ -848,6 +848,7 @@ class PhononDispersion(zntrack.Node):
         
         # --------------------------------- Dash app ---------------------------------
 
+        
         # Dash app
         app = dash.Dash(__name__)
 
@@ -1026,7 +1027,7 @@ class PhononDispersion(zntrack.Node):
             s.close()
             return port
 
-        def run_app(app, browser=True, use_popup=False):
+        def run_app(app, ui):
             port = get_free_port()
             url = f"http://localhost:{port}"
 
@@ -1039,7 +1040,7 @@ class PhononDispersion(zntrack.Node):
                 #threading.Thread(target=_run_server, daemon=True).start()
                 return
 
-            if use_popup:
+            if ui == "popup":
                 import threading
                 import webview
                 # Start Dash app in background
@@ -1049,7 +1050,7 @@ class PhononDispersion(zntrack.Node):
                 # Open popup window with pywebview
                 webview.create_window("Phonon Benchmark Viewer", url)
                 webview.start()
-            elif browser:
+            elif ui == "browser":
                 import webbrowser
                 import threading
                 threading.Thread(target=_run_server, daemon=True).start()
@@ -1061,7 +1062,7 @@ class PhononDispersion(zntrack.Node):
 
             print(f"Dash app running at {url}")
         
-        return run_app(app, browser=browser, use_popup=use_popup)
+        return run_app(app, ui=ui)
 
 
 
