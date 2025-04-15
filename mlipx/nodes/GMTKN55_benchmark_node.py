@@ -80,7 +80,6 @@ class GMTKN55_benchmark(zntrack.Node):
     model_benchmark_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "benchmark.csv")
     reference_values_ouptut: pathlib.Path = zntrack.outs_path(zntrack.nwd / "reference_values.json")
     predicted_values_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "predicted_values.json")
-    system_atoms_traj: pathlib.Path = zntrack.outs_path(zntrack.nwd / "system_atoms.traj")
 
     
 
@@ -101,7 +100,6 @@ class GMTKN55_benchmark(zntrack.Node):
         print(f"\nEvaluating with model: {self.model_name}")
         overall_errors = []
         overall_weights = []
-        traj = Trajectory(str(self.system_atoms_traj), mode="w")
         
         with open(self.model_benchmark_output, "w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
@@ -158,6 +156,8 @@ class GMTKN55_benchmark(zntrack.Node):
                     try:
                         comp_value = 0
                         for species_name, species in system["Species"].items():
+                            
+                            
                             atoms = ase.Atoms(
                                 species["Elements"],
                                 positions=np.array(species["Positions"])
@@ -170,17 +170,14 @@ class GMTKN55_benchmark(zntrack.Node):
                             result = atoms.get_potential_energy()
                             comp_value += result * species["Count"] * 23.0609  # eV to kcal/mol
                             
-                            atoms.info["subset_name"] = subset_name
-                            atoms.info["system_name"] = system_name
-                            atoms.info["model_name"] = self.model_name
-                            traj.write(atoms)
 
 
                         error = ref_value - comp_value
-                        ref_values[subset_name].append(ref_value)
-                        pred_values[subset_name].append(comp_value)
+                        ref_values[subset_name].append({"species_name": species_name, "value": ref_value})
+                        pred_values[subset_name].append({"species_name": species_name, "value": comp_value})
                         weights.append(weight)
                         subset_errors.append(error)
+                        
 
                     except Exception as e:
                         print(f"Error in system {system_name}, skipping. Exception: {e}")
@@ -207,6 +204,7 @@ class GMTKN55_benchmark(zntrack.Node):
             json.dump(ref_values, f)
         with open(self.predicted_values_output, "w") as f:
             json.dump(pred_values, f)
+
             
             
             
@@ -236,210 +234,217 @@ class GMTKN55_benchmark(zntrack.Node):
             
             
             
-            
-    # @staticmethod
-    # def mae_plot_interactive(benchmark_node_dict, subsets_path, ui = None):
+    @staticmethod
+    def mae_plot_interactive(benchmark_node_dict, subsets_path, ui = None):
         
         
-    #     subsets_df = pd.read_csv(subsets_path)
-    #     subsets_df.columns = subsets_df.columns.str.lower()
-    #     subsets_df["subset"] = subsets_df["subset"].str.lower()
-    #     subsets_df["excluded"] = subsets_df["excluded"].astype(str)
+        subsets_df = pd.read_csv(subsets_path)
+        subsets_df.columns = subsets_df.columns.str.lower()
+        subsets_df["subset"] = subsets_df["subset"].str.lower()
+        subsets_df["excluded"] = subsets_df["excluded"].astype(str)
         
     
-    #     mae_data = []
+        mae_data = []
         
-    #     #for file in benchmark_files:
-    #     for model_name, node in benchmark_node_dict.items():
+        #for file in benchmark_files:
+        for model_name, node in benchmark_node_dict.items():
             
-    #         df = node.benchmark_results.copy()
-    #         df.columns = df.columns.str.lower()
-    #         df = df[df["completed"].astype(str).str.lower().str.lower() == "true"]
-    #         df["subset"] = df["subset"].str.lower()  
+            df = node.benchmark_results.copy()
+            df.columns = df.columns.str.lower()
+            df = df[df["completed"].astype(str).str.lower().str.lower() == "true"]
+            df["subset"] = df["subset"].str.lower()  
             
-    #         # merge descriptions
-    #         df = df.merge(subsets_df[["subset", "description"]], on="subset", how="left")
+            # merge descriptions
+            df = df.merge(subsets_df[["subset", "description"]], on="subset", how="left")
 
-    #         for _, row in df.iterrows():
-    #             mae_data.append({
-    #                 "model": model_name,
-    #                 "subset": row["subset"],
-    #                 "mae": row["mae"],
-    #                 "description": row["description"]
-    #             })
+            for _, row in df.iterrows():
+                mae_data.append({
+                    "model": model_name,
+                    "subset": row["subset"],
+                    "mae": row["mae"],
+                    "description": row["description"]
+                })
 
-    #     mae_df = pd.DataFrame(mae_data)
-    #     print(mae_df["model"].value_counts())
+        mae_df = pd.DataFrame(mae_data)
+        print(mae_df["model"].value_counts())
         
-    #     if ui is None:
-    #         return
+        if ui is None:
+            return
 
-    #     # --- Dash app ---
-    #     app = dash.Dash(__name__)
-    #     app.title = "GMTKN55 Dashboard"
+        # --- Dash app ---
+        app = dash.Dash(__name__)
+        app.title = "GMTKN55 Dashboard"
 
-    #     # Main MAE plot (customdata holds [model, subset])
-    #     fig = px.scatter(
-    #         mae_df,
-    #         x="subset",
-    #         y="mae",
-    #         color="model",
-    #         hover_data={"description": True},
-    #         custom_data=["model", "subset", "description"],
-    #         title="Per-subset MAE by Model",
-    #         labels={
-    #             "subset": "Subset",
-    #             "mae": "MAE",
-    #             "model": "Model",
-    #         }
-    #     )
-    #     fig.update_traces(
-    #         hovertemplate="<br>".join([
-    #             "Model: %{customdata[0]}",
-    #             "Subset: %{customdata[1]}",
-    #             "Description: %{customdata[2]}",
-    #             "MAE: %{y:.3f} kcal/mol",
-    #             "<extra></extra>"
-    #         ])
-    #     )
-    #     fig.update_layout(
-    #         paper_bgcolor='white',
-    #         font_color='black',
-    #         title_font=dict(size=20),
-    #         margin=dict(t=50, r=30, b=50, l=50),
-    #         xaxis=dict(showgrid=True, gridcolor='lightgray'),
-    #         yaxis=dict(showgrid=True, gridcolor='lightgray')
-    #     )
+        # Main MAE plot (customdata holds [model, subset])
+        fig = px.scatter(
+            mae_df,
+            x="subset",
+            y="mae",
+            color="model",
+            hover_data={"description": True},
+            custom_data=["model", "subset", "description"],
+            title="Per-subset MAE by Model",
+            labels={
+                "subset": "Subset",
+                "mae": "MAE",
+                "model": "Model",
+            }
+        )
+        fig.update_traces(
+            hovertemplate="<br>".join([
+                "Model: %{customdata[0]}",
+                "Subset: %{customdata[1]}",
+                "Description: %{customdata[2]}",
+                "MAE: %{y:.3f} kcal/mol",
+                "<extra></extra>"
+            ])
+        )
+        fig.update_layout(
+            paper_bgcolor='white',
+            font_color='black',
+            title_font=dict(size=20),
+            margin=dict(t=50, r=30, b=50, l=50),
+            xaxis=dict(showgrid=True, gridcolor='lightgray'),
+            yaxis=dict(showgrid=True, gridcolor='lightgray')
+        )
 
-    #     app.layout = html.Div([
-    #         html.H1("GMTKN55 Benchmarking Dashboard", style={"color": "black"}),
+        app.layout = html.Div([
+            html.H1("GMTKN55 Benchmarking Dashboard", style={"color": "black"}),
 
-    #         dcc.Graph(id="mae-plot", figure=fig),
+            dcc.Graph(id="mae-plot", figure=fig),
 
-    #         html.H2("Predicted vs Reference Energies", style={"color": "black"}),
-    #         dcc.Graph(id="pred-vs-ref-plot")
-    #     ], style={"backgroundColor": "white", "padding": "20px"})
+            html.H2("Predicted vs Reference Energies", style={"color": "black"}),
+            dcc.Graph(id="pred-vs-ref-plot")
+        ], style={"backgroundColor": "white", "padding": "20px"})
 
-    #     @app.callback(
-    #         Output("pred-vs-ref-plot", "figure"),
-    #         Input("mae-plot", "clickData"),
-    #     )
-    #     def update_scatter(click_data):
-    #         if click_data is None:
-    #             raise dash.exceptions.PreventUpdate
+        @app.callback(
+            Output("pred-vs-ref-plot", "figure"),
+            Input("mae-plot", "clickData"),
+        )
 
-    #         model_name, subset_name, *_ = click_data["points"][0]["customdata"]
-    #         subset_name = subset_name.lower()
-    #         print(f"Selected: {model_name} | {subset_name}")
+        def update_scatter(click_data):
+            if click_data is None:
+                raise dash.exceptions.PreventUpdate
 
-    #         try:
-    #             preds = benchmark_node_dict[model_name].predicted_dict[subset_name]
-    #             refs = benchmark_node_dict[model_name].reference_dict[subset_name]
-    #         except KeyError:
-    #             print(f"Model {model_name} or subset {subset_name} not found in data.")
-    #             return go.Figure()
+            model_name, subset_name, *_ = click_data["points"][0]["customdata"]
+            subset_name = subset_name.lower()
+            print(f"Selected: {model_name} | {subset_name}")
 
-    #         # Compute error metrics
-    #         preds = np.array(preds)
-    #         refs = np.array(refs)
-    #         errors = preds - refs
-    #         mae = np.mean(np.abs(errors))
+            try:
+                pred_list = benchmark_node_dict[model_name].predicted_dict[subset_name]
+                ref_list = benchmark_node_dict[model_name].reference_dict[subset_name]
+            except KeyError:
+                print(f"Model {model_name} or subset {subset_name} not found in data.")
+                return go.Figure()
+            
+            preds_dict = {entry["species_name"]: entry["value"] for entry in pred_list}
+            refs_dict = {entry["species_name"]: entry["value"] for entry in ref_list}
 
-    #         # Axis ranges based on max/min of both predicted and reference
-    #         min_val = min(refs.min(), preds.min(), 0)
-    #         max_val = max(refs.max(), preds.max())
-    #         pad = 0.05 * (max_val - min_val)
-    #         x_range = [min_val - pad, max_val + pad]
-    #         y_range = x_range
+            # Use the order of preds_dict and filter to species also in refs_dict
+            species_list = [s["species_name"] for s in pred_list if s["species_name"] in refs_dict]
+            if not species_list:
+                print("No overlapping species between predictions and references.")
+                return go.Figure()
 
-    #         fig = px.scatter(
-    #             x=refs,
-    #             y=preds,
-    #             labels={"x": "Reference Energy (kcal/mol)", "y": "Predicted Energy (kcal/mol)"},
-    #             title=f"{model_name} — {subset_name}: Predicted vs Reference",
-    #         )
+            preds = np.array([preds_dict[s] for s in species_list])
+            refs = np.array([refs_dict[s] for s in species_list])
+            #mae_val = mae_df[(mae_df["model"] == model_name) & (mae_df["subset"] == subset_name)]["mae"].values[0]
+            mae = np.mean(np.abs(refs - preds))
 
-    #         fig.add_trace(go.Scatter(
-    #             x=np.linspace(min_val - 100, max_val + 100, 100), y=np.linspace(min_val - 100, max_val + 100, 100),
-    #             mode="lines", name="y = x",
-    #             line=dict(dash="dot", color="gray")
-    #         ))
+            min_val = min(refs.min(), preds.min(), 0)
+            max_val = max(refs.max(), preds.max())
+            pad = 0.05 * (max_val - min_val)
+            x_range = [min_val - pad, max_val + pad]
+            y_range = x_range
 
-    #         fig.add_annotation(
-    #             xref="paper", yref="paper",
-    #             x=0.02, y=0.98,
-    #             text=f"MAE: {mae:.3f}",
-    #             showarrow=False,
-    #             align="left",
-    #             font=dict(size=12, color="black"),
-    #             bordercolor="black",
-    #             borderwidth=1,
-    #             borderpad=4,
-    #             bgcolor="white",
-    #             opacity=0.8
-    #         )
+            fig = px.scatter(
+                x=refs,
+                y=preds,
+                custom_data=[species_list],
+                labels={"x": "Reference Energy (kcal/mol)", "y": "Predicted Energy (kcal/mol)"},
+                title=f"{model_name} — {subset_name}: Predicted vs Reference"
+            )
 
-    #         fig.update_layout(
-    #             height=500,
-    #             plot_bgcolor='white',
-    #             paper_bgcolor='white',
-    #             font_color='black',
-    #             margin=dict(t=50, r=30, b=50, l=50),
-    #             xaxis=dict(range=x_range, showgrid=True, gridcolor='lightgray', scaleanchor='y', scaleratio=1),
-    #             yaxis=dict(range=y_range, showgrid=True, gridcolor='lightgray')
-    #         )
+            fig.update_traces(
+                hovertemplate="<br>".join([
+                    "Species: %{customdata[0]}",
+                    "Reference: %{x:.3f} kcal/mol",
+                    "Predicted: %{y:.3f} kcal/mol",
+                    "<extra></extra>"
+                ])
+            )
 
-    #         return fig
+            fig.add_trace(go.Scatter(
+                x=np.linspace(min_val - 100, max_val + 100, 100),
+                y=np.linspace(min_val - 100, max_val + 100, 100),
+                mode="lines", name="y = x",
+                line=dict(dash="dot", color="gray")
+            ))
+
+            fig.add_annotation(
+                xref="paper", yref="paper",
+                x=0.02, y=0.98,
+                text=f"MAE: {mae:.3f}",
+                showarrow=False,
+                align="left",
+                font=dict(size=12, color="black"),
+                bordercolor="black",
+                borderwidth=1,
+                borderpad=4,
+                bgcolor="white",
+                opacity=0.8
+            )
+
+            fig.update_layout(
+                height=500,
+                plot_bgcolor='white',
+                paper_bgcolor='white',
+                font_color='black',
+                margin=dict(t=50, r=30, b=50, l=50),
+                xaxis=dict(range=x_range, showgrid=True, gridcolor='lightgray', scaleanchor='y', scaleratio=1),
+                yaxis=dict(range=y_range, showgrid=True, gridcolor='lightgray')
+            )
+
+            return fig
 
 
 
-    #     def get_free_port():
-    #         """Find an unused local port."""
-    #         s = socket.socket()
-    #         s.bind(('', 0))  # let OS pick a free port
-    #         port = s.getsockname()[1]
-    #         s.close()
-    #         return port
+        def get_free_port():
+            """Find an unused local port."""
+            s = socket.socket()
+            s.bind(('', 0))  # let OS pick a free port
+            port = s.getsockname()[1]
+            s.close()
+            return port
 
 
-    #     def run_app(app, ui):
-    #         port = get_free_port()
-    #         url = f"http://localhost:{port}"
+        def run_app(app, ui):
+            port = get_free_port()
+            url = f"http://localhost:{port}"
 
-    #         def _run_server():
-    #             app.run(debug=True, use_reloader=False, port=port)
+            def _run_server():
+                app.run(debug=True, use_reloader=False, port=port)
                 
-    #         if "SSH_CONNECTION" in os.environ or "SSH_CLIENT" in os.environ:
-    #             import threading
-    #             print(f"\n Detected SSH session — skipping browser launch.")
-    #             #threading.Thread(target=_run_server, daemon=True).start()
-    #             return
-
-    #         if ui == "popup":
-    #             import threading
-    #             import webview
-    #             # Start Dash app in background
-    #             threading.Thread(target=_run_server, daemon=True).start()
-    #             time.sleep(1.5)  # Give it time to start
-
-    #             # Open popup window with pywebview
-    #             webview.create_window("Phonon Benchmark Viewer", url)
-    #             webview.start()
-    #         elif ui == "browser":
-    #             import webbrowser
-    #             import threading
-    #             threading.Thread(target=_run_server, daemon=True).start()
-    #             time.sleep(1.5)
-    #             #webbrowser.open(url)
-    #         elif ui == "notebook":
-    #             _run_server()
+            if "SSH_CONNECTION" in os.environ or "SSH_CLIENT" in os.environ:
+                import threading
+                print(f"\n Detected SSH session — skipping browser launch.")
+                #threading.Thread(target=_run_server, daemon=True).start()
+                return
+            elif ui == "browser":
+                import webbrowser
+                import threading
+                threading.Thread(target=_run_server, daemon=True).start()
+                time.sleep(1.5)
+                #webbrowser.open(url)
+            elif ui == "notebook":
+                _run_server()
             
-    #         else:
-    #             print(f"Unknown UI option: {ui}. Please use 'popup', 'browser', or 'notebook'.")
-    #             return
+            else:
+                print(f"Unknown UI option: {ui}. Please use 'popup', 'browser', or 'notebook'.")
+                return
 
-    #         print(f"Dash app running at {url}")
+            print(f"Dash app running at {url}")
             
-    #     return run_app(app, ui=ui)
+        return run_app(app, ui=ui)
     
     

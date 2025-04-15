@@ -821,11 +821,11 @@ class PhononDispersion(zntrack.Node):
                 app.run(debug=True, use_reloader=False, port=port)
                 
                 
-            if "SSH_CONNECTION" in os.environ or "SSH_CLIENT" in os.environ:
-                import threading
-                print(f"\n Detected SSH session — skipping browser launch.")
-                #threading.Thread(target=_run_server, daemon=True).start()
-                return
+            # if "SSH_CONNECTION" in os.environ or "SSH_CLIENT" in os.environ:
+            #     import threading
+            #     print(f"\n Detected SSH session — skipping browser launch.")
+            #     #threading.Thread(target=_run_server, daemon=True).start()
+            #     return
 
             # if ui == "popup":
             #     import threading
@@ -838,7 +838,7 @@ class PhononDispersion(zntrack.Node):
             #     webview.create_window("Phonon Benchmark Viewer", url)
             #     webview.start()
                 
-            elif ui == "browser":
+            if ui == "browser":
                 import webbrowser
                 import threading
                 threading.Thread(target=_run_server, daemon=True).start()
