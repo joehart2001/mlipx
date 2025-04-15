@@ -191,8 +191,8 @@ def phonon_compare(
         }
 
 
-    if ui not in {None, "browser", "popup"}:
-        typer.echo("Invalid UI mode. Choose from: none, browser, popup.")
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
         raise typer.Exit(1)
 
     print('\n UI = ', ui)
