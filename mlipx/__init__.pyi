@@ -32,7 +32,7 @@ from .nodes.phonon_node import PhononSpectrum, BuildASEcrystal
 from .nodes.phonon_fc2_node import PhononForceConstants
 from .nodes.phonon_dispersion_node import PhononDispersion
 from .nodes.phonon_ref_to_node import PhononRefToNode
-from .nodes.GMTKN55_benchmark_node import GMTKN55_benchmark
+from .nodes.GMTKN55_benchmark_node import GMTKN55Benchmark
 from .project import Project
 from .version import __version__
 
@@ -76,6 +76,6 @@ __all__ = [
     "PhononForceConstants",
     "PhononDispersion",
     "PhononRefToNode",
-    "GMTKN55_benchmark",
+    "GMTKN55Benchmark",
     "__version__",
 ]

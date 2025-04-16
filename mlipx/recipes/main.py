@@ -38,7 +38,7 @@ def render_models(models: str | None):
         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
 
 
-def parse_inputs(datapath: str | None, material_ids: str | None, smiles: str | None):
+def parse_inputs(datapath: str | None, material_ids: str | None, smiles: str | None, subsets: str | None = None):
     """Parse and validate input arguments."""
     if not any([datapath, material_ids, smiles]):
         raise ValueError(
@@ -49,6 +49,7 @@ def parse_inputs(datapath: str | None, material_ids: str | None, smiles: str | N
         "datapath": datapath.split(",") if datapath else None,
         "material_ids": material_ids.split(",") if material_ids else None,
         "smiles": smiles.split(",") if smiles else None,
+        "subsets": subsets.split(",") if subsets else None,
     }
 
 
@@ -346,6 +347,27 @@ def phonons(
         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
     handle_recipe(
         "phonons.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+    )
+    
+@app.command()
+def gmtkn55(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run GMTKN55 benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "GMTKN55_benchmark.py.jinja2",
         initialize=initialize,
         repro=repro,
         datapath=datapath,
