@@ -495,8 +495,8 @@ class PhononDispersion(zntrack.Node):
 
         plot_stats_dict = {}
     
+        for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
 
-        for mp_id in pred_node_dict.keys():
             ref_benchmarks_dict[mp_id] = {}
             ref_band_data_dict[mp_id] = {}
             pred_benchmarks_dict[mp_id] = {}
@@ -841,7 +841,8 @@ class PhononDispersion(zntrack.Node):
             if ui == "browser":
                 import webbrowser
                 import threading
-                threading.Thread(target=_run_server, daemon=True).start()
+                #threading.Thread(target=_run_server, daemon=True).start()
+                _run_server()
                 time.sleep(1.5)
                 #webbrowser.open(url)
             elif ui == "notebook":
@@ -851,9 +852,9 @@ class PhononDispersion(zntrack.Node):
                 print(f"Unknown UI option: {ui}. Please use 'browser', or 'notebook'.")
                 return
 
+
             print(f"Dash app running at {url}")
         
         return run_app(app, ui=ui)
-
 
 

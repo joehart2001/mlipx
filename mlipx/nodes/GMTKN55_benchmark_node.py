@@ -299,7 +299,6 @@ class GMTKN55Benchmark(zntrack.Node):
         
         #for file in benchmark_files:
         for model_name, node in benchmark_node_dict.items():
-            
 
             
             df = node.benchmark_results.copy()
@@ -652,5 +651,6 @@ class GMTKN55Benchmark(zntrack.Node):
             print(f"Dash app running at {url}")
             
         return run_app(app, ui=ui)
+    
     
     
