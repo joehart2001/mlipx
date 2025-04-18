@@ -338,6 +338,7 @@ def phonons(
     initialize: bool = False,
     repro: bool = False,
     datapath: str | None = None,
+    max_mpid_idx: int | None = None,
     material_ids: str | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
@@ -352,6 +353,7 @@ def phonons(
         datapath=datapath,
         material_ids=material_ids,
         smiles=smiles,
+        max_mpid_idx=max_mpid_idx,
     )
     
     

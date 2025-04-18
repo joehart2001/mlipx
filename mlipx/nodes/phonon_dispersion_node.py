@@ -65,9 +65,10 @@ class PhononDispersion(zntrack.Node):
     phonopy_yaml_path: pathlib.Path = zntrack.deps()
     thermal_properties_path: pathlib.Path = zntrack.deps()
     
-    # qpoints: list[np.ndarray] = zntrack.deps(None)
-    # labels: list[str] = zntrack.deps(None)
-    # connections: list[bool] = zntrack.deps(None)
+    node_idx: int = zntrack.params(None)
+    total_no_nodes: int = zntrack.params(None)
+    
+
     qpoints_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
     labels_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
     connections_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
@@ -162,6 +163,9 @@ class PhononDispersion(zntrack.Node):
             thermal_properties = json.load(f)
         with open(self.thermal_properties_path_output, "w") as f:
             json.dump(thermal_properties, f)
+            
+        if self.node_idx is not None and self.total_no_nodes is not None:
+            print(f"Phonons {self.node_idx}/{self.total_no_nodes} predicted.")
         
 
     @property
