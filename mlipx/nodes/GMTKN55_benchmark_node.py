@@ -175,6 +175,7 @@ class GMTKN55Benchmark(zntrack.Node):
                             atoms.calc = calc
                             result = atoms.get_potential_energy()
                             comp_value += result * species["Count"] * 23.0609  # eV to kcal/mol
+                            # the sign of count is defined so the correct relative energy is calculated
                             
                         overall_label = "-".join(str(s) for s in species_involved)
 
@@ -286,10 +287,6 @@ class GMTKN55Benchmark(zntrack.Node):
         subsets_df["excluded"] = subsets_df["excluded"].astype(str)
         
         categories = list(subsets_df["category"].unique()) + ["All"]
-        
-
-
-        # category mae
         
         
         # subset mae
