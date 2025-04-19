@@ -195,26 +195,14 @@ class GMTKN55Benchmark(zntrack.Node):
                 overall_errors.extend(subset_errors)
                 overall_weights.extend(weights)
 
-        #wtmad = np.average(np.abs(overall_errors), weights=overall_weights) # not actually the wtmad
-        #results_summary.append((self.model_name, wtmad, len(overall_errors)))
 
-        # Print formatted summary table
-        #print("\nSummary of WTMAD for each model:")
-        #print(f"{'Model':<25} {'WTMAD (kcal/mol)':<20} {'Systems':<10}")
-        #print("-" * 55)
-        #for model_name, wtmad, count in results_summary:
-        #print(f"{self.model_name:<25} {wtmad:<20.2f} {len(overall_errors):<10}")
-        #print("-" * 55)
         
         
         with open(self.reference_values_ouptut, "w") as f:
             json.dump(ref_values, f)
         with open(self.predicted_values_output, "w") as f:
             json.dump(pred_values, f)
-        # with open(self.wtmad_output, "w") as f:
-        #     json.dump({"wtmad": wtmad}, f)
-
-            
+       
             
             
     @property
@@ -237,13 +225,7 @@ class GMTKN55Benchmark(zntrack.Node):
         benchmark_results = pd.read_csv(self.model_benchmark_output)
         return benchmark_results
     
-    # @property
-    # def wtmad(self):
-    #     """Get the WTMAD value."""
-    #     with open(self.wtmad_output, "r") as f:
-    #         wtmad = json.load(f)["wtmad"]
-    #     return wtmad
-    
+
 
 
 

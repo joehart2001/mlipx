@@ -33,7 +33,7 @@ from dash import dash_table
 import socket
 import time
 import signal
-
+from datetime import datetime
 
 from scipy.stats import gaussian_kde
 
@@ -165,8 +165,8 @@ class PhononDispersion(zntrack.Node):
             json.dump(thermal_properties, f)
             
         if self.node_idx is not None and self.total_no_nodes is not None:
-            print(f"Phonons {self.node_idx}/{self.total_no_nodes} predicted.")
-        
+            now = datetime.now().strftime("%H:%M:%S")
+            print(f"[{now}] Phonons {self.node_idx}/{self.total_no_nodes} predicted.")        
 
     @property
     def qpoints(self):

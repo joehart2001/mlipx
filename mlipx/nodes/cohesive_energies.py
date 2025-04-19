@@ -74,7 +74,7 @@ class CohesiveEnergies(zntrack.Node):
     # outputs
     # nwd: ZnTrack's node working directory for saving files
     abs_error_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "abs_error.csv")
-    lattice_e_ouptut: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_e.json")
+    lattice_e_ouptut: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_e.csv")
     mae_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mae.json")
     
 
@@ -108,8 +108,6 @@ class CohesiveEnergies(zntrack.Node):
             
             def get_lattice_energy(model, sol, mol, nmol):
                 # Assign calculator to structures
-                # sol.info["head"] = "mp_pbe"
-                # mol.info["head"] = "mp_pbe"
                 sol.calc = model
                 mol.calc = model
                 # Compute energies
@@ -127,19 +125,21 @@ class CohesiveEnergies(zntrack.Node):
             system_errors[self.model_name] = error
             
             # lattice energy
-            lattice_e_dict[system] = lat_energy_kjmol
+            lattice_e_dict[system][self.model_name] = lat_energy_kjmol
             
             # absolute error for each system
             error_data = pd.concat([error_data, pd.DataFrame([system_errors])], ignore_index=True)
             
             # mae for the model model
             mae = error_data[self.model_name].mean()
-            
+        
+        lattice_e_df = pd.DataFrame.from_dict(lattice_e_dict, orient='index')
+        lattice_e_df.index.name = "System"
             
         with open(self.abs_error_output, "w") as f:
             error_data.to_csv(f, index=False)
         with open(self.lattice_e_ouptut, "w") as f:
-            json.dump(lattice_e_dict, f)
+            lattice_e_df.to_csv(f, index=True)
         with open(self.mae_output, "w") as f:
             json.dump(mae, f)
             
@@ -152,10 +152,67 @@ class CohesiveEnergies(zntrack.Node):
     @property
     def lattice_e(self):
         """Lattice energy"""
-        with open(self.lattice_e_ouptut, "r") as f:
-            return json.load(f)
+        return pd.read_csv(self.lattice_e_ouptut)
     @property
     def mae(self):
         """Mean absolute error"""
         with open(self.mae_output, "r") as f:
             return json.load(f)
+        
+        
+        
+    @staticmethod
+    def mae_plot_interactive(node_dict, ui = None):
+        
+        mae_dict = {}
+        abs_error_df_all = None
+        lattice_e_df_all = None
+        
+        for model_name, node in node_dict.items():
+            # mae
+            mae_dict[model_name] = node.mae
+        
+            # absolute error
+            abs_error_df = node.abs_error
+            if abs_error_df_all is None:
+                abs_error_df_all = abs_error_df
+            else:
+                abs_error_df_all = abs_error_df_all.merge(abs_error_df, on="System")
+                
+            # lattice energy
+            lattice_e_df = node.lattice_e
+            if lattice_e_df_all is None:
+                lattice_e_df_all = lattice_e_df
+            else:
+                lattice_e_df_all = lattice_e_df_all.merge(lattice_e_df.drop(columns=["ref"]), on="System")
+
+        mae_df = pd.DataFrame([mae_dict])
+        
+        # save plots
+        
+        
+        
+        
+        if ui is None:
+            return
+        
+        
+        # --- Dash app ---
+        app = dash.Dash(__name__)
+        app.title = "GMTKN55 Dashboard"
+            
+
+        app.layout = html.Div([
+            html.H1("Cohesive Energy Benchmarking Dashboard", style={"color": "black"}),
+
+            html.H2("X23 dataset Lattice Energy MAE (KJ/mol)", style={"color": "black", "marginTop": "20px"}),
+            dash_table.DataTable(
+                data=mae_df.round(3).to_dict("records"),
+                columns=[{"name": i, "id": i} for i in mae_df.columns],
+                style_table={"overflowX": "auto"},
+                style_cell={"textAlign": "center", "minWidth": "100px", "border": "1px solid black"},
+                style_header={"backgroundColor": "lightgray", "fontWeight": "bold"},
+            ),
+        
+        
+            

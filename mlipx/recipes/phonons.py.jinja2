@@ -52,6 +52,9 @@ with project.group("reference", "phonons-dispersion-ref"):
 
 # # calculated yaml files for models -> phonon dispersions
 phonon_dict_pred = {}
+total_dispersion_tasks = sum(len(models) for models in fc2_dict.values())
+idx = 1
+
 for mp_id in fc2_dict:
     ref_phonon = phonon_dict_ref[mp_id]
 
@@ -63,8 +66,11 @@ for mp_id in fc2_dict:
                 qpoints_input_path=ref_phonon.qpoints_path,
                 labels_input_path=ref_phonon.labels_path,
                 connections_input_path=ref_phonon.connections_path,
+                node_idx=idx,
+                total_no_nodes=total_dispersion_tasks,
                 name=f"PhononDispersion_{mp_id}"
             )
             phonon_dict_pred.setdefault(mp_id, {})[model_name] = phonon
+            idx += 1
 
 project.build()
