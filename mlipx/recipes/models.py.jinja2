@@ -8,13 +8,15 @@ from mlipx.nodes.generic_ase import Device
 ALL_MODELS = {}
 
 # https://github.com/ACEsuit/mace
-ALL_MODELS["MACE-MPA-0"] = mlipx.GenericASECalculator(
+ALL_MODELS["MACE-MP-0"] = mlipx.GenericASECalculator(
     module="mace.calculators",
     class_name="mace_mp",
     device="auto",
-    kwargs={"model": "../../models/mace-mpa-0-medium.model"}
+    kwargs={"model": "medium"}
     # MLIPX-hub model path, adjust as needed
 )
+
+
 # https://github.com/MDIL-SNU/SevenNet
 ALL_MODELS["7net-0"] = mlipx.GenericASECalculator(
     module="sevenn.sevennet_calculator",
