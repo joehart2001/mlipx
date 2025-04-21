@@ -14,6 +14,19 @@ To use :code:`mlipx`, first install it using pip:
 
    The :code:`mlipx` package installation does not contain any :term:`MLIP` packages.
    Due to different dependencies, it is highly recommended to install your preferred :term:`MLIP` package individually into the same environment.
+   We provide extras for the :term:`MLIP` packages included in our documentation.
+   You can install them using extras (not exhaustive):
+
+   .. code-block:: console
+
+      (.venv) $ pip install mlipx[mace]
+      (.venv) $ pip install mlipx[orb]
+
+   To get an overview of the currently available models :code:`mlipx` is familiar with, you can use the following command:
+
+   .. code-block:: console
+
+      (.venv) $ mlipx info
 
 .. note::
 
@@ -22,16 +35,20 @@ To use :code:`mlipx`, first install it using pip:
 From Source
 -----------
 
-To install and develop :code:`mlipx` from source we recommend using :code:`poetry`.
-More information and installation instructions can be found at https://python-poetry.org .
+To install and develop :code:`mlipx` from source we recommend using :code:`https://docs.astral.sh/uv`.
+More information and installation instructions can be found at https://docs.astral.sh/uv/getting-started/installation/ .
 
 .. code:: console
 
    (.venv) $ git clone https://github.com/basf/mlipx
    (.venv) $ cd mlipx
-   (.venv) $ poetry install
+   (.venv) $ uv sync
+   (.venv) $ source .venv/bin/activate
 
-.. note::
+You can quickly switch between different :term:`MLIP` packages extras using :code:`uv sync` command.
 
-   You can also use :code:`pip install -e .` for a editable installation.
-   This does not ensure that all dependencies are handled correctly and for adding new requirements it is mandatory to update the :code:`poetry.lock` file.
+
+.. code:: console
+
+   (.venv) $ uv sync --extra mattersim
+   (.venv) $ uv sync --extra sevenn

@@ -4,10 +4,7 @@ Phase Diagram
 :code:`mlipx` provides a command line interface to generate Phase Diagrams.
 You can run the following command to instantiate a test directory:
 
-.. code-block:: console
-
-   (.venv) $ mlipx recipes phase-diagram  --models mace_mp,sevennet,orb_v2,chgnet,mattersim --material-ids=mp-30084 --repro
-   (.venv) $ mlipx compare --glob "*PhaseDiagram"
+.. mdinclude:: ../../../mlipx-hub/phase_diagram/mp-30084/README.md
 
 
 .. jupyter-execute::
@@ -15,13 +12,10 @@ You can run the following command to instantiate a test directory:
 
    from mlipx.doc_utils import get_plots
 
-   plots = get_plots("*PhaseDiagram", "../../mlipx-hub/phase_diagram/")
-   plots["mace_mp_0-phase-diagram"].show()
-   plots["orb_v2_0-phase-diagram"].show()
-   plots["sevennet_0-phase-diagram"].show()
-   plots["chgnet_0-phase-diagram"].show()
-   plots["mattersim_0-phase-diagram"].show()
-
+   plots = get_plots("*PhaseDiagram", "../../mlipx-hub/phase_diagram/mp-30084/")
+   for name, plot in plots.items():
+      if name.endswith("phase-diagram"):
+         plot.show()
 
 This test uses the following Nodes together with your provided model in the :term:`models.py` file:
 
@@ -29,11 +23,11 @@ This test uses the following Nodes together with your provided model in the :ter
 
 .. dropdown:: Content of :code:`main.py`
 
-   .. literalinclude:: ../../../mlipx-hub/phase_diagram/main.py
+   .. literalinclude:: ../../../mlipx-hub/phase_diagram/mp-30084/main.py
       :language: Python
 
 
 .. dropdown:: Content of :code:`models.py`
 
-   .. literalinclude:: ../../../mlipx-hub/phase_diagram/models.py
+   .. literalinclude:: ../../../mlipx-hub/phase_diagram/mp-30084/models.py
       :language: Python

@@ -3,9 +3,7 @@ Energy and Force Evaluation
 
 This recipe is used to test the performance of different models in predicting the energy and forces for a given dataset.
 
-.. code-block:: console
-
-   (.venv) $ mlipx recipes metrics --models mace_mp,sevennet,orb_v2,chgnet,mattersim --datapath ../data/DODH_adsorption_dft.xyz --repro
+.. mdinclude:: ../../../mlipx-hub/metrics/DODH_adsorption/README.md
 
 .. mermaid::
    :align: center
@@ -48,7 +46,7 @@ This recipe is used to test the performance of different models in predicting th
 
    from mlipx.doc_utils import get_plots
 
-   plots = get_plots("*CompareCalculatorResults", "../../mlipx-hub/metrics/")
+   plots = get_plots("*CompareCalculatorResults", "../../mlipx-hub/metrics/DODH_adsorption/")
    # raise ValueError(plots.keys())
    plots["fmax_error"].show()
    plots["adjusted_energy_error_per_atom"].show()
@@ -65,11 +63,11 @@ This recipe uses the following Nodes together with your provided model in the :t
 
 .. dropdown:: Content of :code:`main.py`
 
-   .. literalinclude:: ../../../mlipx-hub/metrics/main.py
+   .. literalinclude:: ../../../mlipx-hub/metrics/DODH_adsorption/main.py
       :language: Python
 
 
 .. dropdown:: Content of :code:`models.py`
 
-   .. literalinclude:: ../../../mlipx-hub/metrics/models.py
+   .. literalinclude:: ../../../mlipx-hub/metrics/DODH_adsorption/models.py
       :language: Python
