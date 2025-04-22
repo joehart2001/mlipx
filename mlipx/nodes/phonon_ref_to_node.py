@@ -52,9 +52,17 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 class PhononRefToNode(zntrack.Node):
     """Compute the phonon dispersion from a phonopy object
+    
+    Parameters
+    ----------
+    phonopy_yaml_path : pathlib.Path
+        Optional path to the phonopy yaml file. If not provided, the node will download the alex dataset.
+    
     """
     # inputs
     phonopy_yaml_path: pathlib.Path = zntrack.params()
+    
+    
     
     # outputs
     force_constants_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "force_constants.yaml")

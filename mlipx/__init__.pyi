@@ -34,6 +34,7 @@ from .nodes.phonon_dispersion_node import PhononDispersion
 from .nodes.phonon_ref_to_node import PhononRefToNode
 from .nodes.GMTKN55_benchmark_node import GMTKN55Benchmark
 from .nodes.cohesive_energies import CohesiveEnergies
+from .nodes.elasticity import Elasticity
 from .project import Project
 from .version import __version__
 
@@ -79,5 +80,6 @@ __all__ = [
     "PhononRefToNode",
     "GMTKN55Benchmark",
     "CohesiveEnergies",
+    "Elasticity",
     "__version__",
 ]

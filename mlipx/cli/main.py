@@ -331,3 +331,62 @@ def gmtkn55_compare(
     )
     
 
+def cohesive_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to cohesive nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+
+    ):
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    selected_nodes = []
+    if glob:
+        for pattern in nodes:
+            matched = fnmatch.filter(all_nodes, pattern)
+            for name in matched:
+                model = name.split("_cohesive-energies")[0]
+                if not models or model in models:
+                    selected_nodes.append(name)
+    else:
+        for name in nodes:
+            model = name.split("_cohesive-energies")[0]
+            if not models or model in models:
+                selected_nodes.append(name)
+
+    if not selected_nodes:
+        typer.echo("No matching nodes found.")
+        raise typer.Exit()
+
+    # Instantiate nodes
+    node_objects = {}
+    for name in selected_nodes:
+        node_objects[name] = zntrack.from_rev(name)
+
+    benchmark_node_dict = {}
+
+    for name, node in node_objects.items():
+        model = name.split("_cohesive-energies")[0]
+        benchmark_node_dict[model] = node
+
+    if models:
+        # filter to selected models
+        benchmark_node_dict = {
+            m: node for m, node in benchmark_node_dict.items() if m in models
+        }
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+
+    print('\n UI = ', ui)
+
+    from mlipx import CohesiveEnergies
+    CohesiveEnergies.mae_plot_interactive(
+        benchmark_node_dict=benchmark_node_dict,
+        ui=ui
+    )

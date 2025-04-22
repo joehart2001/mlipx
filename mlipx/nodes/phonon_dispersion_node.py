@@ -498,7 +498,7 @@ class PhononDispersion(zntrack.Node):
         model_benchmarks_dict = {} # max_freq, min_freq ...
 
         plot_stats_dict = {}
-    
+
         for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
 
             ref_benchmarks_dict[mp_id] = {}

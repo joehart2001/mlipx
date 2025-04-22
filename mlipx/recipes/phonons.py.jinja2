@@ -3,15 +3,43 @@ import zntrack
 
 from models import MODELS
 
+from mlipx.phonons_utils import download_alex_parallel
+
 project = zntrack.Project()
 
 
 
 # datapath = [path] so need first element (only element)
+# if datapath: use that dir of yaml files
+
 
 {% if datapath %}
-with open("{{ datapath[0] }}/../mp_ids_subsampled.txt", "r") as f:
+mp_ids = []
+for filename in os.listdir({{ datapath[0] }}):
+    match = re.match(r"(mp-\d+)\.yaml$", filename)
+    if match:
+        mp_ids.append(match.group(1))
+
+{% if max_mpid_idx %}
+mp_ids = mp_ids[:{{ max_mpid_idx }}]
+print(f"found {len(mp_ids)} mp-ids")
+{% endif %}
+
+dict_ref = {}
+with project.group("reference", "phonons-ref-to-node"):
+    for mp_id in mp_ids:
+        phonon = mlipx.PhononRefToNode(
+            phonopy_yaml_path=f"{{ datapath[0] }}{mp_id}.yaml",
+            name=f"PhononRefToNode_{mp_id}")
+        dict_ref[mp_id] = phonon
+
+
+{% else %}
+download_alex_parallel(sample_every=10, max_threads=16)
+
+with open("alex_phonons/mp_ids_subsampled.txt", "r") as f:
     mp_ids = [line.strip() for line in f.readlines()]
+
 
 
 {% if max_mpid_idx %}
@@ -22,7 +50,7 @@ dict_ref = {}
 with project.group("reference", "phonons-ref-to-node"):
     for mp_id in mp_ids:
         phonon = mlipx.PhononRefToNode(
-            phonopy_yaml_path=f"{{ datapath[0] }}{mp_id}.yaml",
+            phonopy_yaml_path=f"alex_phonons/alex_phonon_data/{mp_id}.yaml",
             name=f"PhononRefToNode_{mp_id}")
         dict_ref[mp_id] = phonon
 {% endif %}
