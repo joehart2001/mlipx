@@ -35,6 +35,7 @@ from .nodes.phonon_ref_to_node import PhononRefToNode
 from .nodes.GMTKN55_benchmark_node import GMTKN55Benchmark
 from .nodes.cohesive_energies import CohesiveEnergies
 from .nodes.elasticity import Elasticity
+from .nodes.bulk_crystal_benchmark import BulkCrystalBenchmark
 from .project import Project
 from .version import __version__
 
@@ -81,5 +82,6 @@ __all__ = [
     "GMTKN55Benchmark",
     "CohesiveEnergies",
     "Elasticity",
+    "BulkCrystalBenchmark",
     "__version__",
 ]

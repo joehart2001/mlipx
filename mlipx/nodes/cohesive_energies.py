@@ -67,6 +67,9 @@ class CohesiveEnergies(zntrack.Node):
     """
     # inputs
     lattice_energy_dir: pathlib.Path = zntrack.params()
+    dmc_ice_dir: pathlib.Path = zntrack.params()
+    ice_ref: t.Dict[str, float] = zntrack.params()
+    
     model: NodeWithCalculator = zntrack.deps()
     model_name: str = zntrack.params()
     
@@ -77,64 +80,86 @@ class CohesiveEnergies(zntrack.Node):
     lattice_e_ouptut: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_e.csv")
     mae_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mae.json")
     
-
-
+    lattice_e_ice_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_e_ice.csv")
+    mae_ice_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mae_ice.json")
+    ref_ice_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "ref_ice.csv")
+    
 
     def run(self):
-        
         calc = self.model.get_calculator()
-        
-        with open(self.lattice_energy_dir + "/list", "r") as f:
-            systems = f.read().splitlines()
-        
-        
-        error_data = pd.DataFrame(columns=['System'] + [self.model_name])
         ev_to_kjmol = 96.485
         
-        
+        with open(os.path.join(self.lattice_energy_dir, "list"), "r") as f:
+            systems = f.read().splitlines()
+
+        polymorphs = [name for name in os.listdir(self.dmc_ice_dir)
+                    if os.path.isdir(os.path.join(self.dmc_ice_dir, name)) and name != "water"]
+        water = read(os.path.join(self.dmc_ice_dir, "water/POSCAR"), '0')
+
+        def get_lattice_energy(model, sol, mol, nmol):
+            sol.calc = model
+            mol.calc = model
+            return sol.get_potential_energy() / nmol - mol.get_potential_energy()
+
+
+        error_rows = []
         lattice_e_dict = {}
 
         for system in systems:
-            # Read molecule and solid structures
-            mol = read(f"{self.lattice_energy_dir}/{system}/POSCAR_molecule", '0')
-            sol = read(f"{self.lattice_energy_dir}/{system}/POSCAR_solid", '0')
-            # Reference lattice energy
-            ref = np.loadtxt(f"{self.lattice_energy_dir}/{system}/lattice_energy_DMC")
-            nmol = np.loadtxt(f"{self.lattice_energy_dir}/{system}/nmol")
+            mol_path = os.path.join(self.lattice_energy_dir, system, "POSCAR_molecule")
+            sol_path = os.path.join(self.lattice_energy_dir, system, "POSCAR_solid")
+            ref_path = os.path.join(self.lattice_energy_dir, system, "lattice_energy_DMC")
+            nmol_path = os.path.join(self.lattice_energy_dir, system, "nmol")
             
-            lattice_e_dict[system] = {}
-            lattice_e_dict[system]['ref'] = ref[0]
-            
-            
-            def get_lattice_energy(model, sol, mol, nmol):
-                # Assign calculator to structures
-                sol.calc = model
-                mol.calc = model
-                # Compute energies
-                energy_solid = sol.get_potential_energy()
-                energy_molecule = mol.get_potential_energy()
-                return energy_solid / nmol - energy_molecule
-            
-            
-            system_errors = {'System': system}
+            mol = read(mol_path, '0')
+            sol = read(sol_path, '0')
+            ref = np.loadtxt(ref_path)[0]
+            nmol = np.loadtxt(nmol_path)
 
-            lat_energy = get_lattice_energy(calc, sol, mol, nmol)
-            lat_energy_kjmol = lat_energy * ev_to_kjmol  # Convert to kJ/mol
-            # absolute error
-            error = abs(lat_energy_kjmol - ref[0])
-            system_errors[self.model_name] = error
-            
-            # lattice energy
-            lattice_e_dict[system][self.model_name] = lat_energy_kjmol
-            
-            # absolute error for each system
-            error_data = pd.concat([error_data, pd.DataFrame([system_errors])], ignore_index=True)
-            
-            # mae for the model model
-            mae = error_data[self.model_name].mean()
-        
+            lat_energy = get_lattice_energy(calc, sol, mol, nmol) * ev_to_kjmol
+            error = abs(lat_energy - ref)
+
+            lattice_e_dict[system] = {
+                'ref': ref,
+                self.model_name: lat_energy
+            }
+            error_rows.append({'System': system, self.model_name: error})
+
+        error_data = pd.DataFrame(error_rows)
+        mae = error_data[self.model_name].mean()
         lattice_e_df = pd.DataFrame.from_dict(lattice_e_dict, orient='index')
         lattice_e_df.index.name = "System"
+
+        # ICE part
+        ice_error_rows = []
+        ice_lattice_e_dict = {}
+
+        for polymorph in polymorphs:
+            pol_path = os.path.join(self.dmc_ice_dir, polymorph, "POSCAR")
+            pol = read(pol_path, '0')
+            nmol = len(pol.arrays['numbers']) / 3
+            ref = self.ice_ref[polymorph]
+
+            lat_energy = get_lattice_energy(calc, pol, water, nmol) * 1000  # to meV
+            error = abs(lat_energy - ref)
+
+            ice_lattice_e_dict[polymorph] = {
+                self.model_name: lat_energy
+            }
+            ice_error_rows.append({'Polymorph': polymorph, self.model_name: error})
+
+        ice_error_data = pd.DataFrame(ice_error_rows)
+        mae_ice = ice_error_data[self.model_name].mean()
+        ice_lattice_e_df = pd.DataFrame.from_dict(ice_lattice_e_dict, orient='index')
+        ice_lattice_e_df.index.name = "Polymorph"
+        
+        order = ['Ih', 'II', 'III', 'IV', 'VI', 'VII', 'VIII', 'IX', 'XI', 'XIII', 'XIV', 'XV', 'XVII']
+        ice_lattice_e_df = ice_lattice_e_df.reindex(order)
+        ref_df = pd.DataFrame(self.ice_ref, index=[0]).T.rename(columns={0: "Ref"})
+        ref_df.index.name = "Polymorph"
+        
+
+
             
         with open(self.abs_error_output, "w") as f:
             error_data.to_csv(f, index=False)
@@ -142,6 +167,14 @@ class CohesiveEnergies(zntrack.Node):
             lattice_e_df.to_csv(f, index=True)
         with open(self.mae_output, "w") as f:
             json.dump(mae, f)
+            
+        with open(self.lattice_e_ice_output, "w") as f:
+            ice_lattice_e_df.to_csv(f, index=True)
+        with open(self.mae_ice_output, "w") as f:
+            json.dump(mae_ice, f)
+        with open(self.ref_ice_output, "w") as f:
+            ref_df.to_csv(f, index=True)
+        
             
         
     
@@ -158,7 +191,19 @@ class CohesiveEnergies(zntrack.Node):
         """Mean absolute error"""
         with open(self.mae_output, "r") as f:
             return json.load(f)
-        
+    @property
+    def lattice_e_ice(self):
+        """Lattice energy ICE"""
+        return pd.read_csv(self.lattice_e_ice_output).set_index("Polymorph")
+    @property
+    def mae_ice(self):
+        """Mean absolute error ICE"""
+        with open(self.mae_ice_output, "r") as f:
+            return json.load(f)
+    @property
+    def ref_ice(self):
+        """Reference ICE lattice energy"""
+        return pd.read_csv(self.ref_ice_output).set_index("Polymorph")
         
         
     @staticmethod
@@ -168,7 +213,20 @@ class CohesiveEnergies(zntrack.Node):
         abs_error_df_all = None
         lattice_e_df_all = None
         
+        mae_ice_dict = {}
+        mae_rel_ih_dict = {}
+        mae_rel_all_dict = {}
+        lattice_e_ice_df_all_models = None
+        lattice_e_ice_df_all_models_all_polymorphs = None
+        lattice_e_ice_all_polymorphs_dict_of_dfs = {}
+        rel_lattice_e_ice_df_ih = pd.DataFrame()
+        
+        
+        
+        
+        
         for model_name, node in node_dict.items():
+            # --- X23 ---
             # mae
             mae_dict[model_name] = node.mae
         
@@ -185,8 +243,68 @@ class CohesiveEnergies(zntrack.Node):
                 lattice_e_df_all = lattice_e_df
             else:
                 lattice_e_df_all = lattice_e_df_all.merge(lattice_e_df.drop(columns=["ref"]), on="System")
+            
+            
+            
+            
+            # --- DMC-ICE13 ---
+            # mae
+            mae_ice_dict[model_name] = node.mae_ice
+            
+            # lattice e
+            
+            if lattice_e_ice_df_all_models is None:
+                lattice_e_ice_df_all_models = node.ref_ice
+                lattice_e_ice_df_all_models = lattice_e_ice_df_all_models.merge(node.lattice_e_ice[model_name], on="Polymorph")
+            else:
+                lattice_e_ice_df_all_models = lattice_e_ice_df_all_models.merge(node.lattice_e_ice[model_name], on="Polymorph")
+                
+            
+            # set the reference for the rel Ih lattice energy
+            rel_ref_ice_df = node.ref_ice - node.ref_ice.loc['Ih']
+            rel_ref_ice_df = rel_ref_ice_df[rel_ref_ice_df.index != 'Ih']
+            rel_lattice_e_ice_df_ih['Ref'] = rel_ref_ice_df
+            
+            # Ih relative lattice energy + mae
+            rel_lattice_e_ih_df = node.lattice_e_ice - node.lattice_e_ice.loc['Ih']
+            rel_lattice_e_ih_df = rel_lattice_e_ih_df[rel_lattice_e_ih_df.index != 'Ih']
+            rel_lattice_e_ice_df_ih[model_name] = rel_lattice_e_ih_df[model_name]
+            
+            mae_rel_ih_dict[model_name] = abs(rel_lattice_e_ih_df[model_name] - rel_lattice_e_ice_df_ih['Ref']).mean()
 
+            # all relative lattice energies + avg mae
+            mae_all_rel = 0
+            for polymorph in node.lattice_e_ice.index:
+                
+                rel_lattice_e = node.lattice_e_ice - node.lattice_e_ice.loc[polymorph]
+                rel_lattice_e = rel_lattice_e[rel_lattice_e.index != polymorph]
+
+                rel_ref_df = node.ref_ice - node.ref_ice.loc[polymorph]
+                rel_ref_df = rel_ref_df[rel_ref_df.index != polymorph]
+                
+                mae_all_rel += abs(rel_lattice_e[model_name] - rel_ref_df['Ref']).mean()
+                
+
+                if polymorph not in lattice_e_ice_all_polymorphs_dict_of_dfs:
+                    lattice_e_ice_all_polymorphs_dict_of_dfs[polymorph] = rel_ref_df
+
+                lattice_e_ice_all_polymorphs_dict_of_dfs[polymorph] = lattice_e_ice_all_polymorphs_dict_of_dfs[polymorph].merge(rel_lattice_e, on="Polymorph")
+
+
+                
+                
+            mae_rel_all_dict[model_name] = mae_all_rel / len(node.lattice_e_ice.index)
+
+        
         mae_df = pd.DataFrame(mae_dict.items(), columns=["Model", "MAE"])
+        
+        mae_ice_df = pd.DataFrame(mae_ice_dict.items(), columns=["Model", "MAE"])
+        mae_rel_ih_df = pd.DataFrame(mae_rel_ih_dict.items(), columns=["Model", "MAE (relative to Ih)"])
+        mae_rel_all_df = pd.DataFrame(mae_rel_all_dict.items(), columns=["Model", "Avg MAE (relative to all polymorphs)"])
+        # merge
+        mae_ice_df = mae_ice_df.merge(mae_rel_ih_df, on="Model")
+        mae_ice_df = mae_ice_df.merge(mae_rel_all_df, on="Model")
+        
         
         # save plots/csvs
         path = Path("cohesive-energy-benchmark-stats/X23")
@@ -268,6 +386,17 @@ class CohesiveEnergies(zntrack.Node):
         lattice_e_fig.update_traces(
             hovertemplate="Model = %{customdata[0]}<br>System = %{customdata[1]}<br>Lattice E = %{customdata[2]:.3f} kJ/mol<extra></extra>"
         )
+        
+        
+        # ICE figure
+        fig_ice = px.line(
+            lattice_e_ice_df_all_models,
+            markers=True,
+        )
+        fig_ice.update_layout(
+            xaxis_title="Polymorph",
+            yaxis_title="Absolute Lattice Energy (meV)"
+        )
             
 
         app.layout = html.Div(
@@ -275,6 +404,7 @@ class CohesiveEnergies(zntrack.Node):
             children=[
                 html.H1("Cohesive Energy Benchmarking Dashboard", style={"color": "black"}),
 
+                # X23
                 html.H2("X23 Dataset Lattice Energy MAE (KJ/mol)", style={"color": "black", "marginTop": "20px"}),
                 dash_table.DataTable(
                     data=mae_df.round(3).to_dict("records"),
@@ -284,16 +414,52 @@ class CohesiveEnergies(zntrack.Node):
                     style_header={"backgroundColor": "lightgray", "fontWeight": "bold"},
                 ),
                 
-                html.H2("Predicted Lattice Energies", style={"marginTop": "40px"}),
+                html.H2("X23 - Predicted Lattice Energies", style={"marginTop": "40px"}),
                 dcc.Graph(figure=lattice_e_fig),
 
-                html.H2("Absolute Error Comparison (vs reference)", style={"marginTop": "40px"}),
+                html.H2("X23 - Absolute Error Comparison (vs reference)", style={"marginTop": "40px"}),
                 dcc.Graph(figure=abs_error_fig),
 
-            ]
-)
+                html.Hr(style={"marginTop": "40px", "marginBottom": "30px", "borderTop": "2px solid #bbb"}),
+                
+                # DMC-ICE13
+                html.H2("DMC-ICE13 Dataset Lattice Energy MAE (meV)", style={"color": "black", "marginTop": "20px"}),
+                dash_table.DataTable(
+                    data=mae_ice_df.round(3).to_dict("records"),
+                    columns=[{"name": i, "id": i} for i in mae_ice_df.columns],
+                    style_table={"overflowX": "auto"},
+                    style_cell={"textAlign": "center", "minWidth": "100px", "border": "1px solid black"},
+                    style_header={"backgroundColor": "lightgray", "fontWeight": "bold"},
+                ),
+                
+                html.H2("DMC-ICE13 - Absolute lattice energies", style={"marginTop": "40px"}),
+                dcc.Graph(figure=fig_ice),
+            
+                html.H2("DMC-ICE13 - Relative Lattice Energies"),
+                dcc.Dropdown(
+                    id="polymorph-dropdown",
+                    options=[{"label": poly, "value": poly} for poly in lattice_e_ice_all_polymorphs_dict_of_dfs],
+                    value=list(lattice_e_ice_all_polymorphs_dict_of_dfs.keys())[0]
+                ),
+                dcc.Graph(id="relative-energy-plot")
+                                
+            ])
+        
 
 
+        @app.callback(
+            Output("relative-energy-plot", "figure"),
+            Input("polymorph-dropdown", "value")
+        )
+        
+        def update_plot(selected_poly):
+            df = lattice_e_ice_all_polymorphs_dict_of_dfs[selected_poly].reset_index()
+            df_melt = df.melt(id_vars="Polymorph", var_name="Model", value_name="Relative Energy")
+
+            fig = px.line(df_melt, x="Polymorph", y="Relative Energy", color="Model", markers=True,
+                        title=f"Relative to {selected_poly}")
+            fig.update_layout(xaxis_title="Polymorph", yaxis_title="Relative Lattice Energy (meV)")
+            return fig
 
 
 

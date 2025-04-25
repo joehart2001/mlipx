@@ -79,7 +79,7 @@ class Elasticity(zntrack.Node):
     # outputs
     # nwd: ZnTrack's node working directory for saving files
     results_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "moduli_results.csv")
-
+    mae_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mae.csv")
     
 
 
@@ -103,8 +103,17 @@ class Elasticity(zntrack.Node):
         
         print(self.model_name)
         results = benchmark.run(calc, self.model_name)
-        
         results.to_csv(self.results_path, index=False)
+        
+        mae_df = pd.DataFrame()
+        mae_K = np.abs(results[f'K_vrh_{self.model_name}'].values - results['K_vrh_DFT'].values).mean()
+        mae_G = np.abs(results[f'G_vrh_{self.model_name}'].values - results['G_vrh_DFT'].values).mean()
+        mae_df.loc[self.model_name, 'K_bulk [GPa]'] = mae_K
+        mae_df.loc[self.model_name, 'K_shear [GPa]'] = mae_G
+        mae_df = mae_df.reset_index().rename(columns={'index': 'Model'})
+        mae_df.to_csv(self.mae_path, index=False)        
+        
+        
         
         
     @property
@@ -113,6 +122,9 @@ class Elasticity(zntrack.Node):
         """
         results = pd.read_csv(self.results_path)
         return results
+    
+    
+    
     
     
     @staticmethod
@@ -136,22 +148,142 @@ class Elasticity(zntrack.Node):
         
         label_to_key = {v: k for k, v in benchmark_labels.items()}
         
-        mae_df = pd.DataFrame() # rows are models, cols are K and G
-        
-        for model in tqdm(node_dict.keys(), desc="Processing models"):
+        mae_df = pd.DataFrame()
 
+        for model in node_dict.keys():
             results_df = node_dict[model].results
-            
             mae_K = np.abs(results_df[f'K_vrh_{model}'].values - results_df['K_vrh_DFT'].values).mean()
             mae_G = np.abs(results_df[f'G_vrh_{model}'].values - results_df['G_vrh_DFT'].values).mean()
-            mae_df.loc[model, 'K_vrh (MAE)'] = mae_K
-            mae_df.loc[model, 'G_vrh (MAE)'] = mae_G
+            mae_df.loc[model, 'K_bulk [GPa]'] = mae_K
+            mae_df.loc[model, 'K_shear [GPa]'] = mae_G
+
+        mae_df = mae_df.reset_index().rename(columns={'index': 'Model'})
+        mae_df = mae_df.round(3)
+        
+        
+        # save stats
+
+        # Dash app
+        app = dash.Dash(__name__)
+
+        app.layout = html.Div([
+            html.H2("Bulk and Shear Moduli MAEs", style={'color': 'Black', 'padding': '1rem'}),
+            dash_table.DataTable(
+                id='mae-table',
+                columns=[{"name": col, "id": col} for col in mae_df.columns],
+                data=mae_df.to_dict('records'),
+                style_cell={'textAlign': 'center'},
+                style_header={'fontWeight': 'bold'},
+            ),
+            dcc.Graph(id='scatter-plot'),
+        ],
+            style={
+                'backgroundColor': 'white',
+                'border': '2px solid lightgray',
+                'padding': '10px',
+                'margin': '30px',
+            }
+        )
+
+        @app.callback(
+            Output('scatter-plot', 'figure'),
+            Input('mae-table', 'active_cell')
+        )
+        def update_scatter_plot(active_cell):
+            if active_cell is None:
+                return px.scatter(title="Click on a cell to view scatter plot")
+
+            row = active_cell['row']
+            col = active_cell['column_id']
+            model = mae_df.loc[row, 'Model']
+
+            if col not in mae_df.columns or col == 'Model':
+                return px.scatter(title="Invalid column clicked")
+
+            label = col.split()[0]  # "K_bulk" or "K_shear"
+            prop = label_to_key.get(label, None)
+            if prop is None:
+                return px.scatter(title="Unknown property")
+
+            df = node_dict[model].results
+            fig = px.scatter(
+                data_frame=df,
+                x=f'{prop}_DFT',
+                y=f'{prop}_{model}',
+                labels={
+                    f'{prop}_DFT': f'{label} DFT [GPa]',
+                    f'{prop}_{model}': f'{label} Predicted [GPa]'
+                },
+                title=f'{label} Scatter Plot - {model}',
+                hover_data=['mp_id', 'formula', f'{prop}_DFT', f'{prop}_{model}'],
+            )
+            fig.add_shape(type='line', x0=df[f'{prop}_DFT'].min(), y0=df[f'{prop}_DFT'].min(),
+                        x1=df[f'{prop}_DFT'].max(), y1=df[f'{prop}_DFT'].max(),
+                        line=dict(dash='dash'))
+
+            fig.update_layout(
+                xaxis_showgrid=True,
+                yaxis_showgrid=True,
+                xaxis=dict(gridcolor='lightgray'),
+                yaxis=dict(gridcolor='lightgray')
+            )
             
             
-        #mae_df = mae_df.rename(index=label_to_key)
+            fig.add_annotation(
+                xref="paper", yref="paper",
+                x=0.02, y=0.98,
+                text=f"{label} MAE: {mae_df.loc[row, col]} GPa",
+                showarrow=False,
+                align="left",
+                font=dict(size=12, color="black"),
+                bordercolor="black",
+                borderwidth=1,
+                borderpad=4,
+                bgcolor="white",
+                opacity=0.8
+            )
+
+
+            return fig
 
         
+
+        def reserve_free_port():
+            s = socket.socket()
+            s.bind(('', 0))
+            port = s.getsockname()[1]
+            return s, port  # you must close `s` later
+
+
+        def run_app(app, ui):
+            sock, port = reserve_free_port()
+            url = f"http://localhost:{port}"
+            sock.close()
+
+            def _run_server():
+                app.run(debug=True, use_reloader=False, port=port)
+                
+                
+                
+            if ui == "browser":
+                import webbrowser
+                import threading
+                #threading.Thread(target=_run_server, daemon=True).start()
+                _run_server()
+                time.sleep(1.5)
+                #webbrowser.open(url)
+            elif ui == "notebook":
+                _run_server()
             
+            else:
+                print(f"Unknown UI option: {ui}. Please use 'browser', or 'notebook'.")
+                return
+
+
+            print(f"Dash app running at {url}")
+        
+        return run_app(app, ui=ui)
+
 
                 
             
