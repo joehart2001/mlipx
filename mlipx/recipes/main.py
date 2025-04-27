@@ -385,7 +385,8 @@ def gmtkn55(
         smiles=smiles,
     )
     
-    
+
+@app.command()
 def cohesive_energies(
     initialize: bool = False,
     repro: bool = False,
@@ -405,3 +406,5 @@ def cohesive_energies(
         material_ids=material_ids,
         smiles=smiles,
     )
+    
+def

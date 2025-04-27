@@ -435,10 +435,10 @@ class PhononDispersion(zntrack.Node):
         
         if correlation_plot_mode:
             
-            if not os.path.exists(f"phonon-dispersion-stats-plots/{model_name}/phonon_plots"):
-                os.makedirs(f"phonon-dispersion-stats-plots/{model_name}/phonon_plots")
+            if not os.path.exists(f"benchmark_stats/phonons/{model_name}/phonon_plots"):
+                os.makedirs(f"benchmark_stats/phonons/{model_name}/phonon_plots")
             
-            phonon_plot_path = f"phonon-dispersion-stats-plots/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.png"
+            phonon_plot_path = f"benchmark_stats/phonons/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.png"
             fig.savefig(phonon_plot_path, bbox_inches='tight')
             plt.close(fig)
             return phonon_plot_path
@@ -555,7 +555,10 @@ class PhononDispersion(zntrack.Node):
         )
         
         if ui is None:
-            return
+            if dont_run:
+                pass
+            else:
+                return
 
 
 
@@ -774,10 +777,7 @@ class PhononDispersion(zntrack.Node):
 
         
         if dont_run:
-            print(app)
-            print("App not running, as requested.")
             return app, plot_stats_dict
-        print(app)
         
         return run_app(app, ui=ui)
 
@@ -952,7 +952,7 @@ class PhononDispersion(zntrack.Node):
                             pretty_benchmark_labels, benchmarks):
         """Generate and save visualization plots for all models."""
         model_figures_dict = {}
-        results_dir = Path("phonon-dispersion-stats-plots")
+        results_dir = Path("benchmark_stats/phonons/")
         results_dir.mkdir(exist_ok=True)
         
         for model_name in model_plotting_data:
@@ -990,7 +990,7 @@ class PhononDispersion(zntrack.Node):
         
         # Save summary table to CSV
         mae_summary_df = PhononDispersion.calculate_summary_statistics(plot_stats_dict, pretty_benchmark_labels, benchmarks)
-        mae_summary_df.to_csv(results_dir / "mae_summary.csv", index=False)
+        mae_summary_df.to_csv(results_dir / "mae_phonons.csv", index=False)
 
 
     def create_scatter_plot(ref_vals, pred_vals, model_name, benchmark, rmse, mae, pretty_benchmark_labels):
