@@ -9,12 +9,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.express.colors import qualitative
 import zntrack
-from ase import Atoms, units
-from ase.build import bulk
-from ase.phonons import Phonons
-from ase.dft.kpoints import bandpath
-from ase.optimize import LBFGS
-from dataclasses import field
 
 import warnings
 from pathlib import Path
@@ -23,11 +17,7 @@ from ase.calculators.calculator import Calculator
 from tqdm import tqdm
 from phonopy.api_phonopy import Phonopy
 import yaml
-import matplotlib.pyplot as plt
-from matplotlib import gridspec
-import pickle
-import glob
-import re
+
 import pandas as pd
 from dash.exceptions import PreventUpdate
 from dash import dash_table
@@ -42,13 +32,6 @@ from scipy.stats import gaussian_kde
 
 from mlipx.abc import ComparisonResults, NodeWithCalculator
 
-
-from mlipx.phonons_utils import get_fc2_and_freqs, init_phonopy, load_phonopy, get_chemical_formula
-from phonopy.structure.atoms import PhonopyAtoms
-from seekpath import get_path
-import zntrack.node
-from phonopy.phonon.band_structure import get_band_qpoints_by_seekpath
-
 import os
 import plotly.express as px
 import dash
@@ -57,6 +40,7 @@ import base64
 import csv
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+from mlipx.benchmark_download_utils import get_benchmark_data
 
 
 
@@ -65,8 +49,8 @@ class GMTKN55Benchmark(zntrack.Node):
     """Benchmark model against GMTKN55
     """
     # inputs
-    GMTKN55_yaml: pathlib.Path = zntrack.params()
-    subsets_csv: pathlib.Path = zntrack.params()
+    #GMTKN55_yaml: pathlib.Path = zntrack.params()
+    #subsets_csv: pathlib.Path = zntrack.params()
     model: NodeWithCalculator = zntrack.deps()
     model_name: str = zntrack.params()
     
@@ -90,9 +74,12 @@ class GMTKN55Benchmark(zntrack.Node):
         
         calc = self.model.get_calculator()
         
+        # download GMTKN55_yaml and subsets.csv
+        GMTKN55_dir = get_benchmark_data("GMTKN55.zip") / "GMTKN55"
         
-        with open(self.GMTKN55_yaml, "r") as file:
+        with open(GMTKN55_dir / "GMTKN55.yaml", "r") as file:
             structure_dict = yaml.safe_load(file)
+
             
         ref_values = {}
         pred_values = {}
@@ -260,8 +247,9 @@ class GMTKN55Benchmark(zntrack.Node):
             
 
     @staticmethod
-    def mae_plot_interactive(benchmark_node_dict, subsets_path, ui = None):
+    def mae_plot_interactive(benchmark_node_dict, ui = None):
         
+        subsets_path = get_benchmark_data("GMTKN55.zip") / "GMTKN55/subsets.csv"
         
         subsets_df = pd.read_csv(subsets_path)
         subsets_df.columns = subsets_df.columns.str.lower()
@@ -420,7 +408,7 @@ class GMTKN55Benchmark(zntrack.Node):
                 style_header={"backgroundColor": "lightgray", "fontWeight": "bold"},
             ),
 
-            html.H2("MAD/MAE per Category", style={"color": "black", "marginTop": "30px"}),
+            html.H2("MAD/MAE per Category (kcal/mol)", style={"color": "black", "marginTop": "30px"}),
             dash_table.DataTable(
                 data=benchmark_df.round(3).to_dict("records"),
                 columns=[{"name": i, "id": i} for i in benchmark_df.columns],
@@ -472,7 +460,7 @@ class GMTKN55Benchmark(zntrack.Node):
                 title="MAE Per-subset",
                 labels={
                     "subset": "Subset",
-                    "mae": "MAE",
+                    "mae": "MAE (kcal/mol)",
                     "model": "Model",
                 }
             )
@@ -564,7 +552,7 @@ class GMTKN55Benchmark(zntrack.Node):
             fig.add_annotation(
                 xref="paper", yref="paper",
                 x=0.02, y=0.98,
-                text=f"MAE: {mae:.2f}",
+                text=f"MAE (kcal/mol): {mae:.2f}",
                 showarrow=False,
                 align="left",
                 font=dict(size=12, color="black"),

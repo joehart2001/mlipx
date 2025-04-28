@@ -259,9 +259,9 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
-def download_and_save_phonons(mp_id):
-    directory="alex_phonons/alex_phonon_data"
-    save_path = f"{directory}/{mp_id}.yaml"
+def download_and_save_phonons(mp_id, dir):
+    #directory="alex_phonons/alex_phonon_data"
+    save_path = f"{dir}/{mp_id}.yaml"
     if os.path.exists(save_path, ):
         return f"{mp_id}: exists"
 
@@ -281,12 +281,14 @@ def download_and_save_phonons(mp_id):
         return f"{mp_id}: failed ({e})"
 
 
+from mlipx.benchmark_download_utils import BENCHMARK_DATA_DIR
 
 def download_alex_parallel(sample_every = 10, max_threads=16):
 
-    # Create folder if it doesn't exist
-    os.makedirs("alex_phonons/alex_phonon_data", exist_ok=True)
+    local_path = Path(BENCHMARK_DATA_DIR) / "alex_phonons/alex_phonon_data"
 
+    if not local_path.exists():
+        local_path.mkdir(parents=True, exist_ok=True)
 
     # --------- Get mp-ids from website -----------
     url = "https://alexandria.icams.rub.de/data/phonon_benchmark/pbe/"
@@ -300,12 +302,12 @@ def download_alex_parallel(sample_every = 10, max_threads=16):
 
     print(f"Found {len(mp_ids)} mp-ids.")
 
-    with open("alex_phonons/mp_ids.txt", "w") as f:
+    with open(f"{local_path}/../mp_ids.txt", "w") as f:
         f.writelines([f"{mp_id}\n" for mp_id in mp_ids])
 
 
     mp_ids_subsampled = mp_ids[::sample_every]
-    with open ("alex_phonons/mp_ids_subsampled.txt", "w") as f:
+    with open (f"{local_path}/../mp_ids_subsampled.txt", "w") as f:
         for mp_id in mp_ids_subsampled:
             f.write(f"{mp_id}\n")
 
@@ -313,7 +315,7 @@ def download_alex_parallel(sample_every = 10, max_threads=16):
     results = []
     with ThreadPoolExecutor(max_workers=max_threads) as executor:
         # only download every N th mp_id
-        futures = {executor.submit(download_and_save_phonons, mp_id): mp_id for mp_id in mp_ids_subsampled}
+        futures = {executor.submit(download_and_save_phonons, mp_id, local_path): mp_id for mp_id in mp_ids_subsampled}
         for future in tqdm(as_completed(futures), total=len(futures), desc="Downloading phonons"):
             result = future.result()
             results.append(result)

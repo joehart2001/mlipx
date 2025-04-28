@@ -204,47 +204,11 @@ def phonon_compare(
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
 
-    selected_nodes = []
-    if glob:
-        for pattern in nodes:
-            matched = fnmatch.filter(all_nodes, pattern)
-            for name in matched:
-                model = name.split("_phonons-dispersion")[0]
-                if ("reference" in name or "ref" in name) or (not models or model in models):
-                    selected_nodes.append(name)
-    else:
-        for name in nodes:
-            model = name.split("_phonons-dispersion")[0]
-            if ("reference" in name or "ref" in name) or (not models or model in models):
-                selected_nodes.append(name)
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_phonons-dispersion")
 
-    if not selected_nodes:
-        typer.echo("No matching nodes found.")
-        raise typer.Exit()
-
-    # Instantiate nodes
-    node_objects = {}
-    for name in selected_nodes:
-        node_objects[name] = zntrack.from_rev(name)
-
-    # Group nodes by mp-id and by model
-    pred_node_dict = {}
-    ref_node_dict = {}
-
-    for name, node in node_objects.items():
-        mp_id = name.split("_")[-1]
-        model = name.split("_phonons-dispersion")[0]
-        if "reference" in name or "ref" in name:
-            ref_node_dict[mp_id] = node
-        else:
-            pred_node_dict.setdefault(mp_id, {})[model] = node
-
-    if models:
-        # filter to selected models
-        pred_node_dict = {
-            mp: {m: node for m, node in models_dict.items() if m in models}
-            for mp, models_dict in pred_node_dict.items()
-        }
+    
+    pred_node_dict, ref_node_dict = load_nodes_mpid_model(node_objects, models, split_str="_phonons-dispersion")
+    
 
 
     if ui not in {None, "browser"}:
@@ -260,35 +224,26 @@ def phonon_compare(
         ui = ui,
     )
     
-
-
-
-@app.command()
-def gmtkn55_compare(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
-    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
-    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
-    subsets: Annotated[str, typer.Option("--subsets", "-s", help="Subsets")] = "subsets.csv",
-    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
-
-    ):
+# ------ helper funcitons -------
+def load_node_objects(
+    nodes: list[str],
+    glob: bool,
+    models: list[str] | None,
+    all_nodes: list[str],
+    split_str: str,
+) -> dict[str, zntrack.Node]:
     
-    # Load all node names from zntrack.json
-    fs = dvc.api.DVCFileSystem()
-    with fs.open("zntrack.json", mode="r") as f:
-        all_nodes = list(json.load(f).keys())
-
     selected_nodes = []
     if glob:
         for pattern in nodes:
             matched = fnmatch.filter(all_nodes, pattern)
             for name in matched:
-                model = name.split("_GMTKN55Benchmark")[0]
+                model = name.split(split_str)[0]
                 if not models or model in models:
                     selected_nodes.append(name)
     else:
         for name in nodes:
-            model = name.split("_GMTKN55Benchmark")[0]
+            model = name.split(split_str)[0]
             if not models or model in models:
                 selected_nodes.append(name)
 
@@ -300,6 +255,55 @@ def gmtkn55_compare(
     node_objects = {}
     for name in selected_nodes:
         node_objects[name] = zntrack.from_rev(name)
+
+    return node_objects
+    
+    
+def load_nodes_mpid_model(node_objects, models, split_str):
+    """Load nodes which are structured: 
+        - ref: Dict["mp_id": zntrack.Node]]
+        - pred: Dict["mp_id": Dict["model_name", zntrack.Node]]
+    """
+    pred_node_dict = {}
+    ref_node_dict = {}
+
+    for name, node in node_objects.items():
+        mp_id = name.split("_")[-1]
+        model = name.split(split_str)[0]
+        if "reference" in name or "ref" in name:
+            ref_node_dict[mp_id] = node
+        else:
+            pred_node_dict.setdefault(mp_id, {})[model] = node
+
+    if models:
+        # filter to selected models
+        pred_node_dict = {
+            mp: {m: node for m, node in models_dict.items() if m in models}
+            for mp, models_dict in pred_node_dict.items()
+        }
+    
+    return pred_node_dict, ref_node_dict
+
+# ------- end of helper functions -------
+
+
+
+@app.command()
+def gmtkn55_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+
+    ):
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_GMTKN55Benchmark")
 
     benchmark_node_dict = {}
 
@@ -313,9 +317,6 @@ def gmtkn55_compare(
             m: node for m, node in benchmark_node_dict.items() if m in models
         }
 
-    if not os.path.exists(subsets):
-        typer.echo("subsets.csv not found in the current directory, please provide the subsets.csv path using --subsets.")
-        raise typer.Exit(1)
     
     if ui not in {None, "browser"}:
         typer.echo("Invalid UI mode. Choose from: none or browser.")
@@ -326,11 +327,11 @@ def gmtkn55_compare(
     from mlipx import GMTKN55Benchmark
     GMTKN55Benchmark.mae_plot_interactive(
         benchmark_node_dict = benchmark_node_dict,
-        subsets_path=subsets,
         ui = ui
     )
     
 
+@app.command()
 def cohesive_compare(
     nodes: Annotated[list[str], typer.Argument(help="Path(s) to cohesive nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
@@ -344,33 +345,12 @@ def cohesive_compare(
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
 
-    selected_nodes = []
-    if glob:
-        for pattern in nodes:
-            matched = fnmatch.filter(all_nodes, pattern)
-            for name in matched:
-                model = name.split("_cohesive-energies")[0]
-                if not models or model in models:
-                    selected_nodes.append(name)
-    else:
-        for name in nodes:
-            model = name.split("_cohesive-energies")[0]
-            if not models or model in models:
-                selected_nodes.append(name)
-
-    if not selected_nodes:
-        typer.echo("No matching nodes found.")
-        raise typer.Exit()
-
-    # Instantiate nodes
-    node_objects = {}
-    for name in selected_nodes:
-        node_objects[name] = zntrack.from_rev(name)
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_CohesiveEnergies")
 
     benchmark_node_dict = {}
 
     for name, node in node_objects.items():
-        model = name.split("_cohesive-energies")[0]
+        model = name.split("_CohesiveEnergies")[0]
         benchmark_node_dict[model] = node
 
     if models:
@@ -387,6 +367,88 @@ def cohesive_compare(
 
     from mlipx import CohesiveEnergies
     CohesiveEnergies.mae_plot_interactive(
-        benchmark_node_dict=benchmark_node_dict,
+        node_dict=benchmark_node_dict,
         ui=ui
+    )
+
+
+@app.command()
+def elasticity_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to elasticity nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+
+    ):
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_Elasticity")
+    
+    benchmark_node_dict = load_nodes_model(node_objects, models, split_str="_Elasticity")
+    
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import Elasticity
+    Elasticity.mae_plot_interactive(
+        node_dict=benchmark_node_dict,
+        ui=ui
+    )
+    
+
+def load_nodes_model(node_objects, models, split_str):
+    """Load nodes which are structured: Dict["model_name": zntrack.Node]
+    """
+    benchmark_node_dict = {}
+    
+    for name, node in node_objects.items():
+        model = name.split(split_str)[0]
+        benchmark_node_dict[model] = node
+    if models:
+        # filter to selected models
+        benchmark_node_dict = {
+            m: node for m, node in benchmark_node_dict.items() if m in models
+        }
+    return benchmark_node_dict
+
+    
+
+@app.command()
+def bulk_crystal_benchmark(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to cohesive nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    pattern: Annotated[str, typer.Option("--pattern", help="Comma-separated glob patterns")] = None,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+
+    ):
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    phonon_nodes = [node for node in all_nodes if "phonon" in node]
+    elasticity_nodes = [node for node in all_nodes if "Elasticity" in node]
+        
+    phonon_node_objects = load_node_objects(nodes, glob, models, phonon_nodes, split_str="-phonons-dispersion")
+    elasticity_node_objects = load_node_objects(nodes, glob, models, elasticity_nodes, split_str="_Elasticity")
+            
+    phonon_pred_node_dict, phonon_ref_node_dict = load_nodes_mpid_model(phonon_node_objects, models, split_str="_phonons-dispersion")
+    elasticity_dict = load_nodes_model(elasticity_node_objects, models, split_str="_Elasticity")
+    
+    
+    
+    
+    from mlipx import BulkCrystalBenchmark
+    BulkCrystalBenchmark.benchmark_interactive(
+        phonon_ref_data=phonon_ref_node_dict,
+        phonon_pred_data=phonon_pred_node_dict,
+        elasticity_data=elasticity_dict,
+        ui = "notebook",
     )

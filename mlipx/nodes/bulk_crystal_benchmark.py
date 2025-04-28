@@ -30,23 +30,12 @@ from dash import dash_table
 import socket
 import time
 from typing import List, Dict, Any, Optional
-import cctk
-from ase.io.trajectory import Trajectory
-from plotly.io import write_image
-from ase.io import read
 
-from scipy.stats import gaussian_kde
 
 import mlipx
 from mlipx import PhononDispersion, Elasticity
-from mlipx.abc import ComparisonResults, NodeWithCalculator
 
 
-from mlipx.phonons_utils import get_fc2_and_freqs, init_phonopy, load_phonopy, get_chemical_formula
-from phonopy.structure.atoms import PhonopyAtoms
-from seekpath import get_path
-import zntrack.node
-from phonopy.phonon.band_structure import get_band_qpoints_by_seekpath
 
 import os
 import plotly.express as px
@@ -61,17 +50,13 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 class BulkCrystalBenchmark(zntrack.Node):
-    """
+    """ Node to combine all bulk crystal benchmarks
     """
     # inputs
     phonon_ref_list: List[PhononDispersion] = zntrack.deps()
     phonon_pred_list: List[PhononDispersion] = zntrack.deps()
     elasticity_list: List[Elasticity] = zntrack.deps()
-    ui: str = zntrack.params(None)
     
-
-    
-
     # outputs
     # nwd: ZnTrack's node working directory for saving files
     #elasticity_dict: pathlib.Path = zntrack.outs_path(zntrack.nwd / "elasticity_dict.json")
@@ -79,11 +64,8 @@ class BulkCrystalBenchmark(zntrack.Node):
     #phonon_pred_dict: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_pred_dict.json")
 
     
-
     def run(self):
         pass
-        
-
         
 
         
@@ -92,36 +74,42 @@ class BulkCrystalBenchmark(zntrack.Node):
     
 
     @staticmethod
-    def benchmark_interactive(elasticity_list: List[Elasticity],
-                            phonon_ref_list: List[PhononDispersion],
-                            phonon_pred_list: List[PhononDispersion],
+    def benchmark_interactive(elasticity_data: List[Elasticity] | Dict[str, Elasticity],
+                            phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion],
+                            phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
                             ui: str = "browser"
     ):
         
         
-        """
+        """ Interactive dashboard + saving plots and data for all bulk crystal benchmarks
         """
         
-        
-        elasticity_dict = {}
-        for node in elasticity_list:
-            name = node.name
-            model = name.split("_Elasticity")[0]
-            elasticity_dict[model] = node
+        def process_data(data, key_extractor, value_extractor):
+            if isinstance(data, list):
+                return {key_extractor(node): value_extractor(node) for node in data}
+            elif isinstance(data, dict):
+                return data
+            else:
+                raise ValueError(f"{data} should be a list or dict")
 
-        phonon_dict_ref = {}
-        for node in phonon_ref_list:
-            name = node.name
-            mp_id = name.split("PhononDispersion_")[1]
-            phonon_dict_ref[mp_id] = node
-            
-        phonon_dict_pred = {}
-        for node in phonon_pred_list:
-            name = node.name
-            model = name.split("_phonons-dispersion")[0]
-            mp_id = name.split("PhononDispersion_")[1]
-            phonon_dict_pred.setdefault(mp_id, {})[model] = node
-            
+        elasticity_dict = process_data(
+            elasticity_data,
+            key_extractor=lambda node: node.name.split("_Elasticity")[0],
+            value_extractor=lambda node: node
+        )
+
+        phonon_dict_ref = process_data(
+            phonon_ref_data,
+            key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
+            value_extractor=lambda node: node
+        )
+
+        phonon_dict_pred = process_data(
+            phonon_pred_data,
+            key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
+            value_extractor=lambda node: {node.name.split("_phonons-dispersion")[0]: node}
+        )
+                
         
         
         app_phonon, phonon_plot_stats_dict = PhononDispersion.benchmark_interactive(

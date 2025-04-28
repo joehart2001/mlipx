@@ -46,7 +46,7 @@ def parse_inputs(datapath: str | None, material_ids: str | None, smiles: str | N
         #    "Provide at least one of `datapath`, `material_ids`, or `smiles`."
         #)
         print(
-            "Provide at least one of `datapath`, `material_ids`, or `smiles`, unless running phonons"
+            "Provide at least one of `datapath`, `material_ids`, or `smiles`, unless running a predefined benchmark."
         )
 
     return {
@@ -345,7 +345,7 @@ def phonons(
     initialize: bool = False,
     repro: bool = False,
     datapath: str | None = None,
-    max_mpid_idx: int | None = None,
+    n_samples: int | None = None,
     material_ids: str | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
@@ -360,7 +360,7 @@ def phonons(
         datapath=datapath,
         material_ids=material_ids,
         smiles=smiles,
-        max_mpid_idx=max_mpid_idx,
+        n_samples=n_samples,
     )
     
     
@@ -407,4 +407,49 @@ def cohesive_energies(
         smiles=smiles,
     )
     
-def
+
+@app.command()
+def elasticity(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_samples: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run elasticity benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "elasticity.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+    )
+
+
+@app.command()
+def bulk_crystal(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_samples: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run bulk crystal benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "bulk_crystal_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        n_samples=n_samples,
+        smiles=smiles,
+    )

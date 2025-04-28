@@ -59,6 +59,7 @@ import csv
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
+from mlipx.benchmark_download_utils import get_benchmark_data
 
 
 
@@ -66,9 +67,9 @@ class CohesiveEnergies(zntrack.Node):
     """Benchmark model against X23 and DMC-ICE13
     """
     # inputs
-    lattice_energy_dir: pathlib.Path = zntrack.params()
-    dmc_ice_dir: pathlib.Path = zntrack.params()
-    ice_ref: t.Dict[str, float] = zntrack.params()
+    #lattice_energy_dir: pathlib.Path = zntrack.params()
+    #dmc_ice_dir: pathlib.Path = zntrack.params()
+    #ice_ref: t.Dict[str, float] = zntrack.params()
     
     model: NodeWithCalculator = zntrack.deps()
     model_name: str = zntrack.params()
@@ -77,7 +78,7 @@ class CohesiveEnergies(zntrack.Node):
     # outputs
     # nwd: ZnTrack's node working directory for saving files
     abs_error_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "abs_error.csv")
-    lattice_e_ouptut: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_e.csv")
+    lattice_e_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_e.csv")
     mae_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mae.json")
     
     lattice_e_ice_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_e_ice.csv")
@@ -89,12 +90,23 @@ class CohesiveEnergies(zntrack.Node):
         calc = self.model.get_calculator()
         ev_to_kjmol = 96.485
         
-        with open(os.path.join(self.lattice_energy_dir, "list"), "r") as f:
+        # download X23 and DMC-ICE13 datasets
+        lattice_energy_dir = get_benchmark_data("lattice_energy.zip") / "lattice_energy"
+        dmc_ice_dir = get_benchmark_data("dmc-ice13-main.zip") / "dmc-ice13-main/INPUT/VASP"
+        
+        
+        with open(dmc_ice_dir / "../../ice_polymorph_ref_PBE_D3.json", "r") as f:
+            ice_ref = json.load(f)
+        
+        with open(lattice_energy_dir / "list", "r") as f:
             systems = f.read().splitlines()
+        
 
-        polymorphs = [name for name in os.listdir(self.dmc_ice_dir)
-                    if os.path.isdir(os.path.join(self.dmc_ice_dir, name)) and name != "water"]
-        water = read(os.path.join(self.dmc_ice_dir, "water/POSCAR"), '0')
+        # polymorphs = [name for name in os.listdir(dmc_ice_dir)
+        #             if os.path.isdir(os.path.join(dmc_ice_dir, name)) and name != "water"]
+        polymorphs = [p.name for p in dmc_ice_dir.iterdir() if p.is_dir() and p.name != "water"]
+        
+        water = read(dmc_ice_dir / "water/POSCAR", '0')
 
         def get_lattice_energy(model, sol, mol, nmol):
             sol.calc = model
@@ -106,10 +118,10 @@ class CohesiveEnergies(zntrack.Node):
         lattice_e_dict = {}
 
         for system in systems:
-            mol_path = os.path.join(self.lattice_energy_dir, system, "POSCAR_molecule")
-            sol_path = os.path.join(self.lattice_energy_dir, system, "POSCAR_solid")
-            ref_path = os.path.join(self.lattice_energy_dir, system, "lattice_energy_DMC")
-            nmol_path = os.path.join(self.lattice_energy_dir, system, "nmol")
+            mol_path = lattice_energy_dir / system / "POSCAR_molecule"
+            sol_path = lattice_energy_dir / system / "POSCAR_solid"
+            ref_path = lattice_energy_dir / system / "lattice_energy_DMC"
+            nmol_path = lattice_energy_dir / system / "nmol"
             
             mol = read(mol_path, '0')
             sol = read(sol_path, '0')
@@ -135,10 +147,10 @@ class CohesiveEnergies(zntrack.Node):
         ice_lattice_e_dict = {}
 
         for polymorph in polymorphs:
-            pol_path = os.path.join(self.dmc_ice_dir, polymorph, "POSCAR")
+            pol_path = dmc_ice_dir / polymorph / "POSCAR"
             pol = read(pol_path, '0')
             nmol = len(pol.arrays['numbers']) / 3
-            ref = self.ice_ref[polymorph]
+            ref = ice_ref[polymorph]
 
             lat_energy = get_lattice_energy(calc, pol, water, nmol) * 1000  # to meV
             error = abs(lat_energy - ref)
@@ -155,7 +167,7 @@ class CohesiveEnergies(zntrack.Node):
         
         order = ['Ih', 'II', 'III', 'IV', 'VI', 'VII', 'VIII', 'IX', 'XI', 'XIII', 'XIV', 'XV', 'XVII']
         ice_lattice_e_df = ice_lattice_e_df.reindex(order)
-        ref_df = pd.DataFrame(self.ice_ref, index=[0]).T.rename(columns={0: "Ref"})
+        ref_df = pd.DataFrame(ice_ref, index=[0]).T.rename(columns={0: "Ref"})
         ref_df.index.name = "Polymorph"
         
 
@@ -163,7 +175,7 @@ class CohesiveEnergies(zntrack.Node):
             
         with open(self.abs_error_output, "w") as f:
             error_data.to_csv(f, index=False)
-        with open(self.lattice_e_ouptut, "w") as f:
+        with open(self.lattice_e_output, "w") as f:
             lattice_e_df.to_csv(f, index=True)
         with open(self.mae_output, "w") as f:
             json.dump(mae, f)
@@ -185,7 +197,7 @@ class CohesiveEnergies(zntrack.Node):
     @property
     def lattice_e(self):
         """Lattice energy"""
-        return pd.read_csv(self.lattice_e_ouptut)
+        return pd.read_csv(self.lattice_e_output)
     @property
     def mae(self):
         """Mean absolute error"""
@@ -217,7 +229,6 @@ class CohesiveEnergies(zntrack.Node):
         mae_rel_ih_dict = {}
         mae_rel_all_dict = {}
         lattice_e_ice_df_all_models = None
-        lattice_e_ice_df_all_models_all_polymorphs = None
         lattice_e_ice_all_polymorphs_dict_of_dfs = {}
         rel_lattice_e_ice_df_ih = pd.DataFrame()
         
