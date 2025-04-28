@@ -4,6 +4,7 @@ import zntrack
 from models import MODELS
 
 from mlipx.phonons_utils import download_alex_parallel
+from mlipx.benchmark_download_utils import BENCHMARK_DATA_DIR
 
 project = zntrack.Project()
 
@@ -38,9 +39,11 @@ with project.group("reference", "phonons-ref-to-node"):
 
 {% else %}
 download_alex_parallel(sample_every=10, max_threads=16)
+local_path = Path(BENCHMARK_DATA_DIR) / "alex_phonons/alex_phonon_data"
 
-with open("alex_phonons/mp_ids_subsampled.txt", "r") as f:
+with open(f"{local_path}/../mp_ids_subsampled.txt", "r") as f:
     mp_ids = [line.strip() for line in f.readlines()]
+
 
 
 {% if n_samples %}
@@ -50,12 +53,11 @@ print(f"Using {len(mp_ids)} mp-ids")
 print(f"Using {len(mp_ids)} mp-ids")
 {% endif %}
 
-
 dict_ref = {}
 with project.group("reference", "phonons-ref-to-node"):
     for mp_id in mp_ids:
         phonon = mlipx.PhononRefToNode(
-            phonopy_yaml_path=f"alex_phonons/alex_phonon_data/{mp_id}.yaml",
+            phonopy_yaml_path=f"{local_path}/{mp_id}.yaml",
             name=f"PhononRefToNode_{mp_id}")
         dict_ref[mp_id] = phonon
 {% endif %}
@@ -72,8 +74,9 @@ for mp_id, node in dict_ref.items():
             fc2_dict.setdefault(mp_id, {})[model_name] = fc2
 
 
+# Alex's yaml files -> phonon dispersions
+alex_dir = "alexandria_phonons/alex_data/"
 phonon_dict_ref = {}
-phonon_ref_list = []
 with project.group("reference", "phonons-dispersion-ref"):
     for mp_id in mp_ids:
         phonon = mlipx.PhononDispersion(
@@ -81,11 +84,9 @@ with project.group("reference", "phonons-dispersion-ref"):
             thermal_properties_path= dict_ref[mp_id].get_thermal_properties_path,
             name=f"PhononDispersion_{mp_id}")
         phonon_dict_ref[mp_id] = phonon
-        phonon_ref_list.append(phonon)
 
-
+# # calculated yaml files for models -> phonon dispersions
 phonon_dict_pred = {}
-phonon_pred_list = []
 total_dispersion_tasks = sum(len(models) for models in fc2_dict.values())
 idx = 1
 
@@ -105,7 +106,6 @@ for mp_id in fc2_dict:
                 name=f"PhononDispersion_{mp_id}"
             )
             phonon_dict_pred.setdefault(mp_id, {})[model_name] = phonon
-            phonon_pred_list.append(phonon)
             idx += 1
 
 
