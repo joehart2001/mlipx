@@ -73,7 +73,7 @@ class Elasticity(zntrack.Node):
     norm_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.1, -0.05, 0.05, 0.1))
     shear_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.02, -0.01, 0.01, 0.02))
     relax_structure: bool = zntrack.params(True)
-    n_samples: int = zntrack.params(10)
+    n_materials: int = zntrack.params(10)
     fmax: float = zntrack.params(0.05)
 
     # outputs
@@ -93,7 +93,7 @@ class Elasticity(zntrack.Node):
         
         
         # from matcalc
-        benchmark = ElasticityBenchmark(n_samples=self.n_samples, seed=2025, 
+        benchmark = ElasticityBenchmark(n_samples=self.n_materials, seed=2025, 
                                         fmax=self.fmax, 
                                         relax_structure=self.relax_structure,
                                         norm_strains = self.norm_strains,

@@ -7,8 +7,14 @@ from mlipx.phonons_utils import download_alex_parallel
 from mlipx.benchmark_download_utils import BENCHMARK_DATA_DIR
 from pathlib import Path
 
-project = zntrack.Project()
 
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+project = zntrack.Project()
+{% endif %}
 
 
 # datapath = [path] so need first element (only element)
@@ -22,8 +28,8 @@ for filename in os.listdir({{ datapath[0] }}):
     if match:
         mp_ids.append(match.group(1))
 
-{% if n_samples %}
-mp_ids = mp_ids[:{{ n_samples }}]
+{% if n_materials %}
+mp_ids = mp_ids[:{{ n_materials }}]
 print(f"Using {len(mp_ids)} mp-ids")
 {% else %}
 print(f"Using {len(mp_ids)} mp-ids")
@@ -47,8 +53,8 @@ with open(f"{local_path}/../mp_ids_subsampled.txt", "r") as f:
 
 
 
-{% if n_samples %}
-mp_ids = mp_ids[:{{ n_samples }}]
+{% if n_materials %}
+mp_ids = mp_ids[:{{ n_materials }}]
 print(f"Using {len(mp_ids)} mp-ids")
 {% else %}
 print(f"Using {len(mp_ids)} mp-ids")
@@ -75,9 +81,9 @@ for mp_id, node in dict_ref.items():
             fc2_dict.setdefault(mp_id, {})[model_name] = fc2
 
 
-# Alex's yaml files -> phonon dispersions
-alex_dir = "alexandria_phonons/alex_data/"
+
 phonon_dict_ref = {}
+phonon_ref_list = []
 with project.group("reference", "phonons-dispersion-ref"):
     for mp_id in mp_ids:
         phonon = mlipx.PhononDispersion(
@@ -85,9 +91,11 @@ with project.group("reference", "phonons-dispersion-ref"):
             thermal_properties_path= dict_ref[mp_id].get_thermal_properties_path,
             name=f"PhononDispersion_{mp_id}")
         phonon_dict_ref[mp_id] = phonon
+        phonon_ref_list.append(phonon)
 
 # # calculated yaml files for models -> phonon dispersions
 phonon_dict_pred = {}
+phonon_pred_list = []
 total_dispersion_tasks = sum(len(models) for models in fc2_dict.values())
 idx = 1
 
@@ -107,6 +115,11 @@ for mp_id in fc2_dict:
                 name=f"PhononDispersion_{mp_id}"
             )
             phonon_dict_pred.setdefault(mp_id, {})[model_name] = phonon
+            phonon_pred_list.append(phonon)
             idx += 1
 
+
+
+{% if standalone %}
 project.build()
+{% endif %}

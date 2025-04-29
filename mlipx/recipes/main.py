@@ -7,6 +7,8 @@ import typing as t
 import jinja2
 import typer
 
+from jinja2 import Environment, FileSystemLoader
+
 CWD = pathlib.Path(__file__).parent
 
 app = typer.Typer()
@@ -22,6 +24,21 @@ def render_template(template_name: str, output_name: str, **context):
     """Render a Jinja2 template and write it to a file."""
     template_path = CWD / template_name
     template = jinja2.Template(template_path.read_text())
+    with open(output_name, "w") as f:
+        f.write(template.render(**context))
+
+
+def render_templateception(template_name: str, output_name: str, **context):
+    """Render a Jinja2 template and write it to a file, supporting includes.
+        Robust to be able to render templates inside of templates e.g. for bulk_crystal_benchmark.py.jinja2
+        which contrains a call to phonons.py.jinja2
+    """
+    template_path = CWD / template_name
+    # set up the environment with a loader
+    env = Environment(loader=FileSystemLoader(str(template_path.parent)))
+    # get template by name
+    template = env.get_template(template_path.name)
+
     with open(output_name, "w") as f:
         f.write(template.render(**context))
 
@@ -73,6 +90,29 @@ def handle_recipe(
     inputs = parse_inputs(datapath, material_ids, smiles)
     render_template(template_name, "main.py", **inputs, **additional_context)
     repro_if_requested(repro)
+    
+    
+def handle_recipeception(
+    template_name: str,
+    initialize: bool,
+    repro: bool,
+    datapath: str | None,
+    material_ids: str | None,
+    smiles: str | None,
+    **additional_context,
+):
+    """Common logic for handling recipes.
+        Allows for rendering templates inside of templates e.g. for bulk_crystal_benchmark.py.jinja2
+    """
+    if initialize:
+        initialize_directory()
+
+    inputs = parse_inputs(datapath, material_ids, smiles)
+    #inputs.update(additional_context)
+    render_templateception(template_name, "main.py", **inputs, **additional_context)
+    repro_if_requested(repro)
+
+
 
 
 @app.command()
@@ -345,7 +385,7 @@ def phonons(
     initialize: bool = False,
     repro: bool = False,
     datapath: str | None = None,
-    n_samples: int | None = None,
+    n_materials: int | None = None,
     material_ids: str | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
@@ -360,7 +400,7 @@ def phonons(
         datapath=datapath,
         material_ids=material_ids,
         smiles=smiles,
-        n_samples=n_samples,
+        n_materials=n_materials,
     )
     
     
@@ -414,7 +454,7 @@ def elasticity(
     repro: bool = False,
     datapath: str | None = None,
     material_ids: str | None = None,
-    n_samples: int | None = None,
+    n_materials: int | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
 ):
@@ -427,6 +467,7 @@ def elasticity(
         repro=repro,
         datapath=datapath,
         material_ids=material_ids,
+        n_materials=n_materials,
         smiles=smiles,
     )
 
@@ -437,19 +478,19 @@ def bulk_crystal(
     repro: bool = False,
     datapath: str | None = None,
     material_ids: str | None = None,
-    n_samples: int | None = None,
+    n_materials: int | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
 ):
     """Run bulk crystal benchmark."""
     if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
+        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipeception(
         "bulk_crystal_benchmark.py.jinja2",
         initialize=initialize,
         repro=repro,
         datapath=datapath,
         material_ids=material_ids,
-        n_samples=n_samples,
         smiles=smiles,
+        n_materials=n_materials,
     )

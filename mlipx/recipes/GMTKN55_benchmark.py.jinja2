@@ -19,4 +19,6 @@ for model_name, model in MODELS.items():
         benchmark_node_dict[model_name] = benchmark
     
 
+{% if caller is not defined %}
 project.build()
+{% endif %}
