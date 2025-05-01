@@ -10,7 +10,7 @@ import plotly.graph_objects as go
 from plotly.express.colors import qualitative
 import zntrack
 from ase import Atoms, units
-
+import subprocess
 
 import warnings
 from pathlib import Path
@@ -72,6 +72,18 @@ class BulkCrystalBenchmark(zntrack.Node):
     
     
     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 
     @staticmethod
     def benchmark_interactive(elasticity_data: List[Elasticity] | Dict[str, Elasticity],
@@ -86,11 +98,26 @@ class BulkCrystalBenchmark(zntrack.Node):
         
         def process_data(data, key_extractor, value_extractor):
             if isinstance(data, list):
-                return {key_extractor(node): value_extractor(node) for node in data}
+                result = {}
+                for node in data:
+                    key = key_extractor(node)
+                    value = value_extractor(node)
+
+                    if isinstance(value, dict):
+                        # Merge nested dictionaries
+                        if key not in result:
+                            result[key] = {}
+                        result[key].update(value)
+                    else:
+                        result[key] = value
+                return result
+
             elif isinstance(data, dict):
                 return data
+
             else:
                 raise ValueError(f"{data} should be a list or dict")
+
 
         elasticity_dict = process_data(
             elasticity_data,
@@ -108,20 +135,18 @@ class BulkCrystalBenchmark(zntrack.Node):
             phonon_pred_data,
             key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
             value_extractor=lambda node: {node.name.split("_phonons-dispersion")[0]: node}
+        )                
+        
+        
+        app_phonon, phonon_plot_stats_dict, phonon_md_path = PhononDispersion.benchmark_interactive(
+            pred_node_dict=phonon_dict_pred,
+            ref_node_dict=phonon_dict_ref,
+            run_interactive=False,
         )
-                
         
-        
-        app_phonon, phonon_plot_stats_dict = PhononDispersion.benchmark_interactive(
-            phonon_dict_pred, 
-            phonon_dict_ref,
-            dont_run=True,
-        )
-        
-        app_elasticity, mae_df_elas = mlipx.Elasticity.mae_plot_interactive(
-            node_dict= elasticity_dict,
-            dont_run=True,
-            
+        app_elasticity, mae_df_elas, elas_md_path = mlipx.Elasticity.mae_plot_interactive(
+            node_dict=elasticity_dict,
+            run_interactive=False,
         )
     
     
@@ -178,6 +203,15 @@ class BulkCrystalBenchmark(zntrack.Node):
             }
             for score in bulk_crystal_benchmark_score_df['Avg MAE \u2193']
         ]
+        
+        
+        md_path_list = [elas_md_path, phonon_md_path]
+    
+        BulkCrystalBenchmark.generate_report(
+            bulk_crystal_benchmark_score_df=bulk_crystal_benchmark_score_df,
+            md_report_paths=md_path_list,
+            markdown_path="benchmark_stats/bulk_crystal_benchmark_report.md",
+        )
 
 
     
@@ -194,6 +228,9 @@ class BulkCrystalBenchmark(zntrack.Node):
                 style_data_conditional=style_data_conditional,
             ),
         ])
+        
+        if ui is None:
+            return
         
         
         phohon_layout = app_phonon.layout
@@ -224,73 +261,6 @@ class BulkCrystalBenchmark(zntrack.Node):
             app_phonon, mae_df_elas, elasticity_dict,
         )
             
-
-        # @app.callback(
-        #     Output('scatter-plot', 'figure'),
-        #     Input('mae-table', 'active_cell')
-        # )
-        
-        # def update_scatter_plot(active_cell):
-        #     if active_cell is None: 
-        #         raise PreventUpdate
-        #         #return px.scatter(title="Click on a cell to view scatter plot")
-
-        #     row = active_cell['row']
-        #     col = active_cell['column_id']
-        #     model = mae_df_elas.loc[row, 'Model']
-
-        #     if col not in mae_df_elas.columns or col == 'Model':
-        #         return px.scatter(title="Invalid column clicked")
-
-        #     label = col.split()[0]  # "K_bulk" or "K_shear"
-        #     prop = label_to_key.get(label, None)
-        #     if prop is None:
-        #         return px.scatter(title="Unknown property")
-
-        #     df = elasticity_dict[model].results
-        #     fig = px.scatter(
-        #         data_frame=df,
-        #         x=f'{prop}_DFT',
-        #         y=f'{prop}_{model}',
-        #         labels={
-        #             f'{prop}_DFT': f'{label} DFT [GPa]',
-        #             f'{prop}_{model}': f'{label} Predicted [GPa]'
-        #         },
-        #         title=f'{label} Scatter Plot - {model}',
-        #         hover_data=['mp_id', 'formula', f'{prop}_DFT', f'{prop}_{model}'],
-        #     )
-        #     fig.add_shape(type='line', x0=df[f'{prop}_DFT'].min(), y0=df[f'{prop}_DFT'].min(),
-        #                 x1=df[f'{prop}_DFT'].max(), y1=df[f'{prop}_DFT'].max(),
-        #                 line=dict(dash='dash'))
-
-        #     fig.update_layout(
-        #         plot_bgcolor='white',
-        #         paper_bgcolor='white',
-        #         font_color='black',
-        #         xaxis_showgrid=True,
-        #         yaxis_showgrid=True,
-        #         xaxis=dict(gridcolor='lightgray'),
-        #         yaxis=dict(gridcolor='lightgray')
-        #     )
-
-            
-            
-        #     fig.add_annotation(
-        #         xref="paper", yref="paper",
-        #         x=0.02, y=0.98,
-        #         text=f"{label} MAE: {mae_df_elas.loc[row, col]} GPa",
-        #         showarrow=False,
-        #         align="left",
-        #         font=dict(size=12, color="black"),
-        #         bordercolor="black",
-        #         borderwidth=1,
-        #         borderpad=4,
-        #         bgcolor="white",
-        #         opacity=0.8
-        #     )
-
-
-        #     return fig
 
         
 
@@ -351,6 +321,54 @@ class BulkCrystalBenchmark(zntrack.Node):
 
 
     # --------------------------------- Helper Functions ---------------------------------
+
+
+    def generate_report(
+        bulk_crystal_benchmark_score_df: pd.DataFrame,
+        md_report_paths: List[str],
+        markdown_path: str,
+    ):
+        markdown_path = Path(markdown_path)
+        pdf_path = markdown_path.with_suffix(".pdf")
+        combined_md = []
+        
+        # Benchmark score Summary table
+        combined_md.append("# Bulk Crystal Benchmark Report\n")
+        combined_md.append("## Benchmark Score Table \n")
+        combined_md.append(bulk_crystal_benchmark_score_df.to_markdown(index=False))
+        combined_md.append("\n")
+
+        for path in md_report_paths:
+            path = Path(path)
+            if not path.exists():
+                print(f"Skipping {path} — file not found")
+                continue
+            with open(path, 'r') as f:
+                md = f.read()
+                #combined_md.append(f"# {path.stem}\n\n")
+                combined_md.append(md)
+                combined_md.append('\n\\newpage\n\n')
+        
+        Path(markdown_path).write_text("\n".join(combined_md))
+        
+        
+        print(f"Markdown report saved to: {markdown_path}")
+
+        # Generate PDF with Pandoc
+        try:
+            subprocess.run(
+                ["pandoc", str(markdown_path), "-o", str(pdf_path), "--pdf-engine=xelatex", "--variable=geometry:top=1.5cm,bottom=2cm,left=1cm,right=1cm"],
+                check=True
+            )
+            print(f"PDF report saved to {pdf_path}")
+
+        except subprocess.CalledProcessError as e:
+            print(f"PDF generation failed: {e}")
+        
+        
+        return markdown_path
+
+
 
 
     def process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, ref_benchmarks_dict, pred_benchmarks_dict):

@@ -323,4 +323,7 @@ def download_alex_parallel(sample_every = 10, max_threads=16):
     # Summary
     success = sum("success" in r for r in results)
     fail = sum("failed" in r for r in results)
-    print(f"\nDownload complete: {success} success, {fail} failed")
+    if success == 0 and fail == 0:
+        print("Found cached files, no download needed")
+    else:
+        print(f"\nDownload complete: {success} success, {fail} failed")

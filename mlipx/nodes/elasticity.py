@@ -1,3 +1,4 @@
+import io
 import pathlib
 import typing as t
 import json
@@ -15,6 +16,7 @@ from ase.phonons import Phonons
 from ase.dft.kpoints import bandpath
 from ase.optimize import LBFGS
 from dataclasses import field
+import subprocess
 
 import warnings
 from pathlib import Path
@@ -128,7 +130,7 @@ class Elasticity(zntrack.Node):
     
     
     @staticmethod
-    def mae_plot_interactive(node_dict, ui = None, dont_run = False):
+    def mae_plot_interactive(node_dict, ui = None, run_interactive = True):
         """Interactive MAE table -> scatter plot for bulk and shear moduli for each model 
         """
         
@@ -161,23 +163,22 @@ class Elasticity(zntrack.Node):
         mae_df = mae_df.reset_index().rename(columns={'index': 'Model'})
         mae_df = mae_df.round(3)
         
-        # save stats
-        # if not os.path.exists(f"benchmark_stats/elasticity/"):
-        #     os.makedirs(f"benchmark_stats/elasticity/")
-            
-        #mae_df.to_csv('benchmark_stats/elasticity/mae_elasticity.csv', index=False)  # save stats
-        
+
         Elasticity.save_scatter_plots_stats(
             node_dict=node_dict,
             mae_df=mae_df,
-            save_path=f"benchmark_stats/elasticity/scatter_plots/"
+            save_path=f"benchmark_stats/elasticity/"
         )
         
-        if ui is None:
-            if dont_run:
-                pass
-            else:
-                return
+        models_list = list(node_dict.keys())
+        md_path = Elasticity.generate_elasticity_report(
+            mae_df=mae_df,
+            models_list=models_list,
+            
+        )
+        
+        if ui is None and run_interactive:
+            return
         
 
         # Dash app
@@ -193,7 +194,11 @@ class Elasticity(zntrack.Node):
                 style_cell={'textAlign': 'center'},
                 style_header={'fontWeight': 'bold'},
             ),
+            dcc.Store(id="stored-cell-points"),
+            dcc.Store(id="stored-results-df"),
+
             dcc.Graph(id='scatter-plot'),
+            dash_table.DataTable(id="material-table"),
         ],
             style={
                 'backgroundColor': 'white',
@@ -221,15 +226,16 @@ class Elasticity(zntrack.Node):
             def _run_server():
                 app.run(debug=True, use_reloader=False, port=port)
                 
-                
+
                 
             if ui == "browser":
-                import webbrowser
-                import threading
+                #import webbrowser
+                #import threading
                 #threading.Thread(target=_run_server, daemon=True).start()
                 _run_server()
                 time.sleep(1.5)
                 #webbrowser.open(url)
+                
             elif ui == "notebook":
                 _run_server()
             
@@ -239,81 +245,223 @@ class Elasticity(zntrack.Node):
 
 
             print(f"Dash app running at {url}")
-        
-        if dont_run:
-            return app, mae_df
-        print(app)
-        
+            
+        if not run_interactive:
+            return app, mae_df, md_path
+
+                
         return run_app(app, ui=ui)
 
 
+ # -------------- helper functions ----------------
+    
 
+
+    def generate_elasticity_report(
+        mae_df,
+        models_list,
+    ):
+        """Generates a markdown and pdf report contraining the MAE summary table, scatter plots and phonon dispersions
+        """
+        markdown_path = Path("benchmark_stats/elasticity/elasticity_benchmark_report.md")
+        pdf_path = markdown_path.with_suffix(".pdf")
+
+        md = []
+
+        md.append("# Elasticity Report\n")
+
+        # MAE Summary table
+        md.append("## Bulk and Shear Moduli MAE Summary\n")
+        md.append(mae_df.to_markdown(index=False))
+        md.append("\n")
+        
+        # function for adding images to the markdown 
+        def add_image_rows(md_lines, image_paths, n_cols = 2):
+            """Append n images per row"""
+            for i in range(0, len(image_paths), n_cols):
+                image_set = image_paths[i:i+n_cols]
+                width = 100 // n_cols
+                line = " ".join(f"![]({img.resolve()}){{ width={width}% }}" for img in image_set)
+                md_lines.append(line + "\n")
+
+
+        # Scatter Plots
+        md.append("## Scatter and density Plots\n")
+        for model in models_list:
+            md.append(f"### {model}\n")
+            scatter_plot_dir = Path(f"benchmark_stats/elasticity/{model}/scatter_plots")
+            images = sorted(scatter_plot_dir.glob("*.png"))
+            add_image_rows(md, images)
+            
+        # Save Markdown file
+        markdown_path.write_text("\n".join(md))
+
+        print(f"Markdown report saved to: {markdown_path}")
+
+        # Generate PDF with Pandoc
+        try:
+            subprocess.run(
+                ["pandoc", str(markdown_path), "-o", str(pdf_path), "--pdf-engine=xelatex", "--variable=geometry:top=1.5cm,bottom=2cm,left=1cm,right=1cm"],
+                check=True
+            )
+            print(f"PDF report saved to {pdf_path}")
+
+        except subprocess.CalledProcessError as e:
+            print(f"PDF generation failed: {e}")
+        
+        
+        return markdown_path
+
+            
+            
+
+    @staticmethod
+    def generate_density_scatter_figure(x, y, label, model, mae=None, max_points=500):
+        x, y = np.array(x), np.array(y)
+        x_min, x_max = x.min() - 0.05, x.max() + 0.05 # add a small margin otherwise the egde points are cut off
+        y_min, y_max = y.min() - 0.05, y.max() + 0.05
+        num_cells = 50
+        cell_w = (x_max - x_min) / num_cells
+        cell_h = (y_max - y_min) / num_cells
+
+        cell_counts = np.zeros((num_cells, num_cells))
+        cell_points = { (i, j): [] for i in range(num_cells) for j in range(num_cells) }
+
+        for idx, (xi, yi) in enumerate(zip(x, y)):
+            cx = int((xi - x_min) // cell_w)
+            cy = int((yi - y_min) // cell_h)
+            if 0 <= cx < num_cells and 0 <= cy < num_cells:
+                cell_counts[cx, cy] += 1
+                cell_points[(cx, cy)].append(idx)  # store index, not coordinates
+
+        plot_x, plot_y, plot_colors = [], [], []
+        point_cells = []
+
+        # plotting points logic
+        # cell has more than 5 points: randomly select one
+        # cell has less than 5 points: plot all points
+        # helps for large datasets but keeps outliers visiable
+        for (cx, cy), indices in cell_points.items():
+            if len(indices) > 5:
+                indices = [np.random.choice(indices)]
+                if len(plot_x) < max_points:
+                    plot_x.append(x[idx])
+                    plot_y.append(y[idx])
+                    plot_colors.append(cell_counts[cx, cy])
+                    point_cells.append((cx, cy))
+            else:
+                indices = indices
+            for idx in indices:
+                plot_x.append(x[idx])
+                plot_y.append(y[idx])
+                plot_colors.append(cell_counts[cx, cy])
+                point_cells.append((cx, cy))
+
+        fig = go.Figure(go.Scatter(
+            x=plot_x, y=plot_y, mode='markers',
+            marker=dict(color=plot_colors, size=5, colorscale='Viridis', showscale=True,
+                        colorbar=dict(title="Density")),
+            text=[f"Density: {int(c)}" for c in plot_colors],
+            customdata=point_cells
+        ))
+
+        fig.update_layout(
+            title=f'{label} Scatter Plot - {model}',
+            xaxis_title=f'{label} DFT [GPa]',
+            yaxis_title=f'{label} Predicted [GPa]',
+            plot_bgcolor='white', paper_bgcolor='white',
+            font=dict(size=16, color='black'),
+            xaxis=dict(gridcolor='lightgray', showgrid=True),
+            yaxis=dict(gridcolor='lightgray', showgrid=True),
+            hovermode='closest'
+        )
+
+        combined_min, combined_max = min(x_min, y_min), max(x_max, y_max)
+        fig.add_shape(type='line', x0=combined_min, y0=combined_min, x1=combined_max, y1=combined_max,
+                      line=dict(dash='dash'))
+
+        if mae is not None:
+            fig.add_annotation(
+                xref="paper", yref="paper", x=0.02, y=0.98,
+                text=f"{label} MAE: {mae} GPa",
+                showarrow=False,
+                font=dict(size=14, color="black"),
+                bordercolor="black", borderwidth=1,
+                borderpad=4, bgcolor="white", opacity=0.8
+            )
+
+        return fig, cell_points, cell_w, cell_h, x_min, y_min
 
     @staticmethod
     def save_scatter_plots_stats(
-        node_dict: Dict[str, zntrack.Node], 
-        mae_df: pd.DataFrame, 
-        save_path: str = "benchmark_stats/elasticity/scatter_plots/"
+        node_dict: Dict[str, zntrack.Node],
+        mae_df: pd.DataFrame,
+        save_path: str = "benchmark_stats/elasticity/"
     ):
-        """
-        Generate and save scatter plots for each model and property.
-        """
         if not os.path.exists(save_path):
             os.makedirs(save_path)
-        
-        mae_df.to_csv(f"{save_path}/../mae_elasticity.csv", index=False)  # save stats
 
+        mae_df.to_csv(f"{save_path}/mae_elasticity.csv", index=False)
         mae_df = mae_df.set_index('Model')
-        for model in node_dict.keys():
-            results_df = node_dict[model].results
-            results_df.to_csv(f"{save_path}/{model}_results.csv", index=False)
+
+        for model, node in node_dict.items():
+            path = Path(f"{save_path}/{model}/")
+            (path / "scatter_plots").mkdir(parents=True, exist_ok=True)
+            
+            results_df = node.results
+            results_df.to_csv(f"{path}/results.csv", index=False)
+
             for col in mae_df.columns:
                 if "K_bulk" in col:
-                    prop = "K_vrh"
-                    label = "K_bulk"
+                    prop, label = "K_vrh", "K_bulk"
                 elif "K_shear" in col:
-                    prop = "G_vrh"
-                    label = "K_shear"
-                
-                # plot
-                fig = px.scatter(
-                    data_frame=results_df,
-                    x=f'{prop}_DFT',
-                    y=f'{prop}_{model}',
-                    labels={
-                        f'{prop}_DFT': f'{label} DFT [GPa]',
-                        f'{prop}_{model}': f'{label} Predicted [GPa]'
-                    },
-                    title=f'{label} Scatter Plot - {model}')
-                fig.add_shape(type='line', x0=results_df[f'{prop}_DFT'].min(), y0=results_df[f'{prop}_DFT'].min(),
-                            x1=results_df[f'{prop}_DFT'].max(), y1=results_df[f'{prop}_DFT'].max(),
-                            line=dict(dash='dash'))
-                fig.update_layout(plot_bgcolor='white',paper_bgcolor='white',font_color='black',xaxis_showgrid=True,yaxis_showgrid=True,xaxis=dict(gridcolor='lightgray'),yaxis=dict(gridcolor='lightgray'), font=dict(size=16, color="black")
+                    prop, label = "G_vrh", "K_shear"
+                else:
+                    continue
+
+                mae = mae_df.loc[model, col]
+                x = results_df[f'{prop}_DFT']
+                y = results_df[f'{prop}_{model}']
+
+                # Standard scatter
+                fig_std = px.scatter(
+                    results_df, x=f'{prop}_DFT', y=f'{prop}_{model}',
+                    labels={f'{prop}_DFT': f'{label} DFT [GPa]', f'{prop}_{model}': f'{label} Predicted [GPa]'},
+                    title=f'{label} Scatter Plot - {model}'
                 )
-                fig.add_annotation(xref="paper", yref="paper",x=0.02, y=0.98,text=f"{prop} MAE: {mae_df.loc[model, col]} GPa",showarrow=False,align="left",font=dict(size=16, color="black"),bordercolor="black",borderwidth=1,borderpad=4,bgcolor="white",opacity=0.8
+                combined_min, combined_max = min(x.min(), y.min()), max(x.max(), y.max())
+                fig_std.add_shape(type='line', x0=combined_min, y0=combined_min, x1=combined_max, y1=combined_max,
+                                  line=dict(dash='dash'))
+                fig_std.add_annotation(
+                    xref="paper", yref="paper", x=0.02, y=0.98,
+                    text=f"{label} MAE: {mae} GPa",
+                    showarrow=False, font=dict(size=14, color="black"),
+                    bordercolor="black", borderwidth=1,
+                    borderpad=4, bgcolor="white", opacity=0.8
                 )
-                fig.write_image(f"{save_path}/{model}_{label}.png", width=800, height=600)
-            
-                    
-        
-        
-                
-                
-                
-    
+                fig_std.update_layout(
+                    plot_bgcolor='white', paper_bgcolor='white',
+                    font=dict(size=16, color="black"),
+                    xaxis=dict(gridcolor='lightgray'), yaxis=dict(gridcolor='lightgray')
+                )
+                fig_std.write_image(f"{path}/scatter_plots/{label}_scatter.png", width=800, height=600)
+
+                # Heatmap-style scatter
+                fig_heatmap, *_ = Elasticity.generate_density_scatter_figure(x, y, label, model, mae)
+                fig_heatmap.write_image(f"{path}/scatter_plots/{label}_density.png", width=800, height=600)
+
     @staticmethod
     def register_elasticity_callbacks(app, mae_df, node_dict):
-        
+
         @app.callback(
             Output('scatter-plot', 'figure'),
+            Output('stored-cell-points', 'data'),
+            Output('stored-results-df', 'data'),
             Input('mae-table', 'active_cell')
         )
-        
-        
         def update_scatter_plot(active_cell):
-            if active_cell is None: 
+            if active_cell is None:
                 raise PreventUpdate
-                #return px.scatter(title="Click on a cell to view scatter plot")
 
             row = active_cell['row']
             col = active_cell['column_id']
@@ -322,63 +470,48 @@ class Elasticity(zntrack.Node):
             if col not in mae_df.columns or col == 'Model':
                 return px.scatter(title="Invalid column clicked")
 
-            # label = col.split()[0]  # "K_bulk" or "K_shear"
-            # prop = label_to_key.get(label, None)
-            
             if "K_bulk" in col:
-                prop = "K_vrh"
-                label = "K_bulk"
+                prop, label = "K_vrh", "K_bulk"
             elif "K_shear" in col:
-                prop = "G_vrh"
-                label = "K_shear"
+                prop, label = "G_vrh", "K_shear"
             else:
                 return px.scatter(title="Unknown property")
-    
-    
-            # if prop is None:
-            #     return px.scatter(title="Unknown property")
 
             df = node_dict[model].results
-            fig = px.scatter(
-                data_frame=df,
-                x=f'{prop}_DFT',
-                y=f'{prop}_{model}',
-                labels={
-                    f'{prop}_DFT': f'{label} DFT [GPa]',
-                    f'{prop}_{model}': f'{label} Predicted [GPa]'
-                },
-                title=f'{label} Scatter Plot - {model}',
-                hover_data=['mp_id', 'formula', f'{prop}_DFT', f'{prop}_{model}'],
-            )
-            fig.add_shape(type='line', x0=df[f'{prop}_DFT'].min(), y0=df[f'{prop}_DFT'].min(),
-                        x1=df[f'{prop}_DFT'].max(), y1=df[f'{prop}_DFT'].max(),
-                        line=dict(dash='dash'))
+            x = df[f'{prop}_DFT']
+            y = df[f'{prop}_{model}']
+            mae = mae_df.loc[row, col]
 
-            fig.update_layout(
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                font_color='black',
-                xaxis_showgrid=True,
-                yaxis_showgrid=True,
-                xaxis=dict(gridcolor='lightgray'),
-                yaxis=dict(gridcolor='lightgray')
+            fig, cell_points, *_ = Elasticity.generate_density_scatter_figure(x, y, label, model, mae)
+
+            # Serialize for Dash
+            serialized = {f"{cx}_{cy}": indices for (cx, cy), indices in cell_points.items()}
+
+            return (
+                fig,
+                json.dumps(serialized),
+                df.to_json(orient='split')
             )
 
-            
-            
-            fig.add_annotation(
-                xref="paper", yref="paper",
-                x=0.02, y=0.98,
-                text=f"{label} MAE: {mae_df.loc[row, col]} GPa",
-                showarrow=False,
-                align="left",
-                font=dict(size=12, color="black"),
-                bordercolor="black",
-                borderwidth=1,
-                borderpad=4,
-                bgcolor="white",
-                opacity=0.8
-            )
+        @app.callback(
+            Output('material-table', 'data'),
+            Output('material-table', 'columns'),
+            Input('scatter-plot', 'clickData'),
+            State('stored-cell-points', 'data'),
+            State('stored-results-df', 'data')
+        )
+        def update_material_table(clickData, cell_points_json, results_json):
+            if clickData is None:
+                raise PreventUpdate
 
+            cx, cy = clickData['points'][0]['customdata']
+            cell_key = f"{cx}_{cy}"
+            cell_points = json.loads(cell_points_json)
+            indices = cell_points.get(cell_key, [])
 
-            return fig
+            df = pd.read_json(io.StringIO(results_json), orient='split')
+            subset = df.iloc[indices]
+
+            return subset.to_dict('records'), [{"name": col, "id": col} for col in subset.columns]
+
+    

@@ -17,8 +17,8 @@ project = zntrack.Project()
 print(f"Elasticity benchmark on {{n_materials}} mp-ids")
 n_materials = {{ n_materials }}
 {% else %}
-{% set n_materials = 10 %}
-print(f"Elasticity benchmark on {{n_materials}} mp-ids")
+n_materials = None # none means all
+print(f"Elasticity benchmark on whole dataset (12,122 materials)")
 {% endif %}
 
 elasticity_dict = {}

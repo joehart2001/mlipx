@@ -472,7 +472,7 @@ class PhononDispersion(zntrack.Node):
 
 
     @staticmethod
-    def benchmark_interactive(pred_node_dict, ref_node_dict, ui = None, dont_run = False):
+    def benchmark_interactive(pred_node_dict, ref_node_dict, ui = None, run_interactive = True):
         """
         Main benchmarking function that coordinates the benchmarking process.
         
@@ -480,6 +480,7 @@ class PhononDispersion(zntrack.Node):
             pred_node_dict: Dictionary of prediction nodes
             ref_node_dict: Dictionary of reference nodes
             ui: Optional UI object for interactive display
+            run_interactive: Boolean flag to run the interactive UI or not
             
         Returns:
             Various benchmarking data and plots
@@ -557,19 +558,13 @@ class PhononDispersion(zntrack.Node):
         
         model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
         
-        PhononDispersion.generate_phonon_markdown_report(
+        md_path = PhononDispersion.generate_phonon_report(
             mae_summary_df=mae_summary_df,
-            models_list=model_list
+            models_list=model_list,
         )
         
-        if ui is None:
-            if dont_run:
-                pass
-            else:
-                return
-
-
-
+        if ui is None and run_interactive:
+            return
 
         
         # --------------------------------- Dash app ---------------------------------
@@ -784,8 +779,8 @@ class PhononDispersion(zntrack.Node):
 
 
         
-        if dont_run:
-            return app, plot_stats_dict
+        if not run_interactive:
+            return app, plot_stats_dict, md_path
 
 
         return run_app(app, ui=ui)
@@ -802,10 +797,12 @@ class PhononDispersion(zntrack.Node):
 
 
 
-    def generate_phonon_markdown_report(
+    def generate_phonon_report(
         mae_summary_df,
         models_list,
     ):
+        """Generates a markdown and pdf report contraining the MAE summary table, scatter plots and phonon dispersions
+        """
         markdown_path = Path("benchmark_stats/phonons/phonon_benchmark_report.md")
         pdf_path = markdown_path.with_suffix(".pdf")
 
@@ -818,11 +815,13 @@ class PhononDispersion(zntrack.Node):
         md.append(mae_summary_df.to_markdown(index=False))
         md.append("\n")
         
-        def add_image_rows(md_lines, image_paths):
-            """Append 2-per-row image rows using Pandoc's attribute syntax."""
-            for i in range(0, len(image_paths), 2):
-                pair = image_paths[i:i+2]
-                line = " ".join(f"![]({img.resolve()}){{ width=48% }}" for img in pair)
+        # function for adding images to the markdown 
+        def add_image_rows(md_lines, image_paths, n_cols = 4):
+            """Append n images per row"""
+            for i in range(0, len(image_paths), n_cols):
+                image_set = image_paths[i:i+n_cols]
+                width = 100 // n_cols
+                line = " ".join(f"![]({img.resolve()}){{ width={width}% }}" for img in image_set)
                 md_lines.append(line + "\n")
 
 
@@ -831,10 +830,6 @@ class PhononDispersion(zntrack.Node):
         for model in models_list:
             md.append(f"### {model}\n")
             scatter_plot_dir = Path(f"benchmark_stats/phonons/{model}/scatter_plots")
-            # for img_path in sorted(scatter_plot_dir.glob("*.png")):
-            #     title = img_path.stem.replace("_", " ").title()
-            #     md.append(f"### {title}\n")
-            #     md.append(f"![]({img_path.resolve()})\n")  # <-- full path
             images = sorted(scatter_plot_dir.glob("*.png"))
             add_image_rows(md, images)            
                     
@@ -843,10 +838,6 @@ class PhononDispersion(zntrack.Node):
         for model in models_list:
             md.append(f"### {model}\n")
             dispersion_plot_dir = Path(f"benchmark_stats/phonons/{model}/phonon_plots")
-            # for img_path in sorted(dispersion_plot_dir.glob("*.png")):
-            #     title = model + img_path.stem.split("_")[1]
-            #     md.append(f"### {title}\n")
-            #     md.append(f"![]({img_path.resolve()})\n")  # <-- full path
             images = sorted(dispersion_plot_dir.glob("*.png"))
             add_image_rows(md, images)
     
@@ -857,6 +848,7 @@ class PhononDispersion(zntrack.Node):
         # Replace unicode terms with LaTeX
         text = markdown_path.read_text()
         text = text.replace("ω_max", "$\\omega_{max}$")
+        
         markdown_path.write_text(text)
 
         print(f"Markdown report saved to: {markdown_path}")
@@ -864,13 +856,16 @@ class PhononDispersion(zntrack.Node):
         # Generate PDF with Pandoc
         try:
             subprocess.run(
-                ["pandoc", str(markdown_path), "-o", str(pdf_path), "--pdf-engine=xelatex"],
+                ["pandoc", str(markdown_path), "-o", str(pdf_path), "--pdf-engine=xelatex", "--variable=geometry:top=1.5cm,bottom=2cm,left=1cm,right=1cm"],
                 check=True
             )
             print(f"PDF report saved to {pdf_path}")
 
         except subprocess.CalledProcessError as e:
             print(f"PDF generation failed: {e}")
+
+
+        return markdown_path
 
 
 
@@ -1143,264 +1138,3 @@ class PhononDispersion(zntrack.Node):
     
 
 
-
-    # @staticmethod
-    # def bulk_crystal_benchmark(phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict , ui = None):
-        
-    #     """Combines all the benchmarks related to bulk crystals, including:
-    #     - Phonon Dispersion
-    #     - Elasticity (bulk and shear moduli)
-    #     """
-        
-
-    #     app, phonon_plot_stats_dict = PhononDispersion.benchmark_interactive(
-    #         phonon_pred_node_dict, 
-    #         phonon_ref_node_dict,
-    #         ui = "browser",
-    #         dont_run=True,
-    #     )
-        
-    #     print(phonon_plot_stats_dict)
-
-
-    #     benchmarks = [
-    #         'K_vrh', 
-    #         'G_vrh',
-    #     ]
-    #     benchmark_units = {
-    #         'K_vrh': '[GPa]', 
-    #         'G_vrh': '[GPa]',
-    #     }
-    #     benchmark_labels = {
-    #         'K_vrh': 'K_bulk',
-    #         'G_vrh': 'K_shear',
-    #     }
-        
-    #     label_to_key = {v: k for k, v in benchmark_labels.items()}
-        
-    #     mae_df_elas = pd.DataFrame()
-
-    #     for model in elasticity_dict.keys():
-    #         results_df = elasticity_dict[model].results
-    #         mae_K = np.abs(results_df[f'K_vrh_{model}'].values - results_df['K_vrh_DFT'].values).mean()
-    #         mae_G = np.abs(results_df[f'G_vrh_{model}'].values - results_df['G_vrh_DFT'].values).mean()
-    #         mae_df_elas.loc[model, 'K_bulk [GPa]'] = mae_K
-    #         mae_df_elas.loc[model, 'K_shear [GPa]'] = mae_G
-
-    #     mae_df_elas = mae_df_elas.reset_index().rename(columns={'index': 'Model'})
-    #     mae_df_elas = mae_df_elas.round(3)
-
-
-        
-    #     def bulk_crystal_benchmark_score(phonon_plot_stats_dict, mae_df_elas):
-    #         """ Currently avg mae
-    #             (problem with other explored metrics: if we normalise by the max mae, then the models in this test are comparable to each other but not models run in a different test, as they will be normalised differently)
-    #         """
-    #         # Initialize scores
-    #         maes = {}
-    #         scores = {}
-
-            
-    #         # Calculate scores for each model
-    #         for model in phonon_plot_stats_dict.keys():
-    #             scores[model] = 0
-                                                
-    #             for benchmark in phonon_plot_stats_dict[model].keys():
-    #                 mae = phonon_plot_stats_dict[model][benchmark]['MAE'][0]
-    #                 scores[model] += mae
-                
-    #             for benchmark in mae_df_elas.columns[1:]: # first col model
-    #                 mae = mae_df_elas.loc[mae_df_elas['Model'] == model, benchmark].values[0]
-    #                 scores[model] += mae
-                
-    #             scores[model] = scores[model] / (len(phonon_plot_stats_dict[model]) + len(mae_df_elas.columns[1:]))
-                
-    #         return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})
-
-    #     bulk_crystal_benchmark_score_df = bulk_crystal_benchmark_score(phonon_plot_stats_dict, mae_df_elas).round(3)
-        
-    #     score_min = bulk_crystal_benchmark_score_df['Avg MAE \u2193'].min()
-    #     score_max = bulk_crystal_benchmark_score_df['Avg MAE \u2193'].max()
-
-    #     def color_from_score(val):
-    #         if score_max == score_min:
-    #             return 'rgb(0, 255, 0)'  # If all scores are same
-    #         ratio = (val - score_min) / (score_max - score_min)
-    #         red = int(255 * ratio)
-    #         green = int(255 * (1 - ratio))
-    #         return f'rgb({red}, {green}, 0)'
-
-    #     # Create color conditions
-    #     style_data_conditional = [
-    #         {
-    #             'if': {'filter_query': f'{{Avg MAE \u2193}} = {score}', 'column_id': 'Avg MAE \u2193'},
-    #             'backgroundColor': color_from_score(score),
-    #             'color': 'white' if score > (score_min + score_max) / 2 else 'black'
-    #         }
-    #         for score in bulk_crystal_benchmark_score_df['Avg MAE \u2193']
-    #     ]
-
-
-
-
-
-
-    #     elasticity_layout = html.Div([
-    #         html.H2("Bulk and Shear Moduli MAEs", style={'color': 'Black', 'padding': '1rem'}),
-    #         dash_table.DataTable(
-    #             id='mae-table',
-    #             columns=[{"name": col, "id": col} for col in mae_df_elas.columns],
-    #             data=mae_df_elas.to_dict('records'),
-    #             style_cell={'textAlign': 'center', 'fontSize': '14px'},
-    #             style_header={'fontWeight': 'bold'},
-    #         ),
-    #         dcc.Graph(id='scatter-plot'),
-    #     ],
-    #     style={
-    #         'backgroundColor': 'white',
-    #     })
-        
-        
-    #     # benchmark score table
-    #     benchmark_score_table = html.Div([
-    #         html.H2("Benchmark Score Table", style={'color': 'Black', 'padding': '1rem'}),
-    #         dash_table.DataTable(
-    #             id='benchmark-score-table',
-    #             columns=[{"name": col, "id": col} for col in bulk_crystal_benchmark_score_df.columns],
-    #             data=bulk_crystal_benchmark_score_df.to_dict('records'),
-    #             style_cell={'textAlign': 'center', 'fontSize': '14px'},
-    #             style_header={'fontWeight': 'bold'},
-    #             style_data_conditional=style_data_conditional,
-    #         ),
-    #     ])
-        
-        
-    #     original_layout = app.layout
-        
-    #     app.layout = html.Div([
-    #         html.H1("Bulk Crystal Benchmark", style={"color": "black"}),
-    #         html.Div(benchmark_score_table, style={
-    #             "backgroundColor": "white",
-    #             "padding": "20px",
-    #             "border": "2px solid black",
-    #             "marginBottom": "30px"
-    #         }),
-    #         html.H2("Phonon Dispersion MAE Summary Table (300 K)", style={"color": "black"}),
-    #         html.Div(original_layout.children, style={
-    #             "backgroundColor": "white",
-    #             "padding": "20px",
-    #             "border": "2px solid black",
-    #             "marginBottom": "30px"
-    #         }),
-    #         html.Div(elasticity_layout, style={
-    #             "backgroundColor": "white",
-    #             "padding": "20px",
-    #             "border": "2px solid gray"
-    #         }),
-    #     ], style={"backgroundColor": "#f8f8f8"})
-
-            
-
-    #     @app.callback(
-    #         Output('scatter-plot', 'figure'),
-    #         Input('mae-table', 'active_cell')
-    #     )
-    #     def update_scatter_plot(active_cell):
-    #         if active_cell is None: 
-    #             raise PreventUpdate
-    #             #return px.scatter(title="Click on a cell to view scatter plot")
-
-    #         row = active_cell['row']
-    #         col = active_cell['column_id']
-    #         model = mae_df_elas.loc[row, 'Model']
-
-    #         if col not in mae_df_elas.columns or col == 'Model':
-    #             return px.scatter(title="Invalid column clicked")
-
-    #         label = col.split()[0]  # "K_bulk" or "K_shear"
-    #         prop = label_to_key.get(label, None)
-    #         if prop is None:
-    #             return px.scatter(title="Unknown property")
-
-    #         df = elasticity_dict[model].results
-    #         fig = px.scatter(
-    #             data_frame=df,
-    #             x=f'{prop}_DFT',
-    #             y=f'{prop}_{model}',
-    #             labels={
-    #                 f'{prop}_DFT': f'{label} DFT [GPa]',
-    #                 f'{prop}_{model}': f'{label} Predicted [GPa]'
-    #             },
-    #             title=f'{label} Scatter Plot - {model}',
-    #             hover_data=['mp_id', 'formula', f'{prop}_DFT', f'{prop}_{model}'],
-    #         )
-    #         fig.add_shape(type='line', x0=df[f'{prop}_DFT'].min(), y0=df[f'{prop}_DFT'].min(),
-    #                     x1=df[f'{prop}_DFT'].max(), y1=df[f'{prop}_DFT'].max(),
-    #                     line=dict(dash='dash'))
-
-    #         fig.update_layout(
-    #             plot_bgcolor='white',
-    #             paper_bgcolor='white',
-    #             font_color='black',
-    #             xaxis_showgrid=True,
-    #             yaxis_showgrid=True,
-    #             xaxis=dict(gridcolor='lightgray'),
-    #             yaxis=dict(gridcolor='lightgray')
-    #         )
-
-            
-            
-    #         fig.add_annotation(
-    #             xref="paper", yref="paper",
-    #             x=0.02, y=0.98,
-    #             text=f"{label} MAE: {mae_df_elas.loc[row, col]} GPa",
-    #             showarrow=False,
-    #             align="left",
-    #             font=dict(size=12, color="black"),
-    #             bordercolor="black",
-    #             borderwidth=1,
-    #             borderpad=4,
-    #             bgcolor="white",
-    #             opacity=0.8
-    #         )
-
-
-    #         return fig
-
-        
-
-    #     def reserve_free_port():
-    #         s = socket.socket()
-    #         s.bind(('', 0))
-    #         port = s.getsockname()[1]
-    #         return s, port  # you must close `s` later
-
-
-    #     def run_app(app, ui):
-    #         sock, port = reserve_free_port()
-    #         url = f"http://localhost:{port}"
-    #         sock.close()
-
-    #         def _run_server():
-    #             app.run(debug=True, use_reloader=False, port=port)
-                
-                
-                
-    #         if ui == "browser":
-    #             import webbrowser
-    #             import threading
-    #             #threading.Thread(target=_run_server, daemon=True).start()
-    #             _run_server()
-    #             time.sleep(1.5)
-    #             #webbrowser.open(url)
-    #         elif ui == "notebook":
-    #             _run_server()
-            
-    #         else:
-    #             print(f"Unknown UI option: {ui}. Please use 'browser', or 'notebook'.")
-    #             return
-
-
-    #         print(f"Dash app running at {url}")
-        
-    #     return run_app(app, ui=ui)
