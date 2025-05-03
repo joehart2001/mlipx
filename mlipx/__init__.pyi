@@ -27,8 +27,8 @@ from .nodes.smiles import BuildBox, Smiles2Conformers
 from .nodes.structure_optimization import StructureOptimization
 from .nodes.updated_frames import UpdateFramesCalc
 from .nodes.vibrational_analysis import VibrationalAnalysis
-from .nodes.phonon_node import PhononSpectrum, BuildASEcrystal
-#from .nodes.crystal import Crystal
+#from .nodes.phonon_node import PhononSpectrum, BuildASEcrystal
+from .nodes.build_ase_crystal import BuildASEcrystal
 from .nodes.phonon_fc2_node import PhononForceConstants
 from .nodes.phonon_dispersion_node import PhononDispersion
 from .nodes.phonon_ref_to_node import PhononRefToNode
@@ -36,6 +36,7 @@ from .nodes.GMTKN55_benchmark_node import GMTKN55Benchmark
 from .nodes.cohesive_energies import CohesiveEnergies
 from .nodes.elasticity import Elasticity
 from .nodes.bulk_crystal_benchmark import BulkCrystalBenchmark
+from .nodes.lattice_const_benchmark import LatticeConstant
 from .project import Project
 from .version import __version__
 
@@ -73,8 +74,6 @@ __all__ = [
     "BuildASEslab",
     "RelaxAdsorptionConfigs",
     "OrcaSinglePoint",
-    "PhononSpectrum",
-    "Crystal",
     "BuildASEcrystal",
     "PhononForceConstants",
     "PhononDispersion",
@@ -83,5 +82,6 @@ __all__ = [
     "CohesiveEnergies",
     "Elasticity",
     "BulkCrystalBenchmark",
+    "LatticeConstant",
     "__version__",
 ]

@@ -2,12 +2,13 @@ import pathlib
 
 import ase.io
 import ase.optimize as opt
+import ase.filters as filters
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import zntrack
 
-from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer
+from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer, Filter
 
 
 class StructureOptimization(zntrack.Node):
@@ -23,6 +24,8 @@ class StructureOptimization(zntrack.Node):
         The index of the ase.Atoms in `data` to optimize.
     optimizer : Optimizer
         Optimizer to use.
+    filter : Filter
+        Filter to use.
     model : NodeWithCalculator
         Model to use.
     fmax : float
@@ -39,6 +42,7 @@ class StructureOptimization(zntrack.Node):
     data: list[ase.Atoms] = zntrack.deps()
     data_id: int = zntrack.params(-1)
     optimizer: Optimizer = zntrack.params(Optimizer.LBFGS.value)
+    filter: Filter = zntrack.params(None)
     model: NodeWithCalculator = zntrack.deps()
     fmax: float = zntrack.params(0.05)
     steps: int = zntrack.params(100_000_000)
@@ -48,6 +52,9 @@ class StructureOptimization(zntrack.Node):
 
     def run(self):
         optimizer = getattr(opt, self.optimizer)
+        if self.filter:
+            filter_cls = getattr(filters, self.filter)
+        
         calc = self.model.get_calculator()
 
         if not self.data:
@@ -55,16 +62,19 @@ class StructureOptimization(zntrack.Node):
             return # added as alexandria database has mp-ids that have been removed from MP
         
         atoms = self.data[self.data_id]
+        print(atoms)
         self.frames_path.parent.mkdir(exist_ok=True)
 
         energies = []
         fmax = []
 
         def metrics_callback():
-            energies.append(atoms.get_potential_energy())
+            energies.append(atoms.get_potential_energy(force_consistent=False))
             fmax.append(np.linalg.norm(atoms.get_forces(), axis=-1).max())
 
         atoms.calc = calc
+        if filter_cls:
+            atoms = filter_cls(atoms)
         dyn = optimizer(
             atoms,
             trajectory=self.frames_path.as_posix(),

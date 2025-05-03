@@ -1064,7 +1064,7 @@ class PhononDispersion(zntrack.Node):
                 )
                 
                 model_figures_dict[model_name][benchmark] = fig
-                fig.write_image(scatter_dir / f"{benchmark}.png")
+                fig.write_image(scatter_dir / f"{benchmark}.png", width=800, height=600)
         
         # Save summary table to CSV
         mae_summary_df = PhononDispersion.calculate_summary_statistics(plot_stats_dict, pretty_benchmark_labels, benchmarks)

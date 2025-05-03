@@ -33,7 +33,7 @@ from typing import List, Dict, Any, Optional
 
 
 import mlipx
-from mlipx import PhononDispersion, Elasticity
+from mlipx import PhononDispersion, Elasticity, LatticeConstant
 
 
 
@@ -56,6 +56,7 @@ class BulkCrystalBenchmark(zntrack.Node):
     phonon_ref_list: List[PhononDispersion] = zntrack.deps()
     phonon_pred_list: List[PhononDispersion] = zntrack.deps()
     elasticity_list: List[Elasticity] = zntrack.deps()
+    lattice_const_list: List[LatticeConstant] = zntrack.deps()
     
     # outputs
     # nwd: ZnTrack's node working directory for saving files
@@ -87,9 +88,10 @@ class BulkCrystalBenchmark(zntrack.Node):
 
     @staticmethod
     def benchmark_interactive(elasticity_data: List[Elasticity] | Dict[str, Elasticity],
-                            phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion],
-                            phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
-                            ui: str = "browser"
+                              lattice_const_data: List[LatticeConstant] | Dict[str, Dict[str, LatticeConstant]],
+                              phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion],
+                              phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
+                              ui: str = "browser"
     ):
         
         
@@ -118,6 +120,11 @@ class BulkCrystalBenchmark(zntrack.Node):
             else:
                 raise ValueError(f"{data} should be a list or dict")
 
+        lattice_const_dict = process_data(
+            lattice_const_data,
+            key_extractor=lambda node: node.name.split("LatticeConst-")[1],
+            value_extractor=lambda node: {node.name.split("_lattice-constant-pred")[0]: node}
+        )
 
         elasticity_dict = process_data(
             elasticity_data,
@@ -146,6 +153,11 @@ class BulkCrystalBenchmark(zntrack.Node):
         
         app_elasticity, mae_df_elas, elas_md_path = mlipx.Elasticity.mae_plot_interactive(
             node_dict=elasticity_dict,
+            run_interactive=False,
+        )
+        
+        app_lattice_const, mae_df_lattice_const, lattice_const_md_path = LatticeConstant.mae_plot_interactive(
+            node_dict=lattice_const_dict,
             run_interactive=False,
         )
     
@@ -205,7 +217,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         ]
         
         
-        md_path_list = [elas_md_path, phonon_md_path]
+        md_path_list = [elas_md_path, lattice_const_md_path, phonon_md_path]
     
         BulkCrystalBenchmark.generate_report(
             bulk_crystal_benchmark_score_df=bulk_crystal_benchmark_score_df,
@@ -235,6 +247,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         
         phohon_layout = app_phonon.layout
         elasticity_layout = app_elasticity.layout
+        lattice_const_layout = app_lattice_const.layout
         
         app_phonon.layout = html.Div([
             html.H1("Bulk Crystal Benchmark", style={"color": "black"}),
@@ -250,6 +263,12 @@ class BulkCrystalBenchmark(zntrack.Node):
                 "border": "2px solid black",
                 "marginBottom": "30px"
             }),
+            html.Div(lattice_const_layout.children, style={
+                "backgroundColor": "white",
+                "padding": "20px",
+                "border": "2px solid black",
+                "marginBottom": "30px"
+            }),
             html.Div(elasticity_layout.children, style={
                 "backgroundColor": "white",
                 "padding": "20px",
@@ -259,6 +278,9 @@ class BulkCrystalBenchmark(zntrack.Node):
 
         Elasticity.register_elasticity_callbacks(
             app_phonon, mae_df_elas, elasticity_dict,
+        )
+        LatticeConstant.register_lattice_constant_callbacks(
+            app_phonon, mae_df_lattice_const, lattice_const_dict,
         )
             
 

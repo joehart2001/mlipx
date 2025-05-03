@@ -21,6 +21,12 @@ class Optimizer(str, Enum):
     FIRE = "FIRE"
     BFGS = "BFGS"
     LBFGS = "LBFGS"
+    
+class Filter(str, Enum):
+    UnitCellFilter = "UnitCellFilter"
+    StrainFilter = "StrainFilter"
+    ExpCellFilter = "ExpCellFilter"
+    FrechetCellFilter = "FrechetCellFilter"
 
 
 class ASEKeys(str, Enum):
