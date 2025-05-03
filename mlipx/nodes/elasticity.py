@@ -207,7 +207,7 @@ class Elasticity(zntrack.Node):
         
         
         # made into a function so can be called from outside (in the bulk crystal benchmark)
-        Elasticity.register_elasticity_callbacks(app, mae_df, node_dict)
+        Elasticity.register_callbacks(app, mae_df, node_dict)
 
         
 
@@ -451,7 +451,7 @@ class Elasticity(zntrack.Node):
                 fig_heatmap.write_image(f"{path}/scatter_plots/{label}_density.png", width=800, height=600)
 
     @staticmethod
-    def register_elasticity_callbacks(app, mae_df, node_dict):
+    def register_callbacks(app, mae_df, node_dict):
 
         @app.callback(
             Output('scatter-plot', 'figure'),

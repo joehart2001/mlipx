@@ -156,15 +156,47 @@ class BulkCrystalBenchmark(zntrack.Node):
             run_interactive=False,
         )
         
-        app_lattice_const, mae_df_lattice_const, lattice_const_md_path = LatticeConstant.mae_plot_interactive(
+        ref_lat_const_mptrj = {
+            'Ag': 4.082,
+            'Pd': 3.891,
+            'Rh': 3.760,
+            'Li': 3.352,
+            'Na': 4.107,
+            'K': 5.191,
+            'Rb': 5.572,
+            'Cs': 6.106,
+            'Ca': 5.463,
+            'Sr': 5.908,
+            'Ba': 4.976,
+            'Al': 4.002,
+            'LiF': 3.995,
+            'NaF': 4.619,
+            'NaCl': 5.585,
+            'MgO': 4.203,
+            'Si': 5.434,
+            'Ge': 5.719,
+            'GaAs': 5.690,
+            'Cu': 3.568,
+            'C': 3.562,
+            'LiCl': 5.056,
+            'SiC(a)': 3.072,  # alpha-SiC
+            'SiC(c)': 5.029   # beta-SiC
+        }
+        
+        app_lattice_const, mae_df_lattice_const, lattice_const_dict_with_ref, lattice_const_md_path = LatticeConstant.mae_plot_interactive(
             node_dict=lattice_const_dict,
+            ref_dict = ref_lat_const_mptrj,
             run_interactive=False,
         )
     
     
     
     
-        def bulk_crystal_benchmark_score(phonon_plot_stats_dict, mae_df_elas):
+        def bulk_crystal_benchmark_score(
+            phonon_plot_stats_dict, 
+            mae_df_elas, 
+            mae_df_lattice_const
+        ):
             """ Currently avg mae
                 (problem with other explored metrics: if we normalise by the max mae, then the models in this test are comparable to each other but not models run in a different test, as they will be normalised differently)
             """
@@ -178,18 +210,22 @@ class BulkCrystalBenchmark(zntrack.Node):
                 scores[model] = 0
                                                 
                 for benchmark in phonon_plot_stats_dict[model].keys():
-                    mae = phonon_plot_stats_dict[model][benchmark]['MAE'][0]
-                    scores[model] += mae
+                    mae_phonons = phonon_plot_stats_dict[model][benchmark]['MAE'][0]
+                    mae_lattice_const = mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, 'MAE (Å)'].values[0]
+                    scores[model] += mae_phonons
+                    scores[model] += mae_lattice_const
+                    
+                    
                 
                 for benchmark in mae_df_elas.columns[1:]: # first col model
                     mae = mae_df_elas.loc[mae_df_elas['Model'] == model, benchmark].values[0]
                     scores[model] += mae
                 
-                scores[model] = scores[model] / (len(phonon_plot_stats_dict[model]) + len(mae_df_elas.columns[1:]))
+                scores[model] = scores[model] / (len(phonon_plot_stats_dict[model]) + len(mae_df_elas.columns[1:]) + len(mae_df_lattice_const.columns[1:]))
                 
             return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})
 
-        bulk_crystal_benchmark_score_df = bulk_crystal_benchmark_score(phonon_plot_stats_dict, mae_df_elas).round(3)
+        bulk_crystal_benchmark_score_df = bulk_crystal_benchmark_score(phonon_plot_stats_dict, mae_df_elas, mae_df_lattice_const).round(3)
         
         if not os.path.exists("benchmark_stats/"):
             os.makedirs("benchmark_stats/")
@@ -255,19 +291,19 @@ class BulkCrystalBenchmark(zntrack.Node):
                 "backgroundColor": "white",
                 "padding": "20px",
                 "border": "2px solid black",
-                "marginBottom": "30px"
+                #"marginBottom": "30px"
             }),
             html.Div(phohon_layout.children, style={
                 "backgroundColor": "white",
                 "padding": "20px",
                 "border": "2px solid black",
-                "marginBottom": "30px"
+                #"marginBottom": "30px"
             }),
             html.Div(lattice_const_layout.children, style={
                 "backgroundColor": "white",
                 "padding": "20px",
                 "border": "2px solid black",
-                "marginBottom": "30px"
+                #"marginBottom": "30px"
             }),
             html.Div(elasticity_layout.children, style={
                 "backgroundColor": "white",
@@ -276,14 +312,13 @@ class BulkCrystalBenchmark(zntrack.Node):
             }),
         ], style={"backgroundColor": "#f8f8f8"})
 
-        Elasticity.register_elasticity_callbacks(
+        Elasticity.register_callbacks(
             app_phonon, mae_df_elas, elasticity_dict,
         )
-        LatticeConstant.register_lattice_constant_callbacks(
-            app_phonon, mae_df_lattice_const, lattice_const_dict,
+        LatticeConstant.register_callbacks(
+            app_phonon, mae_df_lattice_const, lattice_const_dict_with_ref,
         )
-            
-
+        
         
 
         def reserve_free_port():

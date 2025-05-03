@@ -92,14 +92,14 @@ class LatticeConstant(zntrack.Node):
     
     @staticmethod
     def mae_plot_interactive(
-        lattice_const_node_dict,
+        node_dict,
         ref_dict,
         ui: str | None = None,
         run_interactive: bool = True,
     ):
-        # === 1. Build Data ===
+
         full_data = {}
-        for formula, model_data in lattice_const_node_dict.items():
+        for formula, model_data in node_dict.items():
             formula_ref = {'SiC_a': 'SiC(a)', 'SiC_c': 'SiC(c)'}.get(formula, formula)
             ref_val = ref_dict[formula_ref]
             full_data[formula] = {"ref": ref_val}
@@ -110,7 +110,7 @@ class LatticeConstant(zntrack.Node):
         lat_const_df = lat_const_df[["ref"] + [col for col in lat_const_df.columns if col != "ref"]]
         lat_const_df = lat_const_df.round(3)
 
-        # === 2. Compute MAE per model ===
+        # mae
         mae_data = []
         for model_name in lat_const_df.columns:
             if model_name == "ref":
@@ -121,19 +121,21 @@ class LatticeConstant(zntrack.Node):
 
         mae_df = pd.DataFrame(mae_data)
 
+        # save
+        LatticeConstant.save_lattice_const_plots_tables(lat_const_df)
+        
         # report
         models_list = [col for col in lat_const_df.columns if col != "ref"]
-        LatticeConstant.generate_lattice_const_report(
+        md_path = LatticeConstant.generate_lattice_const_report(
             mae_df=mae_df,
             models_list=models_list,
             markdown_path="benchmark_stats/lattice_constants/lattice_const_report.md",
             lat_const_df=lat_const_df,
         )
 
+        
 
-        LatticeConstant.save_lattice_const_benchmarks(lat_const_df)
-
-        if ui is None and not run_interactive:
+        if ui is None and run_interactive:
             return lat_const_df, mae_df
 
         # === 5. Dash App ===
@@ -143,7 +145,7 @@ class LatticeConstant(zntrack.Node):
             html.H2("Lattice Constants MAE Summary Table", style={"color": "black"}),
 
             dash_table.DataTable(
-                id='benchmark-score-table',
+                id='lat-mae-score-table',
                 columns=[{"name": col, "id": col} for col in mae_df.columns],
                 data=mae_df.to_dict('records'),
                 style_cell={'textAlign': 'center', 'fontSize': '14px'},
@@ -152,66 +154,16 @@ class LatticeConstant(zntrack.Node):
             ),
 
             html.Br(),
-
-            html.Div(id="lattice-const-table")
+            
+            dcc.Store(id='lattice-table-last-clicked'),
+            html.Div(id="lattice-const-table"),
+            
         ], style={"backgroundColor": "white", "padding": "20px"})
 
-        @app.callback(
-            Output("lattice-const-table", "children"),
-            Input("benchmark-score-table", "active_cell"),
-            State("benchmark-score-table", "data"),
-        )
-        def update_lattice_const_plot(active_cell, table_data):
-            if active_cell is None:
-                raise PreventUpdate
+        LatticeConstant.register_callbacks(app, mae_df, lat_const_df)
+        
 
-            row = active_cell["row"]
-            model_name = table_data[row]["Model"]
-            mae_val = table_data[row]["MAE (Å)"]
 
-            ref_vals = lat_const_df["ref"]
-            pred_vals = lat_const_df[model_name]
-            formulas = lat_const_df.index.tolist()
-
-            # -- Scatter plot
-            fig = LatticeConstant.create_scatter_plot(ref_vals, pred_vals, model_name, mae_val, formulas)
-
-            # -- Table data for the model
-            abs_diff = pred_vals - ref_vals
-            pct_diff = 100 * abs_diff / ref_vals
-
-            table_df = pd.DataFrame({
-                "Element": formulas,
-                "DFT": ref_vals,
-                model_name: pred_vals,
-                "Δ": abs_diff.round(3),
-                "Δ/%": pct_diff.round(2)
-            }).round(3)
-
-            # Add final MAE row
-            table_df.loc["MAE"] = ["", "", "", round(mae_val, 3), ""]
-
-            summary_table = dash_table.DataTable(
-                columns=[{"name": i, "id": i} for i in table_df.columns],
-                data=table_df.reset_index(drop=True).to_dict('records'),
-                style_cell={'textAlign': 'center', 'fontSize': '14px'},
-                style_header={'fontWeight': 'bold'},
-                style_table={'overflowX': 'auto'},
-            )
-
-            # Return both components inside tabs
-            return html.Div([
-                dcc.Tabs([
-                    dcc.Tab(label="Scatter Plot", children=[
-                        dcc.Graph(figure=fig)
-                    ]),
-                    dcc.Tab(label="Δ Table", children=[
-                        html.Div(summary_table, style={"padding": "20px"})
-                    ]),
-                ])
-            ])
-
-        # === 6. Run app ===
         def reserve_free_port():
             s = socket.socket()
             s.bind(('', 0))
@@ -237,7 +189,7 @@ class LatticeConstant(zntrack.Node):
             print(f"Dash app running at {url}")
 
         if not run_interactive:
-            return app, mae_df
+            return app, mae_df, lat_const_df, md_path
 
         return run_app(app, ui=ui)
     
@@ -254,6 +206,7 @@ class LatticeConstant(zntrack.Node):
     ):
         """Generate a markdown + PDF report with MAE table, difference tables, and scatter plots."""
         markdown_path = Path(markdown_path)
+        
         pdf_path = markdown_path.with_suffix(".pdf")
 
         md = []
@@ -331,7 +284,7 @@ class LatticeConstant(zntrack.Node):
     
     
     @staticmethod
-    def save_lattice_const_benchmarks(lat_const_df, save_dir="benchmark_stats/lattice_constants"):
+    def save_lattice_const_plots_tables(lat_const_df, save_dir="benchmark_stats/lattice_constants"):
         """Save lattice constant scatter plots, Δ tables, and summary table to disk."""
         save_dir = Path(save_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -434,7 +387,60 @@ class LatticeConstant(zntrack.Node):
     
 
 
-    
+    @staticmethod
+    def register_callbacks(app, mae_df, lat_const_df):
+        
+        @app.callback(
+            Output("lattice-const-table", "children"),
+            Output("lattice-table-last-clicked", "data"),
+            Input("lat-mae-score-table", "active_cell"),
+            State("lat-mae-score-table", "data"),
+            State("lattice-table-last-clicked", "data")
+        )
+        def update_lattice_const_plot(active_cell, table_data, last_clicked):
+            if active_cell is None:
+                raise PreventUpdate
 
+            row = active_cell["row"]
+            model_name = table_data[row]["Model"]
 
+            # Toggle behavior: if the same model is clicked again, collapse
+            if last_clicked == model_name:
+                return html.Div(), None  # Collapse
 
+            # Else, render the plot + table
+            mae_val = (lat_const_df[model_name] - lat_const_df["ref"]).abs().mean()
+
+            ref_vals = lat_const_df["ref"]
+            pred_vals = lat_const_df[model_name]
+            formulas = lat_const_df.index.tolist()
+
+            fig = LatticeConstant.create_scatter_plot(ref_vals, pred_vals, model_name, mae_val, formulas)
+
+            abs_diff = pred_vals - ref_vals
+            pct_diff = 100 * abs_diff / ref_vals
+
+            table_df = pd.DataFrame({
+                "Element": formulas,
+                "DFT": ref_vals,
+                model_name: pred_vals,
+                "Δ": abs_diff.round(3),
+                "Δ/%": pct_diff.round(2)
+            }).round(3)
+
+            table_df.loc["MAE"] = ["", "", "", round(mae_val, 3), ""]
+
+            summary_table = dash_table.DataTable(
+                columns=[{"name": i, "id": i} for i in table_df.columns],
+                data=table_df.reset_index(drop=True).to_dict('records'),
+                style_cell={'textAlign': 'center', 'fontSize': '14px'},
+                style_header={'fontWeight': 'bold'},
+                style_table={'overflowX': 'auto'},
+            )
+
+            return html.Div([
+                dcc.Tabs([
+                    dcc.Tab(label="Scatter Plot", children=[dcc.Graph(figure=fig)]),
+                    dcc.Tab(label="Δ Table", children=[html.Div(summary_table, style={"padding": "20px"})])
+                ])
+            ]), model_name
