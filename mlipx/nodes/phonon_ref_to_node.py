@@ -28,15 +28,7 @@ import pickle
 import glob
 
 
-from scipy.stats import gaussian_kde
-
-from mlipx.abc import ComparisonResults, NodeWithCalculator
-
-
 from mlipx.phonons_utils import get_fc2_and_freqs, init_phonopy, load_phonopy, get_chemical_formula
-from phonopy.structure.atoms import PhonopyAtoms
-from seekpath import get_path
-import zntrack.node
 
 import os
 import plotly.express as px
@@ -51,12 +43,12 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 class PhononRefToNode(zntrack.Node):
-    """Compute the phonon dispersion from a phonopy object
+    """
     
     Parameters
     ----------
     phonopy_yaml_path : pathlib.Path
-        Optional path to the phonopy yaml file. If not provided, the node will download the alex dataset.
+        path to the phonopy yaml file
     
     """
     # inputs

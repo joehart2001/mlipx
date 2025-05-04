@@ -37,6 +37,7 @@ from .nodes.cohesive_energies import CohesiveEnergies
 from .nodes.elasticity import Elasticity
 from .nodes.bulk_crystal_benchmark import BulkCrystalBenchmark
 from .nodes.lattice_const_benchmark import LatticeConstant
+from .nodes.ref_to_node import RefToNode
 from .project import Project
 from .version import __version__
 
@@ -83,5 +84,6 @@ __all__ = [
     "Elasticity",
     "BulkCrystalBenchmark",
     "LatticeConstant",
+    "RefToNode",
     "__version__",
 ]

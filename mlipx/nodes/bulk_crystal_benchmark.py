@@ -89,6 +89,7 @@ class BulkCrystalBenchmark(zntrack.Node):
     @staticmethod
     def benchmark_interactive(elasticity_data: List[Elasticity] | Dict[str, Elasticity],
                               lattice_const_data: List[LatticeConstant] | Dict[str, Dict[str, LatticeConstant]],
+                              lattice_const_ref_node: LatticeConstant,
                               phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion],
                               phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
                               ui: str = "browser"
@@ -120,18 +121,21 @@ class BulkCrystalBenchmark(zntrack.Node):
             else:
                 raise ValueError(f"{data} should be a list or dict")
 
+        # Lattice constant
         lattice_const_dict = process_data(
             lattice_const_data,
             key_extractor=lambda node: node.name.split("LatticeConst-")[1],
             value_extractor=lambda node: {node.name.split("_lattice-constant-pred")[0]: node}
-        )
+        )            
 
+        # elasticity
         elasticity_dict = process_data(
             elasticity_data,
             key_extractor=lambda node: node.name.split("_Elasticity")[0],
             value_extractor=lambda node: node
         )
 
+        # phonons
         phonon_dict_ref = process_data(
             phonon_ref_data,
             key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
@@ -156,36 +160,10 @@ class BulkCrystalBenchmark(zntrack.Node):
             run_interactive=False,
         )
         
-        ref_lat_const_mptrj = {
-            'Ag': 4.082,
-            'Pd': 3.891,
-            'Rh': 3.760,
-            'Li': 3.352,
-            'Na': 4.107,
-            'K': 5.191,
-            'Rb': 5.572,
-            'Cs': 6.106,
-            'Ca': 5.463,
-            'Sr': 5.908,
-            'Ba': 4.976,
-            'Al': 4.002,
-            'LiF': 3.995,
-            'NaF': 4.619,
-            'NaCl': 5.585,
-            'MgO': 4.203,
-            'Si': 5.434,
-            'Ge': 5.719,
-            'GaAs': 5.690,
-            'Cu': 3.568,
-            'C': 3.562,
-            'LiCl': 5.056,
-            'SiC(a)': 3.072,  # alpha-SiC
-            'SiC(c)': 5.029   # beta-SiC
-        }
         
         app_lattice_const, mae_df_lattice_const, lattice_const_dict_with_ref, lattice_const_md_path = LatticeConstant.mae_plot_interactive(
             node_dict=lattice_const_dict,
-            ref_dict = ref_lat_const_mptrj,
+            ref_node = lattice_const_ref_node,
             run_interactive=False,
         )
     

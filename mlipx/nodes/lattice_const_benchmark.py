@@ -93,11 +93,13 @@ class LatticeConstant(zntrack.Node):
     @staticmethod
     def mae_plot_interactive(
         node_dict,
-        ref_dict,
+        ref_node,
         ui: str | None = None,
         run_interactive: bool = True,
     ):
 
+        ref_dict = ref_node.get_ref
+        
         full_data = {}
         for formula, model_data in node_dict.items():
             formula_ref = {'SiC_a': 'SiC(a)', 'SiC_c': 'SiC(c)'}.get(formula, formula)
@@ -370,7 +372,7 @@ class LatticeConstant(zntrack.Node):
 
         fig.add_annotation(
             xref="paper", yref="paper", x=0.02, y=0.98,
-            text=f"MAE: {mae:.3f}",
+            text=f"MAE (Å): {mae:.3f}",
             showarrow=False,
             align="left",
             font=dict(size=12, color="black"),
