@@ -432,19 +432,17 @@ def bulk_crystal_benchmark(
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
-
-    phonon_nodes = [node for node in all_nodes if "phonon" in node]
-    elasticity_nodes = [node for node in all_nodes if "Elasticity" in node]
-    lattice_const_nodes = [node for node in all_nodes if "LatticeConst" in node]
-        
-    phonon_node_objects = load_node_objects(nodes, glob, models, phonon_nodes, split_str="-phonons-dispersion")
-    elasticity_node_objects = load_node_objects(nodes, glob, models, elasticity_nodes, split_str="_Elasticity")
-    lattice_const_node_objects = load_node_objects(nodes, glob, models, lattice_const_nodes, split_str="_lattice-constant")
     
-    phonon_pred_node_dict, phonon_ref_node_dict = load_nodes_mpid_model(phonon_node_objects, models, split_str="_phonons-dispersion")
-    elasticity_dict = load_nodes_model(elasticity_node_objects, models, split_str="_Elasticity")
-    lattice_const_dict, lattice_const_ref_node = load_nodes_and_ref_node(lattice_const_node_objects, models, split_str="_lattice-constant")
     
+    phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node = get_bulk_crystal_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_phonons="_phonons-dispersion",
+        split_str_elasticity="_Elasticity",
+        split_str_lattice_const="_lattice-constant",
+    )
     
     
     from mlipx import BulkCrystalBenchmark
@@ -458,6 +456,31 @@ def bulk_crystal_benchmark(
     )
     
 
+def get_bulk_crystal_benchmark_node_dicts(
+    nodes: list[str],
+    glob: bool,
+    models: list[str] | None,
+    all_nodes: list[str],
+    split_str_phonons: str,
+    split_str_elasticity: str,
+    split_str_lattice_const: str,
+) -> dict[str, zntrack.Node]:
+    
+    phonon_nodes = [node for node in all_nodes if "phonon" in node]
+    elasticity_nodes = [node for node in all_nodes if "Elasticity" in node]
+    lattice_const_nodes = [node for node in all_nodes if "LatticeConst" in node]
+        
+    phonon_node_objects = load_node_objects(nodes, glob, models, phonon_nodes, split_str=split_str_phonons)
+    elasticity_node_objects = load_node_objects(nodes, glob, models, elasticity_nodes, split_str=split_str_elasticity)
+    lattice_const_node_objects = load_node_objects(nodes, glob, models, lattice_const_nodes, split_str=split_str_lattice_const)
+    
+    phonon_pred_node_dict, phonon_ref_node_dict = load_nodes_mpid_model(phonon_node_objects, models, split_str=split_str_phonons)
+    elasticity_dict = load_nodes_model(elasticity_node_objects, models, split_str=split_str_elasticity)
+    lattice_const_dict, lattice_const_ref_node = load_nodes_and_ref_node(lattice_const_node_objects, models, split_str=split_str_lattice_const)
+    
+    return phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node
+    
+    
 @app.command()
 def lattice_constants_compare(
     nodes: Annotated[list[str], typer.Argument(help="Path(s) to lattice constant nodes")],
@@ -586,15 +609,16 @@ def mol_crystal_benchmark(
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
 
-    X23_nodes = [node for node in all_nodes if "X23Benchmark" in node]
-    ICE_DMC_nodes = [node for node in all_nodes if "DMCICE13Benchmark" in node]
+ 
+    X23_dict, ICE_DMC_dict = get_mol_crystal_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_X23="_X23Benchmark",
+        split_str_ICE="_DMCICE13Benchmark",
+    )
     
-    X23_node_objects = load_node_objects(nodes, glob, models, X23_nodes, split_str="_X23Benchmark")
-    ICE_DMC_node_objects = load_node_objects(nodes, glob, models, ICE_DMC_nodes, split_str="_DMCICE13Benchmark")
-    
-    X23_dict = load_nodes_model(X23_node_objects, models, split_str="_X23Benchmark")
-    ICE_DMC_dict = load_nodes_model(ICE_DMC_node_objects, models, split_str="_DMCICE13Benchmark")
-        
     if ui not in {None, "browser"}:
         typer.echo("Invalid UI mode. Choose from: none or browser.")
         raise typer.Exit(1)
@@ -605,3 +629,74 @@ def mol_crystal_benchmark(
         DMC_ICE_data=ICE_DMC_dict,
         ui=ui
     )
+    
+
+def get_mol_crystal_benchmark_node_dicts(
+    nodes: list[str],
+    glob: bool,
+    models: list[str] | None,
+    all_nodes: list[str],
+    split_str_X23: str,
+    split_str_ICE: str,
+) -> dict[str, zntrack.Node]:
+    
+    X23_nodes = [node for node in all_nodes if "X23Benchmark" in node]
+    ICE_DMC_nodes = [node for node in all_nodes if "DMCICE13Benchmark" in node]
+        
+    X23_node_objects = load_node_objects(nodes, glob, models, X23_nodes, split_str=split_str_X23)
+    ICE_DMC_node_objects = load_node_objects(nodes, glob, models, ICE_DMC_nodes, split_str=split_str_ICE)
+    
+    X23_dict = load_nodes_model(X23_node_objects, models, split_str=split_str_X23)
+    ICE_DMC_dict = load_nodes_model(ICE_DMC_node_objects, models, split_str=split_str_ICE)
+    
+    return X23_dict, ICE_DMC_dict
+    
+@app.command()
+def full_benchmark_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to full benchmark nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    ):
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+        
+    phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node = get_bulk_crystal_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_phonons="_phonons-dispersion",
+        split_str_elasticity="_Elasticity",
+        split_str_lattice_const="_lattice-constant",
+    )
+    X23_dict, ICE_DMC_dict = get_mol_crystal_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_X23="_X23Benchmark",
+        split_str_ICE="_DMCICE13Benchmark",
+    )
+    
+    
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import FullBenchmark
+    FullBenchmark.benchmark_interactive(
+        phonon_ref_data=phonon_ref_node_dict,
+        phonon_pred_data=phonon_pred_node_dict,
+        elasticity_data=elasticity_dict,
+        lattice_const_data=lattice_const_dict,
+        lattice_const_ref_node=lattice_const_ref_node,
+        X23_data=X23_dict,
+        DMC_ICE_data=ICE_DMC_dict,
+        ui=ui
+    )
+    

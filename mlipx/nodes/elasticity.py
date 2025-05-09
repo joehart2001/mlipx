@@ -163,11 +163,16 @@ class Elasticity(zntrack.Node):
         mae_df = mae_df.reset_index().rename(columns={'index': 'Model'})
         mae_df = mae_df.round(3)
         
+        mae_cols = [col for col in mae_df.columns if col not in ['Model']]
+        mae_df['Elasticity Score (avg)'] = mae_df[mae_cols].mean(axis=1).round(3)
+        mae_df['Rank'] = mae_df['Elasticity Score (avg)'].rank(method='min', ascending=True).astype(int)
 
+        
+            
         Elasticity.save_scatter_plots_stats(
             node_dict=node_dict,
             mae_df=mae_df,
-            save_path=f"benchmark_stats/elasticity/"
+            save_path=f"benchmark_stats/bulk_crystal_benchmark/elasticity/"
         )
         
         models_list = list(node_dict.keys())
@@ -236,7 +241,7 @@ class Elasticity(zntrack.Node):
     ):
         """Generates a markdown and pdf report contraining the MAE summary table, scatter plots and phonon dispersions
         """
-        markdown_path = Path("benchmark_stats/elasticity/elasticity_benchmark_report.md")
+        markdown_path = Path("benchmark_stats/bulk_crystal_benchmark/elasticity/elasticity_benchmark_report.md")
         pdf_path = markdown_path.with_suffix(".pdf")
 
         md = []
@@ -262,7 +267,7 @@ class Elasticity(zntrack.Node):
         md.append("## Scatter and density Plots\n")
         for model in models_list:
             md.append(f"### {model}\n")
-            scatter_plot_dir = Path(f"benchmark_stats/elasticity/{model}/scatter_plots")
+            scatter_plot_dir = Path(f"benchmark_stats/bulk_crystal_benchmark/elasticity/{model}/scatter_plots")
             images = sorted(scatter_plot_dir.glob("*.png"))
             add_image_rows(md, images)
             
@@ -369,7 +374,7 @@ class Elasticity(zntrack.Node):
     def save_scatter_plots_stats(
         node_dict: Dict[str, zntrack.Node],
         mae_df: pd.DataFrame,
-        save_path: str = "benchmark_stats/elasticity/"
+        save_path: str = "benchmark_stats/bulk_crystal_benchmark/elasticity/"
     ):
         if not os.path.exists(save_path):
             os.makedirs(save_path)

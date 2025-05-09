@@ -97,38 +97,34 @@ class FullBenchmark(zntrack.Node):
             DMC_ICE_data=DMC_ICE_data,
             full_benchmark=True,
         )
-        
-        # overall score: create a table with the avg score for each model, and then a table with score for each benchmark and model
-        # overall_score_df = pd.DataFrame()
-        # overall_score_df["Model"] = bulk_benchmark_score_df["Model"]
-        
+
         # df with score for each benchmark and model
-        scores_all_df = pd.DataFrame()
-        scores_all_df["Model"] = bulk_benchmark_score_df["Model"]
-        scores_all_df["Bulk Crystal"] = bulk_benchmark_score_df["Avg MAE \u2193"]
-        scores_all_df["Molecular Crystal"] = mol_benchmark_score_df["Avg MAE \u2193"]
-        scores_all_df["Avg MAE \u2193"] = (bulk_benchmark_score_df["Avg MAE \u2193"] + mol_benchmark_score_df["Avg MAE \u2193"]) / 2
+        scores_all_df = FullBenchmark.get_overall_score_df(
+            (bulk_benchmark_score_df, "Bulk Crystal"),
+            (mol_benchmark_score_df, "Molecular Crystal"),
+        )
         
-        #summary_app = dash.Dash(__name__, suppress_callback_exceptions=True)
+        if not os.path.exists("benchmark_stats/"):
+            os.makedirs("benchmark_stats/")
+        scores_all_df.to_csv("benchmark_stats/overall_benchmark.csv", index=False)
+        
+        
+        from mlipx.dash_utils import colour_table
+        style_data_conditional = colour_table(scores_all_df, all_cols=True)
+        
         
         summary_layout = html.Div([
-            html.H1("Overall Benchmark"),
+            html.H1("Overall Benchmark Scores (avg MAE)"),
             html.Div([
                 dash_table.DataTable(
                     id="summary-table",
                     columns=[{"name": i, "id": i} for i in scores_all_df.columns],
                     data=scores_all_df.to_dict("records"),
                     style_table={'overflowX': 'auto'},
-                    style_cell={
-                        'textAlign': 'left',
-                        'padding': '5px',
-                        'font_size': '14px',
-                        'font_family': 'Arial',
-                    },
-                    style_header={
-                        'backgroundColor': 'lightgrey',
-                        'fontWeight': 'bold'
-                    },
+                    style_cell={'textAlign': 'center', 'fontSize': '14px'},
+                    style_header={'fontWeight': 'bold'},
+                    style_data_conditional=style_data_conditional,
+
                 )
             ])
         ])
@@ -137,9 +133,6 @@ class FullBenchmark(zntrack.Node):
         app_summary = dash.Dash(__name__, suppress_callback_exceptions=True)
         
         # combine apps into one with tabs for each benchmark
-        apps_list = [bulk_benchmark_app, mol_benchmark_app]
-        #app = apps_list[0]
-
         tab_layouts = {
             "Overall Benchmark": summary_layout,
             "Bulk Crystal": bulk_benchmark_app.layout,
@@ -149,20 +142,22 @@ class FullBenchmark(zntrack.Node):
         # Register callbacks for each app
         bulk_register_callbacks(app_summary)
         mol_register_callbacks(app_summary)
-
-        # Define app layout with Tabs
-        #app = apps_list[0]
         
         app_summary.layout = html.Div([
             dcc.Tabs(
                 id="tabs",
-                value="Bulk Crystal",
+                value="Overall Benchmark",
                 children=[
                     dcc.Tab(label=tab, value=tab) for tab in tab_layouts
                 ]
             ),
             html.Div(id="tab-content")
-        ])
+        ],
+        style={
+        "backgroundColor": "white",
+        "padding": "20px",
+        "border": "2px solid black",}
+        )
 
         # Callback to switch tabs
         @app_summary.callback(
@@ -176,3 +171,32 @@ class FullBenchmark(zntrack.Node):
 
         from mlipx.dash_utils import run_app
         return run_app(app_summary, ui=ui)
+    
+    
+    
+    
+    # ------------- helper functions -------------
+
+    @staticmethod
+    def get_overall_score_df(
+        *dfs_with_names: t.Tuple[pd.DataFrame, str]
+    ) -> pd.DataFrame:
+        """Combine multiple benchmark DataFrames into an overall score DataFrame.
+        """
+        overall_score_df = pd.DataFrame()
+        
+        for i, (df, name) in enumerate(dfs_with_names):
+            if i == 0:
+                overall_score_df["Model"] = df["Model"]
+            overall_score_df[name] = df["Avg MAE \u2193"]
+        
+        # average mae across benchmarks
+        benchmark_cols = [name for _, name in dfs_with_names]
+        overall_score_df["Score (Avg MAE \u2193)"] = overall_score_df[benchmark_cols].mean(axis=1)
+        
+        # sort + and rank
+        overall_score_df = overall_score_df.sort_values(by="Score (Avg MAE \u2193)", ascending=True)
+        overall_score_df = overall_score_df.reset_index(drop=True)
+        overall_score_df["Rank"] = overall_score_df.index + 1
+        
+        return overall_score_df.round(3)

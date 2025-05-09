@@ -202,11 +202,11 @@ class X23Benchmark(zntrack.Node):
 
         mae_df = pd.DataFrame(mae_dict.items(), columns=["Model", "MAE (kJ/mol)"])
         
-        save_path = Path("benchmark_stats/X23")
+        save_path = Path("benchmark_stats/molecular_crystal_benchmark/X23")
         save_path.mkdir(parents=True, exist_ok=True)
-        mae_df.to_csv("benchmark_stats/X23/mae.csv", index=False)
-        abs_error_df_all.to_csv("benchmark_stats/X23/abs_error.csv", index=False)
-        lattice_e_df_all.to_csv("benchmark_stats/X23/lattice_e.csv", index=False)
+        mae_df.to_csv("benchmark_stats/molecular_crystal_benchmark/X23/mae.csv", index=False)
+        abs_error_df_all.to_csv("benchmark_stats/molecular_crystal_benchmark/X23/abs_error.csv", index=False)
+        lattice_e_df_all.to_csv("benchmark_stats/molecular_crystal_benchmark/X23/lattice_e.csv", index=False)
 
 
         if ui is None and run_interactive:

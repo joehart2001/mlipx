@@ -2,8 +2,6 @@ import mlipx
 import zntrack
 
 from models import MODELS
-
-
 from pathlib import Path
 
 
@@ -16,16 +14,18 @@ project = zntrack.Project()
 {% endif %}
 
 
+
 {% set standalone = false %}
-{% include "X23_benchmark.py.jinja2" %}
-{% include "DMC_ICE_benchmark.py.jinja2" %}
+{% include "bulk_crystal_benchmark.py.jinja2" %}
+{% include "molecular_crystal_benchmark.py.jinja2" %}
 
 
-with project.group('mol-crystal-benchmark'):
-    mol_benchmark = mlipx.MolecularCrystalBenchmark(
-        X23_list =X23_list,
-        DMC_ICE_list=DMC_ICE_list,
+with project.group("full-benchmark"):
+    full_benchmark = mlipx.FullBenchmark(
+        bulk_crystal_benchmark=bulk_crystal_benchmark,
+        mol_crystal_benchmark=mol_benchmark,
     )
+
 
 
 {% if standalone %}

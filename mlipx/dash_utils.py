@@ -12,6 +12,9 @@ from dash import dcc, html, Input, Output, State, MATCH
 import base64
 import csv
 import warnings
+import matplotlib
+import matplotlib.cm
+
 
 # ----
 
@@ -138,34 +141,44 @@ def combine_mae_tables(*mae_dfs):
 
 def colour_table(
     benchmark_score_df: pd.DataFrame,
-):
+    all_cols: bool = False,
+    col_name: str | None = None,
+    
+) -> List[Dict[str, Any]]:
     """ Viridis-style colormap for Dash DataTable
     """
     
-    score_min = benchmark_score_df['Avg MAE \u2193'].min()
-    score_max = benchmark_score_df['Avg MAE \u2193'].max()
-    
-    import matplotlib
-    import matplotlib.cm
-
-    # For lower-is-better columns (like MAE), use viridis_r (reversed)
     cmap = matplotlib.cm.get_cmap("viridis_r")
-    
+
     def rgba_from_val(val, vmin, vmax, cmap):
         norm = (val - vmin) / (vmax - vmin) if vmax != vmin else 0
         rgba = cmap(norm)
         r, g, b = [int(255 * x) for x in rgba[:3]]
         return f'rgb({r}, {g}, {b})'
 
-    vmin, vmax = score_min, score_max
-    style_data_conditional = [
-        {
-            'if': {'filter_query': f'{{Avg MAE \u2193}} = {score}', 'column_id': 'Avg MAE \u2193'},
-            'backgroundColor': rgba_from_val(score, vmin, vmax, cmap),
-            'color': 'white' if score > (score_min + score_max) / 2 else 'black'
-        }
-        for score in benchmark_score_df['Avg MAE \u2193']
-    ]
+    style_data_conditional = []
+
+    # Choose columns
+    if all_cols:
+        cols_to_color = benchmark_score_df.select_dtypes(include="number").columns
+    elif col_name is not None:
+        if col_name not in benchmark_score_df.columns:
+            raise ValueError(f"Column '{col_name}' not found in DataFrame.")
+        cols_to_color = [col_name]
+    else:
+        raise ValueError("Specify either all_cols=True or provide col_name.")
+
+    for col in cols_to_color:
+        vmin = benchmark_score_df[col].min()
+        vmax = benchmark_score_df[col].max()
+
+        for val in benchmark_score_df[col]:
+            style_data_conditional.append({
+                'if': {'filter_query': f'{{{col}}} = {val}', 'column_id': col},
+                'backgroundColor': rgba_from_val(val, vmin, vmax, cmap),
+                'color': 'white' if val > (vmin + vmax) / 2 else 'black'
+            })
+
     return style_data_conditional
 
 
@@ -180,6 +193,8 @@ def combine_apps(
 ):
     """ combines multiple Dash apps into a single app, where the first app is the main app
          e.g. used in bulk_crystal_benchmark
+         
+         TODO: potential issue: id='benchmark-score-table' will be duplicated in each benchmark
     """
     
     benchmark_score_table = html.Div([

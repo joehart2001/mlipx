@@ -121,14 +121,14 @@ class MolecularCrystalBenchmark(zntrack.Node):
         mol_crystal_benchmark_score_df = mol_crystal_benchmark_score_df.reset_index(drop=True)
         mol_crystal_benchmark_score_df['Rank'] = mol_crystal_benchmark_score_df.index + 1
         
-        if not os.path.exists("benchmark_stats/"):
-            os.makedirs("benchmark_stats/")
-        mol_crystal_benchmark_score_df.to_csv("benchmark_stats/mol_crystal_benchmark_score.csv", index=False)
+        if not os.path.exists("benchmark_stats/molecular_crystal_benchmark/"):
+            os.makedirs("benchmark_stats/molecular_crystal_benchmark/")
+        mol_crystal_benchmark_score_df.to_csv("benchmark_stats/molecular_crystal_benchmark/mol_crystal_benchmark_score.csv", index=False)
 
 
         from mlipx.dash_utils import colour_table
         # Viridis-style colormap for Dash DataTable
-        style_data_conditional = colour_table(mol_crystal_benchmark_score_df)
+        style_data_conditional = colour_table(mol_crystal_benchmark_score_df, col_name="Avg MAE \u2193")
         
         
         # md_path_list = [elas_md_path, lattice_const_md_path, phonon_md_path]

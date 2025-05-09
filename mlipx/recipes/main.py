@@ -612,3 +612,26 @@ def molecular_crystal(
         smiles=smiles,
         n_materials=n_materials,
     )
+    
+@app.command()
+def full_benchmark(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_materials: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run full benchmark."""
+    if models is not None:
+        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipeception(
+        "full_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+        n_materials=n_materials,
+    )

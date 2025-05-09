@@ -198,7 +198,7 @@ class DMCICE13Benchmark(zntrack.Node):
             .merge(pd.DataFrame(rel_ih_dict.items(), columns=["Model", "MAE relative to Ih (meV)"]), on="Model")
         )
 
-        save_path = Path("benchmark_stats/DMC-ICE13")
+        save_path = Path("benchmark_stats/molecular_crystal_benchmark/DMC-ICE13")
         save_path.mkdir(parents=True, exist_ok=True)
         mae_df.to_csv(save_path / "mae.csv", index=False)
         lattice_e_all_df.to_csv(save_path / "lattice_e.csv", index=True)

@@ -140,6 +140,9 @@ class LatticeConstant(zntrack.Node):
 
         mae_df = pd.DataFrame(mae_data)
 
+        mae_df['Rank'] = mae_df['Lat Const [Å]'].rank(method='min', ascending=True).astype(int)
+
+
         # save
         LatticeConstant.save_lattice_const_plots_tables(lat_const_df)
         
@@ -148,7 +151,7 @@ class LatticeConstant(zntrack.Node):
         md_path = LatticeConstant.generate_lattice_const_report(
             mae_df=mae_df,
             models_list=models_list,
-            markdown_path="benchmark_stats/lattice_constants/lattice_const_report.md",
+            markdown_path="benchmark_stats/bulk_crystal_benchmark/lattice_constants/lattice_const_report.md",
             lat_const_df=lat_const_df,
         )
 
@@ -274,7 +277,7 @@ class LatticeConstant(zntrack.Node):
     
     
     @staticmethod
-    def save_lattice_const_plots_tables(lat_const_df, save_dir="benchmark_stats/lattice_constants"):
+    def save_lattice_const_plots_tables(lat_const_df, save_dir="benchmark_stats/bulk_crystal_benchmark/lattice_constants"):
         """Save lattice constant scatter plots, Δ tables, and summary table to disk."""
         save_dir = Path(save_dir)
         save_dir.mkdir(parents=True, exist_ok=True)

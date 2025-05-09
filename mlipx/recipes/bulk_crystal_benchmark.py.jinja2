@@ -4,7 +4,14 @@ import zntrack
 from models import MODELS
 from pathlib import Path
 
+
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
 project = zntrack.Project()
+{% endif %}
 
 
 
@@ -24,4 +31,6 @@ with project.group('bulk-crystal-benchmark'):
 
 
 
+{% if standalone %}
 project.build()
+{% endif %}

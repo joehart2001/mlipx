@@ -436,10 +436,10 @@ class PhononDispersion(zntrack.Node):
         
         if correlation_plot_mode:
             
-            if not os.path.exists(f"benchmark_stats/phonons/{model_name}/phonon_plots"):
-                os.makedirs(f"benchmark_stats/phonons/{model_name}/phonon_plots")
+            if not os.path.exists(f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots"):
+                os.makedirs(f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots")
             
-            phonon_plot_path = f"benchmark_stats/phonons/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.png"
+            phonon_plot_path = f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.png"
             fig.savefig(phonon_plot_path, bbox_inches='tight')
             plt.close(fig)
             return phonon_plot_path
@@ -489,7 +489,7 @@ class PhononDispersion(zntrack.Node):
         ref_band_data_dict = {}
         ref_benchmarks_dict = {}
         pred_benchmarks_dict = {}
-        model_plotting_data = {}     # model_name -> {property -> {ref, pred}, hover, point_map, img_paths}
+        scatter_to_dispersion_map = {}     # model_name -> {property -> {ref, pred}, hover, point_map, img_paths}
         phonon_plot_paths = {}
         point_index_to_id = []
         
@@ -535,7 +535,7 @@ class PhononDispersion(zntrack.Node):
                 pred_benchmarks_dict,
                 model_benchmarks_dict,
                 plot_stats_dict,
-                model_plotting_data,
+                scatter_to_dispersion_map,
                 phonon_plot_paths,
                 point_index_to_id,
                 benchmarks
@@ -547,9 +547,10 @@ class PhononDispersion(zntrack.Node):
             pretty_benchmark_labels, 
             benchmarks
         )
+        #mae_summary_df
         
         PhononDispersion.generate_and_save_plots(
-            model_plotting_data,
+            scatter_to_dispersion_map,
             model_benchmarks_dict,
             plot_stats_dict,
             pretty_benchmark_labels,
@@ -603,18 +604,15 @@ class PhononDispersion(zntrack.Node):
         PhononDispersion.register_callbacks(
             app=app,
             mae_df=mae_summary_df,
-            model_plotting_data=model_plotting_data,
+            scatter_to_dispersion_map=scatter_to_dispersion_map,
             model_benchmarks_dict=model_benchmarks_dict,
-            plot_stats_dict=plot_stats_dict,
-            label_to_key=label_to_key,
-            benchmark_units=benchmark_units
         )
 
     
         from mlipx.dash_utils import run_app
 
         if not run_interactive:
-            return app, mae_summary_df, md_path
+            return app, mae_summary_df, scatter_to_dispersion_map, model_benchmarks_dict , md_path
 
         return run_app(app, ui=ui)
                 
@@ -631,11 +629,13 @@ class PhononDispersion(zntrack.Node):
 
 
     @staticmethod
-    def register_callbacks(app, mae_df, model_plotting_data, model_benchmarks_dict, plot_stats_dict, label_to_key, benchmark_units):
-        from dash.exceptions import PreventUpdate
-        from dash import dcc, html, Input, Output, State, MATCH
-        import base64
-        import plotly.express as px
+    def register_callbacks(
+        app, 
+        mae_df, 
+        scatter_to_dispersion_map, 
+        model_benchmarks_dict, 
+    ):
+
 
         @app.callback(
             Output("model-graphs-container", "children"),
@@ -648,6 +648,16 @@ class PhononDispersion(zntrack.Node):
             if active_cell is None:
                 raise PreventUpdate
 
+            pretty_benchmark_labels = {
+                'max_freq': 'ω_max [THz]',
+                'S': 'S [J/mol·K]',
+                'F': 'F [kJ/mol]',
+                'C_V': 'C_V [J/mol·K]'
+            }
+            
+            label_to_key = {v: k for k, v in pretty_benchmark_labels.items()}
+            
+            
             row = active_cell["row"]
             col = active_cell["column_id"]
             model_name = mae_df.loc[row, "Model"]
@@ -664,64 +674,25 @@ class PhononDispersion(zntrack.Node):
             if selected_property is None:
                 return html.Div("Invalid property selected."), active_cell
 
-            plotting_data = model_plotting_data[model_name]
             data = model_benchmarks_dict[model_name]
 
             ref_vals = data[selected_property]['ref']
             pred_vals = data[selected_property]['pred']
-            x_min, x_max = min(ref_vals), max(ref_vals)
-            y_min, y_max = min(pred_vals), max(pred_vals)
-            x_range = [x_min - 0.05 * abs(x_min), x_max + 0.05 * abs(x_max)]
-            y_range = [y_min - 0.05 * abs(y_min), y_max + 0.05 * abs(y_max)]
-            combined_min = min(min(ref_vals), min(pred_vals), 0)
-            combined_max = max(max(ref_vals), max(pred_vals))
-            stats = plot_stats_dict[model_name][selected_property]
-            metrics_text = (
-                f"RMSE: {stats['RMSE'][-1]:.2f}<br>"
-                f"MAE: {stats['MAE'][-1]:.2f}<br>"
-            )
-            units = benchmark_units.get(selected_property, "")
+
+            pretty_label = pretty_benchmark_labels[selected_property]
+            mae = mae_df.loc[mae_df["Model"] == model_name, pretty_label].values[0]
+
             
-            fig = create_scatter_plot()
+            scatter_fig = PhononDispersion.create_scatter_plot(
+                ref_vals, 
+                pred_vals, 
+                model_name, 
+                selected_property, 
+                mae, 
+                pretty_benchmark_labels
+            )
             
-            scatter_fig = px.scatter(
-                x=ref_vals,
-                y=pred_vals,
-                hover_name=plotting_data['hover'],
-                labels={
-                    'x': f'Reference {selected_property.replace("_", " ").title()} {units}',
-                    'y': f'Predicted {selected_property.replace("_", " ").title()} {units}'
-                }
-            )
-            scatter_fig.add_shape(
-                type="line",
-                x0=combined_min, y0=combined_min,
-                x1=combined_max, y1=combined_max,
-                xref='x', yref='y',
-                line=dict(color="black", dash="dash"),
-                name="y = x"
-            )
-            scatter_fig.update_layout(
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                font_color='black',
-                margin=dict(t=40, r=30, b=40, l=50),
-                xaxis=dict(range=x_range, showgrid=True, gridcolor='lightgray', scaleanchor='y', scaleratio=1),
-                yaxis=dict(range=y_range, showgrid=True, gridcolor='lightgray')
-            )
-            scatter_fig.add_annotation(
-                xref="paper", yref="paper",
-                x=0.02, y=0.98,
-                text=metrics_text,
-                showarrow=False,
-                align="left",
-                font=dict(size=12, color="black"),
-                bordercolor="black",
-                borderwidth=1,
-                borderpad=4,
-                bgcolor="white",
-                opacity=0.8
-            )
+            
             return html.Div([
                 html.H4(f"{model_name} - {selected_property.replace('_', ' ').title()}", style={"color": "black"}),
                 html.Div([
@@ -762,8 +733,8 @@ class PhononDispersion(zntrack.Node):
             if clickData is None:
                 return html.Div("Click on a point to view its phonon dispersion plot.")
             point_index = clickData['points'][0]['pointIndex']
-            mp_id, _ = model_plotting_data[model_name]['point_map'][point_index]
-            img_path = model_plotting_data[model_name]['img_paths'][mp_id]
+            mp_id, _ = scatter_to_dispersion_map[model_name]['point_map'][point_index]
+            img_path = scatter_to_dispersion_map[model_name]['img_paths'][mp_id]
             encoded_img = base64.b64encode(open(img_path, 'rb').read()).decode()
             return html.Img(
                 src=f'data:image/png;base64,{encoded_img}',
@@ -782,7 +753,7 @@ class PhononDispersion(zntrack.Node):
     ):
         """Generates a markdown and pdf report contraining the MAE summary table, scatter plots and phonon dispersions
         """
-        markdown_path = Path("benchmark_stats/phonons/phonon_benchmark_report.md")
+        markdown_path = Path("benchmark_stats/bulk_crystal_benchmark/phonons/phonon_benchmark_report.md")
         pdf_path = markdown_path.with_suffix(".pdf")
 
         md = []
@@ -808,7 +779,7 @@ class PhononDispersion(zntrack.Node):
         md.append("## Scatter Plots\n")
         for model in models_list:
             md.append(f"### {model}\n")
-            scatter_plot_dir = Path(f"benchmark_stats/phonons/{model}/scatter_plots")
+            scatter_plot_dir = Path(f"benchmark_stats/bulk_crystal_benchmark/phonons/{model}/scatter_plots")
             images = sorted(scatter_plot_dir.glob("*.png"))
             add_image_rows(md, images)            
                     
@@ -816,7 +787,7 @@ class PhononDispersion(zntrack.Node):
         md.append("## Dispersion Plots\n")
         for model in models_list:
             md.append(f"### {model}\n")
-            dispersion_plot_dir = Path(f"benchmark_stats/phonons/{model}/phonon_plots")
+            dispersion_plot_dir = Path(f"benchmark_stats/bulk_crystal_benchmark/phonons/{model}/phonon_plots")
             images = sorted(dispersion_plot_dir.glob("*.png"))
             add_image_rows(md, images)
     
@@ -890,7 +861,7 @@ class PhononDispersion(zntrack.Node):
 
 
     def process_prediction_data(pred_nodes, node_ref, mp_id, ref_benchmarks_dict, pred_benchmarks_dict,
-                            model_benchmarks_dict, plot_stats_dict, model_plotting_data, 
+                            model_benchmarks_dict, plot_stats_dict, scatter_to_dispersion_map, 
                             phonon_plot_paths, point_index_to_id, benchmarks):
         """
         Process prediction data for all models for a given structure.
@@ -923,7 +894,7 @@ class PhononDispersion(zntrack.Node):
             point_index_to_id.append((mp_id, model_name))
             
             # Initialize model data if needed
-            PhononDispersion.initialize_model_data(model_name, model_benchmarks_dict, plot_stats_dict, model_plotting_data, benchmarks)
+            PhononDispersion.initialize_model_data(model_name, model_benchmarks_dict, plot_stats_dict, scatter_to_dispersion_map, benchmarks)
             
             # Update benchmark data for the model
             PhononDispersion.update_model_benchmarks(mp_id, model_name, ref_benchmarks_dict, pred_benchmarks_dict, 
@@ -933,10 +904,10 @@ class PhononDispersion(zntrack.Node):
             PhononDispersion.calculate_benchmark_statistics(model_name, model_benchmarks_dict, plot_stats_dict, benchmarks)
             
             # Update plotting data
-            PhononDispersion.update_plotting_data(mp_id, model_name, phonon_plot_path, model_plotting_data)
+            PhononDispersion.update_plotting_data(mp_id, model_name, phonon_plot_path, scatter_to_dispersion_map)
 
 
-    def initialize_model_data(model_name, model_benchmarks_dict, plot_stats_dict, model_plotting_data, benchmarks):
+    def initialize_model_data(model_name, model_benchmarks_dict, plot_stats_dict, scatter_to_dispersion_map, benchmarks):
         """Initialize data structures for a model if they don't exist yet."""
         # Initialize model benchmarks dictionary if needed
         if model_name not in model_benchmarks_dict:
@@ -947,8 +918,8 @@ class PhononDispersion(zntrack.Node):
             plot_stats_dict[model_name] = {b: {'RMSE': [], 'MAE': []} for b in benchmarks}
         
         # Initialize model plotting data if needed
-        if model_name not in model_plotting_data:
-            model_plotting_data[model_name] = {'hover': [], 'point_map': [], 'img_paths': {}}
+        if model_name not in scatter_to_dispersion_map:
+            scatter_to_dispersion_map[model_name] = {'hover': [], 'point_map': [], 'img_paths': {}}
 
 
     def update_model_benchmarks(mp_id, model_name, ref_benchmarks_dict, pred_benchmarks_dict, 
@@ -979,11 +950,11 @@ class PhononDispersion(zntrack.Node):
             plot_stats_dict[model_name][benchmark]['MAE'].append(mae)
 
 
-    def update_plotting_data(mp_id, model_name, phonon_plot_path, model_plotting_data):
+    def update_plotting_data(mp_id, model_name, phonon_plot_path, scatter_to_dispersion_map):
         """Update visualization data for the current structure and model."""
-        model_plotting_data[model_name]['hover'].append(f"{mp_id} ({model_name})")
-        model_plotting_data[model_name]['point_map'].append((mp_id, model_name))
-        model_plotting_data[model_name]['img_paths'][mp_id] = phonon_plot_path
+        scatter_to_dispersion_map[model_name]['hover'].append(f"{mp_id} ({model_name})")
+        scatter_to_dispersion_map[model_name]['point_map'].append((mp_id, model_name))
+        scatter_to_dispersion_map[model_name]['img_paths'][mp_id] = phonon_plot_path
 
 
     def calculate_summary_statistics(plot_stats_dict, pretty_benchmark_labels, benchmarks):
@@ -1002,17 +973,22 @@ class PhononDispersion(zntrack.Node):
         mae_summary_df.index.name = 'Model'
         mae_summary_df.reset_index(inplace=True)
         
+        mae_cols = [col for col in mae_summary_df.columns if col not in ['Model']]
+        mae_summary_df['Phonon Score (avg)'] = mae_summary_df[mae_cols].mean(axis=1).round(3)
+        mae_summary_df['Rank'] = mae_summary_df['Phonon Score (avg)'].rank(method='min', ascending=True).astype(int)
+
+        
         return mae_summary_df
 
 
-    def generate_and_save_plots(model_plotting_data, model_benchmarks_dict, plot_stats_dict, 
+    def generate_and_save_plots(scatter_to_dispersion_map, model_benchmarks_dict, plot_stats_dict, 
                             pretty_benchmark_labels, benchmarks):
         """Generate and save visualization plots for all models."""
         model_figures_dict = {}
-        results_dir = Path("benchmark_stats/phonons/")
+        results_dir = Path("benchmark_stats/bulk_crystal_benchmark/phonons/")
         results_dir.mkdir(exist_ok=True)
         
-        for model_name in model_plotting_data:
+        for model_name in scatter_to_dispersion_map:
             model_figures_dict[model_name] = {}
             
             scatter_dir = results_dir / model_name / "scatter_plots"
@@ -1037,7 +1013,6 @@ class PhononDispersion(zntrack.Node):
                     pred_vals, 
                     model_name, 
                     benchmark, 
-                    rmse, 
                     mae, 
                     pretty_benchmark_labels
                 )
@@ -1050,7 +1025,7 @@ class PhononDispersion(zntrack.Node):
         mae_summary_df.to_csv(results_dir / "mae_phonons.csv", index=False)
 
 
-    def create_scatter_plot(ref_vals, pred_vals, model_name, benchmark, rmse, mae, pretty_benchmark_labels):
+    def create_scatter_plot(ref_vals, pred_vals, model_name, benchmark, mae, pretty_benchmark_labels):
         """Create a scatter plot comparing reference and predicted values."""
         combined_min = min(min(ref_vals), min(pred_vals), 0)
         combined_max = max(max(ref_vals), max(pred_vals))
@@ -1093,7 +1068,7 @@ class PhononDispersion(zntrack.Node):
             yref="paper", 
             x=0.02, 
             y=0.98, 
-            text=f"RMSE: {rmse:.3f}<br>MAE: {mae:.3f}", 
+            text=f"MAE: {mae:.3f}", 
             showarrow=False, 
             align="left", 
             font=dict(size=12, color="black"), 

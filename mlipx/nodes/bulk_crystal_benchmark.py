@@ -132,7 +132,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         
         
         # get apps
-        app_phonon, phonon_mae_df, phonon_md_path = PhononDispersion.benchmark_interactive(
+        app_phonon, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict, phonon_md_path = PhononDispersion.benchmark_interactive(
             pred_node_dict=phonon_dict_pred,
             ref_node_dict=phonon_dict_ref,
             run_interactive=False,
@@ -163,13 +163,13 @@ class BulkCrystalBenchmark(zntrack.Node):
         bulk_crystal_benchmark_score_df = bulk_crystal_benchmark_score_df.reset_index(drop=True)
         bulk_crystal_benchmark_score_df['Rank'] = bulk_crystal_benchmark_score_df.index + 1
         
-        if not os.path.exists("benchmark_stats/"):
-            os.makedirs("benchmark_stats/")
-        bulk_crystal_benchmark_score_df.to_csv("benchmark_stats/bulk_crystal_benchmark_score.csv", index=False)
+        if not os.path.exists("benchmark_stats/bulk_crystal_benchmark/"):
+            os.makedirs("benchmark_stats/bulk_crystal_benchmark")
+        bulk_crystal_benchmark_score_df.to_csv("benchmark_stats/bulk_crystal_benchmark/bulk_crystal_benchmark_score.csv", index=False)
         
         from mlipx.dash_utils import colour_table
         # Viridis-style colormap for Dash DataTable
-        style_data_conditional = colour_table(bulk_crystal_benchmark_score_df)
+        style_data_conditional = colour_table(bulk_crystal_benchmark_score_df, col_name="Avg MAE \u2193")
         
         
         md_path_list = [elas_md_path, lattice_const_md_path, phonon_md_path]
@@ -177,7 +177,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         BulkCrystalBenchmark.generate_report(
             bulk_crystal_benchmark_score_df=bulk_crystal_benchmark_score_df,
             md_report_paths=md_path_list,
-            markdown_path="benchmark_stats/bulk_crystal_benchmark_report.md",
+            markdown_path="benchmark_stats/bulk_crystal_benchmark/bulk_crystal_benchmark_report.md",
             combined_mae_table=combined_mae_table,
         )
 
@@ -185,7 +185,8 @@ class BulkCrystalBenchmark(zntrack.Node):
         if ui is None and not full_benchmark:
             return
     
-    
+        app = dash.Dash(__name__, suppress_callback_exceptions=True)
+        
         from mlipx.dash_utils import combine_apps
         apps_list = [app_phonon, app_lattice_const, app_elasticity]
         layout = combine_apps(
@@ -194,27 +195,31 @@ class BulkCrystalBenchmark(zntrack.Node):
             apps_list=apps_list,
             style_data_conditional=style_data_conditional,
         )
-        apps_list[0].layout = layout
+        #apps_list[0].layout = layout
+        app.layout = layout
         
         # Register callbacks for each app
+        PhononDispersion.register_callbacks(
+            app, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict,
+        )
         Elasticity.register_callbacks(
-            apps_list[0], mae_df_elas, elasticity_dict,
+            app, mae_df_elas, elasticity_dict,
         )
         LatticeConstant.register_callbacks(
-            apps_list[0], mae_df_lattice_const, lattice_const_dict_with_ref,
+            app, mae_df_lattice_const, lattice_const_dict_with_ref,
         )
         
         
         from mlipx.dash_utils import run_app
 
         if full_benchmark:
-            return apps_list[0], bulk_crystal_benchmark_score_df, lambda app: (
+            return app, bulk_crystal_benchmark_score_df, lambda app: (
+                PhononDispersion.register_callbacks(app, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict),
                 Elasticity.register_callbacks(app, mae_df_elas, elasticity_dict),
                 LatticeConstant.register_callbacks(app, mae_df_lattice_const, lattice_const_dict_with_ref),
-                #PhononDispersion.register_callbacks(app, ...)
             )
 
-        return run_app(apps_list[0], ui=ui)
+        return run_app(app, ui=ui)
     
     
     
@@ -292,7 +297,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         combined.reset_index(inplace=True)
         return combined
 
-    def generate_report1(
+    def generate_report(
         bulk_crystal_benchmark_score_df: pd.DataFrame,
         md_report_paths: List[str],
         markdown_path: str,
@@ -392,7 +397,7 @@ class BulkCrystalBenchmark(zntrack.Node):
 
 
 
-    def generate_report(
+    def generate_report1(
         bulk_crystal_benchmark_score_df: pd.DataFrame,
         md_report_paths: List[str],
         markdown_path: str,
