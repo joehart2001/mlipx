@@ -16,19 +16,19 @@ BENCHMARK_DATA_DOWNLOAD_URL = "https://raw.githubusercontent.com/joehart2001/mli
 BENCHMARK_DATA_DIR = pathlib.Path.home() / ".cache" / "my_benchmark"
 
 
-def get_benchmark_data(name: str) -> Path:
+def get_benchmark_data(name: str, force: bool = False) -> Path:
     """
     Retrieve benchmark data. If it's a .zip, download and extract it.
 
     :param name: Name of the benchmark file to retrieve.
+    :param force: If True, force re-download even if cached.
     :return: Path to the extracted folder.
     """
     uri = f"{BENCHMARK_DATA_DOWNLOAD_URL}/{name}"
     local_path = Path(BENCHMARK_DATA_DIR) / name
 
-    # Download file if not already cached
-    
-    if not local_path.exists():
+    # Download file if not already cached or if force is True
+    if force or not local_path.exists():
         print(f"[download] Downloading {name} from {uri}")
         response = requests.get(uri)
         response.raise_for_status()

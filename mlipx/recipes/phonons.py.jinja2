@@ -61,7 +61,7 @@ print(f"Using {len(mp_ids)} mp-ids")
 {% endif %}
 
 dict_ref = {}
-with project.group("reference", "phonons-ref-to-node"):
+with project.group("phonon-reference", "phonons-ref-to-node"):
     for mp_id in mp_ids:
         phonon = mlipx.PhononRefToNode(
             phonopy_yaml_path=f"{local_path}/{mp_id}.yaml",
@@ -84,7 +84,7 @@ for mp_id, node in dict_ref.items():
 
 phonon_dict_ref = {}
 phonon_ref_list = []
-with project.group("reference", "phonons-dispersion-ref"):
+with project.group("phonon-reference", "phonons-dispersion-ref"):
     for mp_id in mp_ids:
         phonon = mlipx.PhononDispersion(
             phonopy_yaml_path=dict_ref[mp_id].force_constants_path,

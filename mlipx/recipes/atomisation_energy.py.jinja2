@@ -1,0 +1,75 @@
+import mlipx
+import zntrack
+import json
+
+from models import MODELS
+from mlipx.benchmark_download_utils import get_benchmark_data
+
+
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+project = zntrack.Project()
+{% endif %}
+
+
+lat_const_dir = get_benchmark_data("lattice_constants.zip", force=True) / "lattice_constants"
+atomisation_dir = get_benchmark_data("atomisation_energy.zip", force=True) / "atomisation_energy"
+
+ref_path_const = lat_const_dir / 'lattice_constants_ref.json'
+ref_path_type = lat_const_dir / 'lattice_constants_ref_types.json'
+ref_path_atomisation = atomisation_dir / 'atomisation_ref.json'
+
+with project.group("lattice-constant-ref-data", "lattice-constant-ref"):
+    ref_lat_const_node = mlipx.RefToNode(
+        ref_path=str(ref_path_const),
+        name="LatticeConst-ref")
+with project.group("lattice-constant-ref-data", "lattice-constant-ref-types"):
+    ref_lat_type_node = mlipx.RefToNode(
+        ref_path=str(ref_path_type),
+        name="Lattice-ref-types")
+with project.group("ref-data", "atomisation-ref"):
+    ref_atomisation_node = mlipx.RefToNode(
+        ref_path=str(ref_path_atomisation),
+        name="AtomisationEnergy-ref")
+    
+with open(ref_path_const) as f:
+    ref_lat_const = json.load(f)
+with open(ref_path_type) as f:
+    ref_lat_type = json.load(f)
+
+crystal_dict = {}
+for solid, lattice_type in ref_lat_type.items():
+    name = solid
+    with project.group("build-crystals"):
+            crystal = mlipx.BuildASEcrystal(
+                element=solid,
+                lattice_type=lattice_type,
+                a = ref_lat_const['SiC(a)'] if solid == 'SiC' else ref_lat_const[solid],
+                c = ref_lat_const['SiC(c)'] if solid == 'SiC' else None,
+                name=f"BuildASEcrystal-{name}-{lattice_type}"
+            )
+            crystal_dict[solid] = crystal
+
+
+atomisation_dict = {}
+atomisation_list = []
+for formula in crystal_dict.keys():
+    
+    for model_name, model in MODELS.items():
+        with project.group(model_name, 'atomisation-e-pred'):
+            atomisation_e = mlipx.AtomisationEnergy(
+                structure=crystal_dict[formula].frames,
+                model=model,
+                model_name=model_name,
+                name=f"AtomisationEnergy-{formula}"
+            )
+            atomisation_dict.setdefault(formula, {})[model_name] = atomisation_e
+            atomisation_list.append(atomisation_e)
+
+
+{% if standalone %}
+project.build()
+{% endif %}

@@ -182,13 +182,13 @@ class Elasticity(zntrack.Node):
         
 
         # Dash app
-        app = dash.Dash(__name__)
+        app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
 
         app.layout = html.Div([
             html.H2("Bulk and Shear Moduli MAEs", style={'color': 'Black', 'padding': '1rem'}),
             dash_table.DataTable(
-                id='mae-table',
+                id='elas-mae-table',
                 columns=[{"name": col, "id": col} for col in mae_df.columns],
                 data=mae_df.to_dict('records'),
                 style_cell={'textAlign': 'center'},
@@ -196,8 +196,10 @@ class Elasticity(zntrack.Node):
             ),
             dcc.Store(id="stored-cell-points"),
             dcc.Store(id="stored-results-df"),
-
-            dcc.Graph(id='scatter-plot'),
+            dcc.Store(id='elas-mae-table-last-clicked'),
+            
+            html.Div(id='scatter-plot-container'),
+            
             dash_table.DataTable(id="material-table"),
         ],
             style={
@@ -209,48 +211,19 @@ class Elasticity(zntrack.Node):
         # made into a function so can be called from outside (in the bulk crystal benchmark)
         Elasticity.register_callbacks(app, mae_df, node_dict)
 
-        
-
-        def reserve_free_port():
-            s = socket.socket()
-            s.bind(('', 0))
-            port = s.getsockname()[1]
-            return s, port  # you must close `s` later
 
 
-        def run_app(app, ui):
-            sock, port = reserve_free_port()
-            url = f"http://localhost:{port}"
-            sock.close()
+        from mlipx.dash_utils import run_app
 
-            def _run_server():
-                app.run(debug=True, use_reloader=False, port=port)
-                
-
-                
-            if ui == "browser":
-                #import webbrowser
-                #import threading
-                #threading.Thread(target=_run_server, daemon=True).start()
-                _run_server()
-                time.sleep(1.5)
-                #webbrowser.open(url)
-                
-            elif ui == "notebook":
-                _run_server()
-            
-            else:
-                print(f"Unknown UI option: {ui}. Please use 'browser', or 'notebook'.")
-                return
-
-
-            print(f"Dash app running at {url}")
-            
         if not run_interactive:
             return app, mae_df, md_path
 
-                
         return run_app(app, ui=ui)
+                
+
+
+
+
 
 
  # -------------- helper functions ----------------
@@ -271,7 +244,7 @@ class Elasticity(zntrack.Node):
         md.append("# Elasticity Report\n")
 
         # MAE Summary table
-        md.append("## Bulk and Shear Moduli MAE Summary\n")
+        md.append("## Bulk and Shear Moduli MAE Table\n")
         md.append(mae_df.to_markdown(index=False))
         md.append("\n")
         
@@ -454,28 +427,38 @@ class Elasticity(zntrack.Node):
     def register_callbacks(app, mae_df, node_dict):
 
         @app.callback(
-            Output('scatter-plot', 'figure'),
+            Output('scatter-plot-container', 'children'),
             Output('stored-cell-points', 'data'),
             Output('stored-results-df', 'data'),
-            Input('mae-table', 'active_cell')
+            Output('elas-mae-table-last-clicked', 'data'),
+            Output('material-table', 'data', allow_duplicate=True),
+            Output('material-table', 'columns', allow_duplicate=True),
+            Input('elas-mae-table', 'active_cell'),
+            State('elas-mae-table-last-clicked', 'data'),
+            prevent_initial_call=True
         )
-        def update_scatter_plot(active_cell):
+        def update_scatter_plot(active_cell, last_clicked):
             if active_cell is None:
                 raise PreventUpdate
+            if last_clicked is not None and (
+                active_cell["row"] == last_clicked.get("row") and
+                active_cell["column_id"] == last_clicked.get("column_id")
+            ):
+                return None, None, None, None, None, None
 
             row = active_cell['row']
             col = active_cell['column_id']
             model = mae_df.loc[row, 'Model']
 
             if col not in mae_df.columns or col == 'Model':
-                return px.scatter(title="Invalid column clicked")
+                return None, None, None, active_cell, None, None
 
             if "K_bulk" in col:
                 prop, label = "K_vrh", "K_bulk"
             elif "K_shear" in col:
                 prop, label = "G_vrh", "K_shear"
             else:
-                return px.scatter(title="Unknown property")
+                return None, None, None, active_cell, None, None
 
             df = node_dict[model].results
             x = df[f'{prop}_DFT']
@@ -487,16 +470,20 @@ class Elasticity(zntrack.Node):
             # Serialize for Dash
             serialized = {f"{cx}_{cy}": indices for (cx, cy), indices in cell_points.items()}
 
-            return (
-                fig,
-                json.dumps(serialized),
-                df.to_json(orient='split')
+            graph = dcc.Graph(
+                id={'type': 'scatter-plot', 'index': 'main'},
+                figure=fig,
+                style={"height": "60vh"}
             )
 
+            # When returning a new plot, clear the material table until clickData occurs
+            return graph, json.dumps(serialized), df.to_json(orient='split'), active_cell, None, None
+
+        # New callback: update the material table based on clickData from the scatter plot
         @app.callback(
             Output('material-table', 'data'),
             Output('material-table', 'columns'),
-            Input('scatter-plot', 'clickData'),
+            Input({'type': 'scatter-plot', 'index': 'main'}, 'clickData'),
             State('stored-cell-points', 'data'),
             State('stored-results-df', 'data')
         )
@@ -509,9 +496,10 @@ class Elasticity(zntrack.Node):
             cell_points = json.loads(cell_points_json)
             indices = cell_points.get(cell_key, [])
 
-            df = pd.read_json(io.StringIO(results_json), orient='split')
+            df = pd.read_json(io.StringIO(results_json), orient='split').round(3)
             subset = df.iloc[indices]
 
             return subset.to_dict('records'), [{"name": col, "id": col} for col in subset.columns]
+
 
     

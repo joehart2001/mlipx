@@ -569,7 +569,6 @@ class PhononDispersion(zntrack.Node):
         
         # --------------------------------- Dash app ---------------------------------
 
-        
         # Dash app
         app = dash.Dash(__name__)
 
@@ -577,7 +576,7 @@ class PhononDispersion(zntrack.Node):
             html.H2("Phonon dispersion MAE Summary Table (300 K)", style={"color": "black"}),
 
             dash_table.DataTable(
-                id='mae-summary-table',
+                id='phonon-mae-summary-table',
                 columns=[{"name": col, "id": col} for col in mae_summary_df.columns],
                 data=mae_summary_df.to_dict('records'),
                 style_cell={'textAlign': 'center', 'fontSize': '14px'},
@@ -591,6 +590,8 @@ class PhononDispersion(zntrack.Node):
                 cell_selectable=True
             ),
 
+            dcc.Store(id="phonon-mae-table-last-clicked"),
+
             html.Br(),
 
             #html.H2("Pair Correlation Plot: Predicted vs Reference", style={"color": "black"}),
@@ -598,49 +599,91 @@ class PhononDispersion(zntrack.Node):
             html.Div(id="model-graphs-container")
         ], style={"backgroundColor": "white", "padding": "20px"})
 
-        # Callback to generate plot for a single model/property cell
+        # Register callbacks using the static method
+        PhononDispersion.register_callbacks(
+            app=app,
+            mae_df=mae_summary_df,
+            model_plotting_data=model_plotting_data,
+            model_benchmarks_dict=model_benchmarks_dict,
+            plot_stats_dict=plot_stats_dict,
+            label_to_key=label_to_key,
+            benchmark_units=benchmark_units
+        )
+
+    
+        from mlipx.dash_utils import run_app
+
+        if not run_interactive:
+            return app, mae_summary_df, md_path
+
+        return run_app(app, ui=ui)
+                
+
+
+
+
+
+
+
+
+    # --------------------------------- Helper Functions ---------------------------------
+
+
+
+    @staticmethod
+    def register_callbacks(app, mae_df, model_plotting_data, model_benchmarks_dict, plot_stats_dict, label_to_key, benchmark_units):
+        from dash.exceptions import PreventUpdate
+        from dash import dcc, html, Input, Output, State, MATCH
+        import base64
+        import plotly.express as px
+
         @app.callback(
             Output("model-graphs-container", "children"),
-            Input("mae-summary-table", "active_cell"),
-            State("mae-summary-table", "data")
+            Output("phonon-mae-table-last-clicked", "data"),
+            Input("phonon-mae-summary-table", "active_cell"),
+            State("phonon-mae-table-last-clicked", "data"),
+            prevent_initial_call=True
         )
-        def update_single_model_plot(active_cell, table_data):
+        def update_single_model_plot(active_cell, last_clicked):
             if active_cell is None:
                 raise PreventUpdate
 
-            col = active_cell['column_id']
-            row = active_cell['row']
-            if col == 'Model':
-                raise PreventUpdate
+            row = active_cell["row"]
+            col = active_cell["column_id"]
+            model_name = mae_df.loc[row, "Model"]
+            if col not in mae_df.columns or col == "Model":
+                return None, active_cell
 
-            model_name = table_data[row]['Model']
+            if last_clicked is not None and (
+                active_cell["row"] == last_clicked.get("row") and
+                active_cell["column_id"] == last_clicked.get("column_id")
+            ):
+                return None, None
+
             selected_property = label_to_key.get(col)
             if selected_property is None:
-                return html.Div("Invalid property selected.")
+                return html.Div("Invalid property selected."), active_cell
 
-            # Gather data
             plotting_data = model_plotting_data[model_name]
             data = model_benchmarks_dict[model_name]
 
             ref_vals = data[selected_property]['ref']
             pred_vals = data[selected_property]['pred']
-
             x_min, x_max = min(ref_vals), max(ref_vals)
             y_min, y_max = min(pred_vals), max(pred_vals)
             x_range = [x_min - 0.05 * abs(x_min), x_max + 0.05 * abs(x_max)]
             y_range = [y_min - 0.05 * abs(y_min), y_max + 0.05 * abs(y_max)]
-
             combined_min = min(min(ref_vals), min(pred_vals), 0)
             combined_max = max(max(ref_vals), max(pred_vals))
-
             stats = plot_stats_dict[model_name][selected_property]
             metrics_text = (
                 f"RMSE: {stats['RMSE'][-1]:.2f}<br>"
                 f"MAE: {stats['MAE'][-1]:.2f}<br>"
             )
-
             units = benchmark_units.get(selected_property, "")
-
+            
+            fig = create_scatter_plot()
+            
             scatter_fig = px.scatter(
                 x=ref_vals,
                 y=pred_vals,
@@ -658,7 +701,6 @@ class PhononDispersion(zntrack.Node):
                 line=dict(color="black", dash="dash"),
                 name="y = x"
             )
-
             scatter_fig.update_layout(
                 plot_bgcolor='white',
                 paper_bgcolor='white',
@@ -667,7 +709,6 @@ class PhononDispersion(zntrack.Node):
                 xaxis=dict(range=x_range, showgrid=True, gridcolor='lightgray', scaleanchor='y', scaleratio=1),
                 yaxis=dict(range=y_range, showgrid=True, gridcolor='lightgray')
             )
-
             scatter_fig.add_annotation(
                 xref="paper", yref="paper",
                 x=0.02, y=0.98,
@@ -681,7 +722,6 @@ class PhononDispersion(zntrack.Node):
                 bgcolor="white",
                 opacity=0.8
             )
-
             return html.Div([
                 html.H4(f"{model_name} - {selected_property.replace('_', ' ').title()}", style={"color": "black"}),
                 html.Div([
@@ -701,7 +741,6 @@ class PhononDispersion(zntrack.Node):
                             "justifyContent": "center",
                             "border": "1px solid #ccc",
                             "padding": "10px",
-                            #"backgroundColor": "#f9f9f9"
                         }
                     )
                 ], style={
@@ -711,9 +750,8 @@ class PhononDispersion(zntrack.Node):
                     "justifyContent": "space-between",
                     "marginBottom": "40px"
                 })
-            ])
+            ]), active_cell
 
-        # Callback to show phonon dispersion image on scatter click
         @app.callback(
             Output({'type': 'plot-display', 'index': MATCH}, 'children'),
             Input({'type': 'pair-plot', 'index': MATCH}, 'clickData'),
@@ -723,11 +761,9 @@ class PhononDispersion(zntrack.Node):
             model_name = graph_id['index']
             if clickData is None:
                 return html.Div("Click on a point to view its phonon dispersion plot.")
-
             point_index = clickData['points'][0]['pointIndex']
             mp_id, _ = model_plotting_data[model_name]['point_map'][point_index]
             img_path = model_plotting_data[model_name]['img_paths'][mp_id]
-
             encoded_img = base64.b64encode(open(img_path, 'rb').read()).decode()
             return html.Img(
                 src=f'data:image/png;base64,{encoded_img}',
@@ -738,63 +774,6 @@ class PhononDispersion(zntrack.Node):
                     "border": "2px solid black"
                 }
             )
-            
-            
-        def reserve_free_port():
-            s = socket.socket()
-            s.bind(('', 0))
-            port = s.getsockname()[1]
-            return s, port  # you must close `s` later
-
-
-        def run_app(app, ui):
-            sock, port = reserve_free_port()
-            url = f"http://localhost:{port}"
-            sock.close()
-
-            def _run_server():
-                app.run(debug=True, use_reloader=False, port=port)
-                
-                
-            # if "SSH_CONNECTION" in os.environ or "SSH_CLIENT" in os.environ:
-            #     import threading
-            #     print(f"\n Detected SSH session — skipping browser launch.")
-            #     #threading.Thread(target=_run_server, daemon=True).start()
-            #     return
-
-                
-            if ui == "browser":
-                import webbrowser
-                import threading
-                #threading.Thread(target=_run_server, daemon=True).start()
-                _run_server()
-                time.sleep(1.5)
-                #webbrowser.open(url)
-            elif ui == "notebook":
-                _run_server()
-            
-            else:
-                print(f"Unknown UI option: {ui}. Please use 'browser', or 'notebook'.")
-                return
-
-
-        
-        if not run_interactive:
-            return app, plot_stats_dict, md_path
-
-
-        return run_app(app, ui=ui)
-
-
-
-
-
-
-
-
-    # --------------------------------- Helper Functions ---------------------------------
-
-
 
 
     def generate_phonon_report(
@@ -811,7 +790,7 @@ class PhononDispersion(zntrack.Node):
         md.append("# Phonon Dispersion Report\n")
 
         # MAE Summary table
-        md.append("## Phonon Dispersion MAE Summary (300K)\n")
+        md.append("## Phonon MAE Summary Table (300K)\n")
         md.append(mae_summary_df.to_markdown(index=False))
         md.append("\n")
         

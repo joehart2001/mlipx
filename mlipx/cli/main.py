@@ -435,13 +435,15 @@ def bulk_crystal_benchmark(
 
     phonon_nodes = [node for node in all_nodes if "phonon" in node]
     elasticity_nodes = [node for node in all_nodes if "Elasticity" in node]
+    lattice_const_nodes = [node for node in all_nodes if "LatticeConst" in node]
         
     phonon_node_objects = load_node_objects(nodes, glob, models, phonon_nodes, split_str="-phonons-dispersion")
     elasticity_node_objects = load_node_objects(nodes, glob, models, elasticity_nodes, split_str="_Elasticity")
-            
+    lattice_const_node_objects = load_node_objects(nodes, glob, models, lattice_const_nodes, split_str="_lattice-constant")
+    
     phonon_pred_node_dict, phonon_ref_node_dict = load_nodes_mpid_model(phonon_node_objects, models, split_str="_phonons-dispersion")
     elasticity_dict = load_nodes_model(elasticity_node_objects, models, split_str="_Elasticity")
-    
+    lattice_const_dict, lattice_const_ref_node = load_nodes_and_ref_node(lattice_const_node_objects, models, split_str="_lattice-constant")
     
     
     
@@ -450,5 +452,156 @@ def bulk_crystal_benchmark(
         phonon_ref_data=phonon_ref_node_dict,
         phonon_pred_data=phonon_pred_node_dict,
         elasticity_data=elasticity_dict,
-        ui = "notebook",
+        lattice_const_data=lattice_const_dict,
+        lattice_const_ref_node=lattice_const_ref_node,
+        ui = ui,
+    )
+    
+
+@app.command()
+def lattice_constants_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to lattice constant nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+
+    ):
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_lattice-constant")
+    
+    benchmark_node_dict, lattice_const_ref_node = load_nodes_and_ref_node(node_objects, models, split_str="_lattice-constant")
+    
+    
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    from mlipx import LatticeConstant
+    LatticeConstant.mae_plot_interactive(
+        node_dict=benchmark_node_dict,
+        ref_node = lattice_const_ref_node,
+        ui=ui
+    )
+    
+def load_nodes_and_ref_node(node_objects, models, split_str):
+    """Load nodes which are structured: Dict["model_name": zntrack.Node]
+    and a single reference node
+    """
+    benchmark_node_dict = {}
+    
+    for name, node in node_objects.items():
+        model = name.split(split_str)[0]
+        formula = name.split("LatticeConst-")[-1]
+        if "ref" in name:
+            ref_node = node
+        else:
+            benchmark_node_dict.setdefault(formula, {})[model] = node
+    if models:
+        # filter to selected models
+        benchmark_node_dict = {
+            ele: {m: node for m, node in models_dict.items() if m in models}
+            for ele, models_dict in benchmark_node_dict.items()
+        }
+    return benchmark_node_dict, ref_node
+
+
+
+@app.command()
+def X23_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to X23 nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    ):
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_X23Benchmark")
+    benchmark_node_dict = {}
+    for name, node in node_objects.items():
+        model = name.split("_X23Benchmark")[0]
+        benchmark_node_dict[model] = node
+    if models:
+        # filter to selected models
+        benchmark_node_dict = {
+            m: node for m, node in benchmark_node_dict.items() if m in models
+        }
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    from mlipx import X23Benchmark
+    X23Benchmark.mae_plot_interactive(
+        node_dict=benchmark_node_dict,
+        ui=ui
+    )
+    
+@app.command()
+def DMC_ICE_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to DMC ICE nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    ):
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_DMCICE13Benchmark")
+    benchmark_node_dict = {}
+    for name, node in node_objects.items():
+        model = name.split("_DMCICE13Benchmark")[0]
+        benchmark_node_dict[model] = node
+    if models:
+        # filter to selected models
+        benchmark_node_dict = {
+            m: node for m, node in benchmark_node_dict.items() if m in models
+        }
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    from mlipx import DMCICE13Benchmark
+    DMCICE13Benchmark.mae_plot_interactive(
+        node_dict=benchmark_node_dict,
+        ui=ui
+    )
+
+
+@app.command()
+def mol_crystal_benchmark(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to molecular crystal nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    ):
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    X23_nodes = [node for node in all_nodes if "X23Benchmark" in node]
+    ICE_DMC_nodes = [node for node in all_nodes if "DMCICE13Benchmark" in node]
+    
+    X23_node_objects = load_node_objects(nodes, glob, models, X23_nodes, split_str="_X23Benchmark")
+    ICE_DMC_node_objects = load_node_objects(nodes, glob, models, ICE_DMC_nodes, split_str="_DMCICE13Benchmark")
+    
+    X23_dict = load_nodes_model(X23_node_objects, models, split_str="_X23Benchmark")
+    ICE_DMC_dict = load_nodes_model(ICE_DMC_node_objects, models, split_str="_DMCICE13Benchmark")
+        
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    from mlipx import MolecularCrystalBenchmark
+    MolecularCrystalBenchmark.benchmark_interactive(
+        X23_data=X23_dict,
+        DMC_ICE_data=ICE_DMC_dict,
+        ui=ui
     )

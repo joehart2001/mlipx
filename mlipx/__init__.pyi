@@ -38,6 +38,11 @@ from .nodes.elasticity import Elasticity
 from .nodes.bulk_crystal_benchmark import BulkCrystalBenchmark
 from .nodes.lattice_const_benchmark import LatticeConstant
 from .nodes.ref_to_node import RefToNode
+from .nodes.atomisation_energy import AtomisationEnergy
+from .nodes.X23_benchmark import X23Benchmark
+from .nodes.DMC_ICE_13_benchmark import DMCICE13Benchmark
+from .nodes.molecular_crystal_benchmark import MolecularCrystalBenchmark
+from .nodes.full_benchmark import FullBenchmark
 from .project import Project
 from .version import __version__
 
@@ -85,5 +90,10 @@ __all__ = [
     "BulkCrystalBenchmark",
     "LatticeConstant",
     "RefToNode",
+    "AtomisationEnergy",
+    "X23Benchmark",
+    "DMCICE13Benchmark",
+    "MolecularCrystalBenchmark",
+    "FullBenchmark",
     "__version__",
 ]

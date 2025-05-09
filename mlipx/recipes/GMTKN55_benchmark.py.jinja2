@@ -3,7 +3,13 @@ import zntrack
 
 from models import MODELS
 
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
 project = zntrack.Project()
+{% endif %}
 
 
 benchmark_node_dict = {}
@@ -19,6 +25,6 @@ for model_name, model in MODELS.items():
         benchmark_node_dict[model_name] = benchmark
     
 
-{% if caller is not defined %}
+{% if standalone %}
 project.build()
 {% endif %}

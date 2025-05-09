@@ -494,3 +494,121 @@ def bulk_crystal(
         smiles=smiles,
         n_materials=n_materials,
     )
+    
+
+@app.command()
+def lattice_constants(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_materials: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run lattice constants benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "lattice_constants.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        n_materials=n_materials,
+        smiles=smiles,
+    )
+    
+@app.command()
+def atomisation_energy(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_materials: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run atomisation energy benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "atomisation_energy.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        n_materials=n_materials,
+        smiles=smiles,
+    )
+    
+
+@app.command()
+def X23(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_materials: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run X23 benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "X23_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        n_materials=n_materials,
+        smiles=smiles,
+    )
+    
+@app.command()
+def DMC_ICE(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_materials: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run DMC ICE benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "DMC_ICE_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        n_materials=n_materials,
+        smiles=smiles,
+    )
+    
+
+@app.command()
+def molecular_crystal(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_materials: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run molecular crystal benchmark."""
+    if models is not None:
+        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipeception(
+        "molecular_crystal_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+        n_materials=n_materials,
+    )

@@ -1,0 +1,24 @@
+import mlipx
+import zntrack
+
+from models import MODELS
+
+
+from pathlib import Path
+
+
+project = zntrack.Project()
+
+
+{% set standalone = false %}
+{% include "X23_benchmark.py.jinja2" %}
+{% include "DMC_ICE_benchmark.py.jinja2" %}
+
+
+with project.group('mol-crystal-benchmark'):
+    benchmark = mlipx.MolecularCrystalBenchmark(
+        X23_list =X23_list,
+        DMC_ICE_list=DMC_ICE_list,
+    )
+
+project.build()

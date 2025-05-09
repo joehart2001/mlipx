@@ -123,12 +123,20 @@ class PhononForceConstants(zntrack.Node):
 
 
         # compute FC2 (2nd order force constants, 2nd dervative of energy) and phonon frequencies on mesh
-        phonons, _, _ = get_fc2_and_freqs(
-            phonons=phonons,
-            calculator=calc,
-            q_mesh=np.array([self.N_q_mesh] * 3),
-            symmetrize_fc2=True
-        )
+        try:
+            phonons, _, _ = get_fc2_and_freqs(
+                phonons=phonons,
+                calculator=calc,
+                q_mesh=np.array([self.N_q_mesh] * 3),
+                symmetrize_fc2=True
+            )
+        except ValueError as e:
+            # Gracefully skip unsupported element e.g. for maceoff
+            if "not in list" in str(e):
+                print(f"Skipping material index {self.material_idx}: {e}")
+                return
+            else:
+                raise
         print("Force constants computed")
     
     

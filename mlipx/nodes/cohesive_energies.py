@@ -219,7 +219,11 @@ class CohesiveEnergies(zntrack.Node):
         
         
     @staticmethod
-    def mae_plot_interactive(node_dict, ui = None):
+    def mae_plot_interactive(
+        node_dict, 
+        ui: str | None = None,
+        run_interactive: bool = True,
+        ):
         
         mae_dict = {}
         abs_error_df_all = None
@@ -326,8 +330,8 @@ class CohesiveEnergies(zntrack.Node):
 
         
         
-        if ui is None:
-            return
+        if ui is None and run_interactive:
+            return mae_df
         
         
         # --- Dash app ---
@@ -475,41 +479,9 @@ class CohesiveEnergies(zntrack.Node):
 
 
 
-        def get_free_port():
-            """Find an unused local port."""
-            s = socket.socket()
-            s.bind(('', 0))  # let OS pick a free port
-            port = s.getsockname()[1]
-            s.close()
-            return port
+        from mlipx.dash_utils import run_app
 
+        if not run_interactive:
+            return app, mae_df
 
-        def run_app(app, ui):
-            port = get_free_port()
-            url = f"http://localhost:{port}"
-
-            def _run_server():
-                app.run(debug=True, use_reloader=False, port=port)
-                
-            if "SSH_CONNECTION" in os.environ or "SSH_CLIENT" in os.environ:
-                import threading
-                print(f"\n Detected SSH session — skipping browser launch.")
-                #threading.Thread(target=_run_server, daemon=True).start()
-                return
-            elif ui == "browser":
-                import webbrowser
-                import threading
-                #threading.Thread(target=_run_server, daemon=True).start()
-                time.sleep(1.5)
-                _run_server()
-                #webbrowser.open(url)
-            elif ui == "notebook":
-                _run_server()
-            
-            else:
-                print(f"Unknown UI option: {ui}. Please use, 'browser', or 'notebook'.")
-                return
-
-            print(f"Dash app running at {url}")
-            
         return run_app(app, ui=ui)

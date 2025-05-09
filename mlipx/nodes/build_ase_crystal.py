@@ -59,8 +59,14 @@ class BuildASEcrystal(zntrack.Node):
             if self.c is None:
                 raise ValueError("hcp structure requires a c/a ratio (c).")
             atoms = bulk(self.element, self.lattice_type, a=self.a, c=self.c)
+        
+        if self.lattice_type == "2H-SiC":
+            cell = [[self.a, 0, 0], [-self.a/2, self.a * 3**0.5 / 2, 0], [0, 0, self.c]]
+            scaled_positions = [(1/3, 2/3, 0.0),(2/3, 1/3, 0.5),(1/3, 2/3, 0.25),(2/3, 1/3, 0.75),]
+            symbols = ['C', 'C', 'Si', 'Si']
+            atoms = Atoms(symbols=symbols, scaled_positions=scaled_positions, cell=cell, pbc=True)
         else:
-            atoms = bulk(self.element, self.lattice_type, a=self.a)
+            atoms = bulk(self.element, self.lattice_type, a=self.a, c=self.c)
 
         atoms.info["lattice_type"] = self.lattice_type
         ase.io.write(self.frames_path, atoms)

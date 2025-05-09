@@ -2,23 +2,16 @@ import mlipx
 import zntrack
 
 from models import MODELS
-
-from mlipx.phonons_utils import download_alex_parallel
-from mlipx.benchmark_download_utils import BENCHMARK_DATA_DIR
 from pathlib import Path
 
 project = zntrack.Project()
 
 
 
-# datapath = [path] so need first element (only element)
-# if datapath: use that dir of yaml files
-
-
 {% set standalone = false %}
 {% include "phonons.py.jinja2" %}
 {% include "elasticity.py.jinja2" %}
-
+{% include "lattice_constants.py.jinja2" %}
 
 
 with project.group('bulk-crystal-benchmark'):
@@ -26,6 +19,7 @@ with project.group('bulk-crystal-benchmark'):
         phonon_ref_list=phonon_ref_list,
         phonon_pred_list=phonon_pred_list,
         elasticity_list=elasticity_list,
+        lattice_const_list=lattice_const_list,
     )
 
 
