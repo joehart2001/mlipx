@@ -33,7 +33,7 @@ from typing import List, Dict, Any, Optional
 
 
 import mlipx
-from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark
+from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, MolecularBenchmark
 
 
 
@@ -55,6 +55,7 @@ class FullBenchmark(zntrack.Node):
     # inputs
     bulk_crystal_benchmark: List[BulkCrystalBenchmark] = zntrack.deps()
     mol_crystal_benchmark: List[MolecularCrystalBenchmark] = zntrack.deps()
+    mol_benchmark: List[MolecularBenchmark] = zntrack.deps()
     
     # outputs
     # nwd: ZnTrack's node working directory for saving files
@@ -79,6 +80,8 @@ class FullBenchmark(zntrack.Node):
         X23_data: List[X23Benchmark] | Dict[str, X23Benchmark],
         DMC_ICE_data: List[DMCICE13Benchmark] | Dict[str, DMCICE13Benchmark],
         
+        GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
+        
         ui: str = "browser"
     ):
         
@@ -92,16 +95,22 @@ class FullBenchmark(zntrack.Node):
             full_benchmark=True,
         )
         
-        mol_benchmark_app, mol_benchmark_score_df, mol_register_callbacks = MolecularCrystalBenchmark.benchmark_interactive(
+        mol_crystal_benchmark_app, mol_crystal_benchmark_score_df, mol_crystal_register_callbacks = MolecularCrystalBenchmark.benchmark_interactive(
             X23_data=X23_data,
             DMC_ICE_data=DMC_ICE_data,
+            full_benchmark=True,
+        )
+        
+        mol_benchmark_app, mol_benchmark_score_df, mol_register_callbacks = MolecularBenchmark.benchmark_interactive(
+            GMTKN55_data=GMTKN55_data,
             full_benchmark=True,
         )
 
         # df with score for each benchmark and model
         scores_all_df = FullBenchmark.get_overall_score_df(
             (bulk_benchmark_score_df, "Bulk Crystal"),
-            (mol_benchmark_score_df, "Molecular Crystal"),
+            (mol_crystal_benchmark_score_df, "Molecular Crystal"),
+            (mol_benchmark_score_df, "Molecular"),
         )
         
         if not os.path.exists("benchmark_stats/"):
@@ -136,11 +145,13 @@ class FullBenchmark(zntrack.Node):
         tab_layouts = {
             "Overall Benchmark": summary_layout,
             "Bulk Crystal": bulk_benchmark_app.layout,
-            "Molecular Crystal": mol_benchmark_app.layout,
+            "Molecular Crystal": mol_crystal_benchmark_app.layout,
+            "Molecular": mol_benchmark_app.layout,
         }
         
         # Register callbacks for each app
         bulk_register_callbacks(app_summary)
+        mol_crystal_register_callbacks(app_summary)
         mol_register_callbacks(app_summary)
         
         app_summary.layout = html.Div([

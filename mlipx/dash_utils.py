@@ -325,30 +325,66 @@ def register_callbacks_table_scatter_table(
 
 # -------- plotting functions --------
         
-    
+
 def create_scatter_plot(
     ref_vals: List[float], 
     pred_vals: List[float], 
     model_name: str, 
     mae: float,
     metric_label: tuple[str] = ("metric", "units"),
-    hover: List[str] | None = None
+    hovertemplate: str | None = None,
+    hover_data: tuple[List[str], str] | List[str] | None = None,
 ) -> px.scatter:
     """Create a scatter plot comparing ref vs predicted + mae in legend."""
     
+    x_col = "Reference"
+    y_col = "Predicted"
+    hover_col = "CustomData"
+
+    data = {
+        x_col: ref_vals,
+        y_col: pred_vals,
+    }
+
+    if isinstance(hover_data, tuple) and hover_data[0] is not None:
+        data[hover_col] = hover_data[0]
+        hover_label = hover_data[1]
+        custom_data_cols = [hover_col]
+    else:
+        custom_data_cols = None
+        hover_label = None
+
+    df = pd.DataFrame(data)
+
     combined_min = min(min(ref_vals), min(pred_vals))
     combined_max = max(max(ref_vals), max(pred_vals))
 
     fig = px.scatter(
-        x=ref_vals,
-        y=pred_vals,
-        hover_name=hover,
+        data_frame=df,
+        x=x_col,
+        y=y_col,
+        custom_data=custom_data_cols,
         labels={
-            "x": f"Reference {metric_label[0]} [{metric_label[1]}]",
-            "y": f"{model_name} {metric_label[0]} [{metric_label[1]}]",
+            x_col: f"Reference {metric_label[0]} [{metric_label[1]}]",
+            y_col: f"{model_name} {metric_label[0]} [{metric_label[1]}]",
         },
-        title=f"{model_name} - {metric_label}"
+        title=f"{model_name} — {metric_label[0]}",
     )
+    
+    
+    combined_min = min(min(ref_vals), min(pred_vals))
+    combined_max = max(max(ref_vals), max(pred_vals))
+
+    # fig = px.scatter(
+    #     x=ref_vals,
+    #     y=pred_vals,
+    #     custom_data=hover_data,
+    #     labels={
+    #         "x": f"Reference {metric_label[0]} [{metric_label[1]}]",
+    #         "y": f"{model_name} {metric_label[0]} [{metric_label[1]}]",
+    #     },
+    #     title=f"{model_name} - {metric_label}"
+    # )
 
     fig.add_shape(
         type="line",
@@ -365,6 +401,18 @@ def create_scatter_plot(
         xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1),
         yaxis=dict(showgrid=True, gridcolor="lightgray"),
     )
+    
+    if hovertemplate:
+        fig.update_traces(hovertemplate=hovertemplate)
+    elif custom_data_cols and hover_label:
+        fig.update_traces(hovertemplate="<br>".join([
+            f"{hover_label}: %{{customdata[0]}}",
+            f"Reference: %{{x:.3f}} {metric_label[1]}",
+            f"Predicted: %{{y:.3f}} {metric_label[1]}",
+            "<extra></extra>"
+        ]))
+
+    
 
     fig.add_annotation(
         xref="paper", yref="paper", x=0.02, y=0.98,

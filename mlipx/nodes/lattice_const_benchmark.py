@@ -319,7 +319,16 @@ class LatticeConstant(zntrack.Node):
             # Save diff table
             table_df.to_csv(model_dir / "full_table.csv", index=False)
 
-            fig = LatticeConstant.create_scatter_plot(ref_vals, pred_vals, model_name, mae, formulas)
+            from mlipx.dash_utils import create_scatter_plot
+            fig = create_scatter_plot(
+                ref_vals = ref_vals, 
+                pred_vals = pred_vals, 
+                model_name = model_name, 
+                mae = mae, 
+                metric_label = ("Lattice Constant", "Å"),
+                hover_data = (formulas, "Formula"),
+            )
+
             fig.write_image(model_dir / "lattice_constants.png", width=800, height=600)
 
             mae_summary.append({"Model": model_name, "MAE (Å)": round(mae, 3)})
@@ -327,53 +336,6 @@ class LatticeConstant(zntrack.Node):
         pd.DataFrame(mae_summary).to_csv(save_dir / "mae_summary.csv", index=False)
     
 
-    @staticmethod
-    def create_scatter_plot(ref_vals, pred_vals, model_name, mae, hover=None):
-        """Create a lattice constant scatter plot comparing ref vs predicted."""
-        combined_min = min(min(ref_vals), min(pred_vals))
-        combined_max = max(max(ref_vals), max(pred_vals))
-
-        fig = px.scatter(
-            x=ref_vals,
-            y=pred_vals,
-            hover_name=hover,
-            labels={
-                "x": "Reference Lattice Constant (Å)",
-                "y": f"{model_name} Prediction (Å)",
-            },
-            title=f"{model_name} - Lattice Constant Prediction"
-        )
-
-        fig.add_shape(
-            type="line",
-            x0=combined_min, y0=combined_min,
-            x1=combined_max, y1=combined_max,
-            xref='x', yref='y',
-            line=dict(color="black", dash="dash")
-        )
-
-        fig.update_layout(
-            plot_bgcolor="white",
-            paper_bgcolor="white",
-            font_color="black",
-            xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1),
-            yaxis=dict(showgrid=True, gridcolor="lightgray"),
-        )
-
-        fig.add_annotation(
-            xref="paper", yref="paper", x=0.02, y=0.98,
-            text=f"MAE (Å): {mae:.3f}",
-            showarrow=False,
-            align="left",
-            font=dict(size=12, color="black"),
-            bordercolor="black",
-            borderwidth=1,
-            borderpad=4,
-            bgcolor="white",
-            opacity=0.8
-        )
-
-        return fig
     
     
 
@@ -421,9 +383,8 @@ class LatticeConstant(zntrack.Node):
                 model_name = model_name, 
                 mae = mae_val, 
                 metric_label = ("Lattice Constant", "Å"),
-                hover = formulas,
+                hover_data = (formulas, "Formula"),
             )
-            
                 
                 
             abs_diff = pred_vals - ref_vals

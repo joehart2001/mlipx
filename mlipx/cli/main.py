@@ -326,7 +326,7 @@ def gmtkn55_compare(
 
     from mlipx import GMTKN55Benchmark
     GMTKN55Benchmark.mae_plot_interactive(
-        benchmark_node_dict = benchmark_node_dict,
+        node_dict = benchmark_node_dict,
         ui = ui
     )
     
@@ -421,13 +421,21 @@ def load_nodes_model(node_objects, models, split_str):
 
 @app.command()
 def bulk_crystal_benchmark(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to cohesive nodes")],
-    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
-    pattern: Annotated[str, typer.Option("--pattern", help="Comma-separated glob patterns")] = None,
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to cohesive nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
 
     ):
+    
+    nodes = [
+        "*Elasticity*",
+        "*PhononDispersion*",
+        "*LatticeConst*",
+    ]
+    glob = True
+    
+    
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
@@ -540,6 +548,8 @@ def X23_compare(
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     ):
     
+    
+    
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
@@ -598,11 +608,17 @@ def DMC_ICE_compare(
 
 @app.command()
 def mol_crystal_benchmark(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to molecular crystal nodes")],
-    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to molecular crystal nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     ):
+    
+    nodes = [
+        "*X23Benchmark*",
+        "*DMCICE13Benchmark*",
+    ]
+    glob = True
     
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()
@@ -651,19 +667,33 @@ def get_mol_crystal_benchmark_node_dicts(
     
     return X23_dict, ICE_DMC_dict
     
+    
+    
+    
 @app.command()
 def full_benchmark_compare(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to full benchmark nodes")],
-    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to full benchmark nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     ):
+    
+    nodes = [
+        "*Elasticity*",
+        "*PhononDispersion*",
+        "*LatticeConst*",
+        "*X23Benchmark*",
+        "*DMCICE13Benchmark*",
+        "*GMTKN55Benchmark*"
+    ]
+    glob = True
     
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
         
+    # bulk crystal benchmark
     phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node = get_bulk_crystal_benchmark_node_dicts(
         nodes,
         glob,
@@ -673,6 +703,7 @@ def full_benchmark_compare(
         split_str_elasticity="_Elasticity",
         split_str_lattice_const="_lattice-constant",
     )
+    # molecular crystal benchmark
     X23_dict, ICE_DMC_dict = get_mol_crystal_benchmark_node_dicts(
         nodes,
         glob,
@@ -681,6 +712,23 @@ def full_benchmark_compare(
         split_str_X23="_X23Benchmark",
         split_str_ICE="_DMCICE13Benchmark",
     )
+    # molecular benchmark
+    GMTKN55_dict = get_mol_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_GMTKN55="_GMTKN55Benchmark",
+    )
+    
+    print('phonon_pred_node_dict = ', phonon_pred_node_dict)
+    print('phonon_ref_node_dict = ', phonon_ref_node_dict)
+    print('elasticity_dict = ', elasticity_dict)
+    print('lattice_const_dict = ', lattice_const_dict)
+    print('lattice_const_ref_node = ', lattice_const_ref_node)
+    print('X23_dict = ', X23_dict)
+    print('ICE_DMC_dict = ', ICE_DMC_dict)
+    print('GMTKN55_dict = ', GMTKN55_dict)
     
     
     if ui not in {None, "browser"}:
@@ -697,6 +745,58 @@ def full_benchmark_compare(
         lattice_const_ref_node=lattice_const_ref_node,
         X23_data=X23_dict,
         DMC_ICE_data=ICE_DMC_dict,
+        GMTKN55_data=GMTKN55_dict,
         ui=ui
     )
     
+    
+    
+    
+@app.command()
+def molecular_benchmark(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to molecular benchmark nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    ):
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    
+    
+    GMTKN55_dict = get_mol_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_GMTKN55="_GMTKN55Benchmark",
+    )
+    
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    from mlipx import MolecularBenchmark
+    MolecularBenchmark.mae_plot_interactive(
+        node_dict=GMTKN55_dict,
+        ui=ui
+    )
+    
+
+def get_mol_benchmark_node_dicts(
+    nodes: list[str],
+    glob: bool,
+    models: list[str] | None,
+    all_nodes: list[str],
+    split_str_GMTKN55: str,
+) -> dict[str, zntrack.Node]:
+    
+    GMTKN55_nodes = [node for node in all_nodes if "GMTKN55Benchmark" in node]
+    
+    GMTKN55_node_objects = load_node_objects(nodes, glob, models, GMTKN55_nodes, split_str=split_str_GMTKN55)
+    
+    GMTKN55_dict = load_nodes_model(GMTKN55_node_objects, models, split_str=split_str_GMTKN55)
+    
+    return GMTKN55_dict

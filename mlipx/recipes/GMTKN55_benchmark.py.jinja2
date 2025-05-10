@@ -12,17 +12,20 @@ project = zntrack.Project()
 {% endif %}
 
 
-benchmark_node_dict = {}
+GMTKN55_node_dict = {}
+GMTKN55_node_list = []
+
 for model_name, model in MODELS.items():
     with project.group(model_name):
-        benchmark = mlipx.GMTKN55Benchmark(
+        GMTKN55_benchmark = mlipx.GMTKN55Benchmark(
             model =model,
             model_name=model_name,
             subsets=[],
             allowed_multiplicity=[1],
             allowed_charge=[0],
         )
-        benchmark_node_dict[model_name] = benchmark
+        GMTKN55_node_dict[model_name] = GMTKN55_benchmark
+        GMTKN55_node_list.append(GMTKN55_benchmark)
     
 
 {% if standalone %}

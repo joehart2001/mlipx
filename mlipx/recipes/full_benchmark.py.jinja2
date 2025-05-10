@@ -18,16 +18,14 @@ project = zntrack.Project()
 {% set standalone = false %}
 {% include "bulk_crystal_benchmark.py.jinja2" %}
 {% include "molecular_crystal_benchmark.py.jinja2" %}
-
+{% include "molecular_benchmark.py.jinja2" %}
 
 with project.group("full-benchmark"):
     full_benchmark = mlipx.FullBenchmark(
         bulk_crystal_benchmark=bulk_crystal_benchmark,
         mol_crystal_benchmark=mol_benchmark,
+        mol_benchmark=mol_benchmark,
     )
 
 
-
-{% if standalone %}
 project.build()
-{% endif %}

@@ -50,7 +50,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 class MolecularCrystalBenchmark(zntrack.Node):
-    """ Node to combine all bulk crystal benchmarks
+    """ Node to combine all molecular crystal benchmarks
     """
     # inputs
     X23_list: List[X23Benchmark] = zntrack.deps()
@@ -77,7 +77,7 @@ class MolecularCrystalBenchmark(zntrack.Node):
     ):
         
         
-        """ Interactive dashboard + saving plots and data for all bulk crystal benchmarks
+        """ Interactive dashboard + saving plots and data for all molecular crystal benchmarks
         """
 
         from mlipx.dash_utils import process_data
@@ -145,6 +145,7 @@ class MolecularCrystalBenchmark(zntrack.Node):
         if ui is None and not full_benchmark:
             return
         
+        app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
         from mlipx.dash_utils import combine_apps
         apps_list = [app_X23, app_DMC_ICE]
@@ -154,20 +155,20 @@ class MolecularCrystalBenchmark(zntrack.Node):
             apps_list=apps_list,
             style_data_conditional=style_data_conditional,
         )
-        apps_list[0].layout = layout
+        app.layout = layout
         
         # app_list[0] is the main app now
-        DMCICE13Benchmark.register_callbacks(apps_list[0], rel_poly_dfs_DMC_ICE)
+        DMCICE13Benchmark.register_callbacks(app, rel_poly_dfs_DMC_ICE)
         
         
         from mlipx.dash_utils import run_app
 
         if full_benchmark:
-            return apps_list[0], mol_crystal_benchmark_score_df, lambda app: (
+            return app, mol_crystal_benchmark_score_df, lambda app: (
                 DMCICE13Benchmark.register_callbacks(app, rel_poly_dfs_DMC_ICE),
             )
         
-        return run_app(apps_list[0], ui=ui)        
+        return run_app(app, ui=ui)        
         
         
         

@@ -42,6 +42,7 @@ from .nodes.atomisation_energy import AtomisationEnergy
 from .nodes.X23_benchmark import X23Benchmark
 from .nodes.DMC_ICE_13_benchmark import DMCICE13Benchmark
 from .nodes.molecular_crystal_benchmark import MolecularCrystalBenchmark
+from .nodes.molecular_benchmark import MolecularBenchmark
 from .nodes.full_benchmark import FullBenchmark
 from .project import Project
 from .version import __version__
@@ -94,6 +95,7 @@ __all__ = [
     "X23Benchmark",
     "DMCICE13Benchmark",
     "MolecularCrystalBenchmark",
+    "MolecularBenchmark",
     "FullBenchmark",
     "__version__",
 ]

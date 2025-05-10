@@ -217,11 +217,11 @@ class GMTKN55Benchmark(zntrack.Node):
 
 
     @staticmethod
-    def calculate_weighted_mae(benchmark_df, subsets_df, category="All"):
+    def calculate_weighted_mae(benchmark_df, subsets_df, category="All (WTMAD)"):
         total_weighted_mae = 0
         total_weight = 0
         filtered_subsets = subsets_df[subsets_df["excluded"].str.lower() != "true"]
-        if category != "All":
+        if category != "All (WTMAD)":
             filtered_subsets = filtered_subsets[filtered_subsets["category"] == category]
         
         for _, subset_row in filtered_subsets.iterrows():
@@ -247,7 +247,7 @@ class GMTKN55Benchmark(zntrack.Node):
             
 
     @staticmethod
-    def mae_plot_interactive(benchmark_node_dict, ui = None):
+    def mae_plot_interactive(node_dict, ui = None, run_interactive = True):
         
         subsets_path = get_benchmark_data("GMTKN55.zip") / "GMTKN55/subsets.csv"
         
@@ -256,7 +256,7 @@ class GMTKN55Benchmark(zntrack.Node):
         subsets_df["subset"] = subsets_df["subset"].str.lower()
         subsets_df["excluded"] = subsets_df["excluded"].astype(str)
         
-        categories = list(subsets_df["category"].unique()) + ["All"]
+        categories = list(subsets_df["category"].unique()) + ["All (WTMAD)"]
         
         
         # subset mae
@@ -265,7 +265,7 @@ class GMTKN55Benchmark(zntrack.Node):
         wtmad_rows = []
         
         #for file in benchmark_files:
-        for model_name, node in benchmark_node_dict.items():
+        for model_name, node in node_dict.items():
 
             
             df = node.benchmark_results.copy()
@@ -289,7 +289,7 @@ class GMTKN55Benchmark(zntrack.Node):
             
             # weighted total MAE
             
-            wtmad = row["All"]
+            wtmad = row["All (WTMAD)"]
             wtmad_rows.append({"Model": model_name, "WTMAD": wtmad})
 
             
@@ -307,7 +307,7 @@ class GMTKN55Benchmark(zntrack.Node):
                 "Reaction barrier heights": "Barrier heights",
                 "Intramolecular noncovalent interactions": "Intramolecular NCIs",
                 "Intermolecular noncovalent interactions": "Intermolecular NCIs",
-                "All": "All"
+                "All (WTMAD)": "All (WTMAD)"
             }
         
             # mae for each subset
@@ -325,7 +325,7 @@ class GMTKN55Benchmark(zntrack.Node):
 
         
         benchmark_df = pd.DataFrame(benchmark_tables)
-        benchmark_df = benchmark_df.sort_values(by="All", ascending=True)
+        benchmark_df = benchmark_df.sort_values(by="All (WTMAD)", ascending=True)
         benchmark_df = benchmark_df.map(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
         benchmark_df = benchmark_df.rename(columns={
             col: category_abbreviations.get(col, col) for col in benchmark_df.columns
@@ -333,17 +333,21 @@ class GMTKN55Benchmark(zntrack.Node):
 
         mae_df = pd.DataFrame(mae_data)
         wtmad_table = pd.DataFrame(wtmad_rows).sort_values(by="WTMAD")
+        wtmad_table = wtmad_table.rename(columns={"WTMAD": "Weighted Total MAD/MAE [kcal/mol] \u2193"})
+        wtmad_table = wtmad_table.round(2)
+        wtmad_table['Rank'] = wtmad_table.index + 1
         # 2 d.p.
-        wtmad_table = wtmad_table.map(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
+        #wtmad_table = wtmad_table.map(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
 
         
         
         #--------------- saving plots and tables ---------------
         
         
-        results_dir = Path("GMTKN55-benchmark-stats")
-        results_dir.mkdir(exist_ok=True)
-        
+        results_dir = Path("benchmark_stats/molecular_benchmark/GMTKN55/")
+        if not os.path.exists(results_dir):
+            os.makedirs(results_dir)
+                    
         wtmad_table.to_csv(os.path.join(results_dir, "wtmad.csv"), index=False)
         benchmark_df.to_csv(os.path.join(results_dir, "category_mae.csv"), index=False)
         
@@ -356,25 +360,48 @@ class GMTKN55Benchmark(zntrack.Node):
         fig.write_image(os.path.join(results_dir, "mae_per_subset.png"))
         
         # scatter plots
-        path = Path("GMTKN55-benchmark-stats/scatter_plots")
-        path.mkdir(parents=True, exist_ok=True)
+        scatter_path = results_dir / "scatter_plots"
+            
+            
         for model_name in mae_df["model"].unique():
-            path_model = path / model_name
-            path_model.mkdir(parents=True, exist_ok=True)
-
+            path_model = scatter_path / model_name
+            
+            if not os.path.exists(path_model):
+                os.makedirs(path_model)
             
             model_df = mae_df[mae_df["model"] == model_name]
             for _, row in model_df.iterrows():
                 subset_name, description = row["subset"], row["description"]
                 try:
-                    preds = list(benchmark_node_dict[model_name].predicted_dict[subset_name].values()); refs = list(benchmark_node_dict[model_name].reference_dict[subset_name].values()); species = list(benchmark_node_dict[model_name].predicted_dict[subset_name].keys())
+                    preds = list(node_dict[model_name].predicted_dict[subset_name].values())
+                    refs = list(node_dict[model_name].reference_dict[subset_name].values())
+                    species = list(node_dict[model_name].predicted_dict[subset_name].keys())
                 except KeyError: continue
+                
                 mae = np.mean(np.abs(np.array(refs) - np.array(preds)))
-                scatter_fig = px.scatter(x=refs, y=preds, custom_data=[species], labels={"x": "Reference Energy (kcal/mol)", "y": "Predicted Energy (kcal/mol)"}, title=f"{model_name} — {subset_name}: Predicted vs Reference")
-                scatter_fig.update_traces(hovertemplate="<br>".join(["Species: %{customdata[0]}", "Reference: %{x:.2f} kcal/mol", "Predicted: %{y:.2f} kcal/mol", "<extra></extra>"]))
-                scatter_fig.add_trace(go.Scatter(x=[min(refs), max(refs)], y=[min(refs), max(refs)], mode="lines", line=dict(dash="dot", color="gray"), name="y = x"))
-                scatter_fig.add_annotation(xref="paper", yref="paper", x=0.02, y=0.98, text=f"MAE: {mae:.2f}", showarrow=False, align="left", font=dict(size=12, color="black"), bordercolor="black", borderwidth=1, borderpad=4, bgcolor="white", opacity=0.8)
-                scatter_fig.update_layout(height=500, plot_bgcolor='white', paper_bgcolor='white', font_color='black', margin=dict(t=50, r=30, b=50, l=50), xaxis=dict(showgrid=True, gridcolor='lightgray', scaleanchor="y", scaleratio=1), yaxis=dict(showgrid=True, gridcolor='lightgray'))
+                # scatter_fig = px.scatter(x=refs, y=preds, custom_data=[species], labels={"x": "Reference Energy (kcal/mol)", "y": "Predicted Energy (kcal/mol)"}, title=f"{model_name} — {subset_name}: Predicted vs Reference")
+                # scatter_fig.update_traces(hovertemplate="<br>".join(["Species: %{customdata[0]}", "Reference: %{x:.2f} kcal/mol", "Predicted: %{y:.2f} kcal/mol", "<extra></extra>"]))
+                # scatter_fig.add_trace(go.Scatter(x=[min(refs), max(refs)], y=[min(refs), max(refs)], mode="lines", line=dict(dash="dot", color="gray"), name="y = x"))
+                # scatter_fig.add_annotation(xref="paper", yref="paper", x=0.02, y=0.98, text=f"MAE: {mae:.2f}", showarrow=False, align="left", font=dict(size=12, color="black"), bordercolor="black", borderwidth=1, borderpad=4, bgcolor="white", opacity=0.8)
+                # scatter_fig.update_layout(height=500, plot_bgcolor='white', paper_bgcolor='white', font_color='black', margin=dict(t=50, r=30, b=50, l=50), xaxis=dict(showgrid=True, gridcolor='lightgray', scaleanchor="y", scaleratio=1), yaxis=dict(showgrid=True, gridcolor='lightgray'))
+                
+                
+                from mlipx.dash_utils import create_scatter_plot
+                scatter_fig = create_scatter_plot(
+                    ref_vals = refs, 
+                    pred_vals = preds, 
+                    model_name = model_name, 
+                    mae = mae, 
+                    metric_label = ("Energy", "kcal/mol"),
+                    hover_data=species,
+                    hovertemplate="<br>".join([
+                        "Species: %{customdata[0]}",
+                        "Reference: %{x:.2f} kcal/mol",
+                        "Predicted: %{y:.2f} kcal/mol",
+                        "<extra></extra>"
+                    ])
+                )
+                
                 scatter_fig.write_image(os.path.join(path_model, f"{subset_name}.png"))
                 pd.DataFrame({"species": species, "reference": refs, "predicted": preds}).to_csv(os.path.join(path_model, f"{subset_name}.csv"), index=False)
 
@@ -382,10 +409,11 @@ class GMTKN55Benchmark(zntrack.Node):
             
         
         
-        # -------------------- Dash app ------------------------
 
-        if ui is None:
-            return
+        if ui is None and run_interactive:
+            return 
+
+
 
         # --- Dash app ---
         app = dash.Dash(__name__)
@@ -401,7 +429,7 @@ class GMTKN55Benchmark(zntrack.Node):
 
             html.H2("WTMAD (weighted total mean absolute deviation)", style={"color": "black", "marginTop": "20px"}),
             dash_table.DataTable(
-                data=wtmad_table.round(3).to_dict("records"),
+                data=wtmad_table.to_dict("records"),
                 columns=[{"name": i, "id": i} for i in wtmad_table.columns],
                 style_table={"overflowX": "auto"},
                 style_cell={"textAlign": "center", "minWidth": "100px", "border": "1px solid black"},
@@ -417,7 +445,7 @@ class GMTKN55Benchmark(zntrack.Node):
                 style_header={"backgroundColor": "lightgray", "fontWeight": "bold"},
             ),
             
-            html.Hr(style={"marginTop": "40px", "marginBottom": "30px", "borderTop": "2px solid #bbb"}),
+            #html.Hr(style={"marginTop": "40px", "marginBottom": "30px", "borderTop": "2px solid #bbb"}),
 
 
             html.H2("MAD/MAE per Subset", style={"color": "black", "marginTop": "30px"}),
@@ -441,6 +469,31 @@ class GMTKN55Benchmark(zntrack.Node):
         ], style={"backgroundColor": "white", "padding": "20px"})
 
 
+        # Register callbacks
+        GMTKN55Benchmark.register_callbacks(app, node_dict, mae_df)
+
+
+        from mlipx.dash_utils import run_app
+
+        if not run_interactive:
+            return app, wtmad_table, mae_df
+
+        return run_app(app, ui=ui)
+    
+    
+    
+    # ----------- helper fuctions -----------
+    
+    
+    
+    
+    @staticmethod
+    def register_callbacks(
+        app: dash.Dash, 
+        node_dict: Dict[str, NodeWithCalculator], 
+        mae_df: pd.DataFrame
+    ):
+        
         @app.callback(
             Output("mae-plot", "figure"),
             Input("color-toggle", "value")
@@ -449,6 +502,7 @@ class GMTKN55Benchmark(zntrack.Node):
         def update_mae_plot(color_by):
             symbol_col = "model" if color_by == "category" else "category"
             
+        
             fig = px.scatter(
                 mae_df,
                 x="subset",
@@ -497,16 +551,16 @@ class GMTKN55Benchmark(zntrack.Node):
 
         def update_scatter(click_data):
             if click_data is None:
-                raise dash.exceptions.PreventUpdate
+                raise PreventUpdate
 
             model_name, subset_name, *_ = click_data["points"][0]["customdata"]
             subset_name = subset_name.lower()
             print(f"Selected: {model_name} | {subset_name}")
 
             try:
-                pred_list = [benchmark_node_dict[model_name].predicted_dict[subset_name][label] for label in benchmark_node_dict[model_name].predicted_dict[subset_name]]
-                ref_list = [benchmark_node_dict[model_name].reference_dict[subset_name][label] for label in benchmark_node_dict[model_name].reference_dict[subset_name]]
-                species_list = [label for label in benchmark_node_dict[model_name].predicted_dict[subset_name]]
+                pred_list = [node_dict[model_name].predicted_dict[subset_name][label] for label in node_dict[model_name].predicted_dict[subset_name]]
+                ref_list = [node_dict[model_name].reference_dict[subset_name][label] for label in node_dict[model_name].reference_dict[subset_name]]
+                species_list = [label for label in node_dict[model_name].predicted_dict[subset_name]]
             except KeyError:
                 print(f"Model {model_name} or subset {subset_name} not found in data.")
                 return go.Figure()
@@ -515,24 +569,17 @@ class GMTKN55Benchmark(zntrack.Node):
 
             preds = np.array([i for i in pred_list])
             refs = np.array([i for i in ref_list])
-            #mae_val = mae_df[(mae_df["model"] == model_name) & (mae_df["subset"] == subset_name)]["mae"].values[0]
             mae = np.mean(np.abs(refs - preds))
 
-            min_val = min(refs.min(), preds.min(), 0)
-            max_val = max(refs.max(), preds.max())
-            pad = 0.05 * (max_val - min_val)
-            x_range = [min_val - pad, max_val + pad]
-            y_range = x_range
 
-            fig = px.scatter(
-                x=refs,
-                y=preds,
-                custom_data=[species_list],
-                labels={"x": "Reference Energy (kcal/mol)", "y": "Predicted Energy (kcal/mol)"},
-                title=f"{model_name} — {subset_name}: Predicted vs Reference"
-            )
-
-            fig.update_traces(
+            from mlipx.dash_utils import create_scatter_plot
+            scatter_fig = create_scatter_plot(
+                ref_vals = refs, 
+                pred_vals = preds, 
+                model_name = model_name, 
+                mae = mae, 
+                metric_label = ("Energy", "kcal/mol"),
+                hover_data=(species_list, "Species"),
                 hovertemplate="<br>".join([
                     "Species: %{customdata[0]}",
                     "Reference: %{x:.2f} kcal/mol",
@@ -540,84 +587,7 @@ class GMTKN55Benchmark(zntrack.Node):
                     "<extra></extra>"
                 ])
             )
-        
-
-            fig.add_trace(go.Scatter(
-                x=np.linspace(min_val - 100, max_val + 100, 100),
-                y=np.linspace(min_val - 100, max_val + 100, 100),
-                mode="lines", name="y = x",
-                line=dict(dash="dot", color="gray")
-            ))
-
-            fig.add_annotation(
-                xref="paper", yref="paper",
-                x=0.02, y=0.98,
-                text=f"MAE (kcal/mol): {mae:.2f}",
-                showarrow=False,
-                align="left",
-                font=dict(size=12, color="black"),
-                bordercolor="black",
-                borderwidth=1,
-                borderpad=4,
-                bgcolor="white",
-                opacity=0.8
-            )
             
 
-
-
-            fig.update_layout(
-                height=500,
-                plot_bgcolor='white',
-                paper_bgcolor='white',
-                font_color='black',
-                margin=dict(t=50, r=30, b=50, l=50),
-                xaxis=dict(range=x_range, showgrid=True, gridcolor='lightgray', scaleanchor='y', scaleratio=1),
-                yaxis=dict(range=y_range, showgrid=True, gridcolor='lightgray')
-            )
-
-            return fig
-
-
-
-        def get_free_port():
-            """Find an unused local port."""
-            s = socket.socket()
-            s.bind(('', 0))  # let OS pick a free port
-            port = s.getsockname()[1]
-            s.close()
-            return port
-
-
-        def run_app(app, ui):
-            port = get_free_port()
-            url = f"http://localhost:{port}"
-
-            def _run_server():
-                app.run(debug=True, use_reloader=False, port=port)
-                
-            if "SSH_CONNECTION" in os.environ or "SSH_CLIENT" in os.environ:
-                import threading
-                print(f"\n Detected SSH session — skipping browser launch.")
-                #threading.Thread(target=_run_server, daemon=True).start()
-                return
-            elif ui == "browser":
-                import webbrowser
-                import threading
-                #threading.Thread(target=_run_server, daemon=True).start()
-                time.sleep(1.5)
-                _run_server()
-                #webbrowser.open(url)
-            elif ui == "notebook":
-                _run_server()
-            
-            else:
-                print(f"Unknown UI option: {ui}. Please use, 'browser', or 'notebook'.")
-                return
-
-            print(f"Dash app running at {url}")
-            
-        return run_app(app, ui=ui)
-    
-    
+            return scatter_fig
     

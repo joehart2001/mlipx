@@ -17,14 +17,11 @@ project = zntrack.Project()
 
 
 {% set standalone = false %}
-{% include "X23_benchmark.py.jinja2" %}
-{% include "DMC_ICE_benchmark.py.jinja2" %}
-
+{% include "GMTKN55_benchmark.py.jinja2" %}
 
 with project.group('mol-crystal-benchmark'):
-    mol_crystal_benchmark = mlipx.MolecularCrystalBenchmark(
-        X23_list =X23_list,
-        DMC_ICE_list=DMC_ICE_list,
+    mol_benchmark = mlipx.MolecularBenchmark(
+        GMTKN55_list = GMTKN55_node_list,
     )
 
 
