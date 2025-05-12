@@ -6,9 +6,10 @@ import ase
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+from ase import Atoms
 import tqdm
 import zntrack
-from ase.data import atomic_numbers, covalent_radii
+from ase.data import atomic_numbers, covalent_radii, vdw_alvarez
 
 from mlipx.abc import ComparisonResults, NodeWithCalculator
 from mlipx.utils import freeze_copy_atoms
@@ -61,6 +62,7 @@ class HomonuclearDiatomics(zntrack.Node):
     results: pd.DataFrame = zntrack.plots()
 
     model_outs: pathlib.Path = zntrack.outs_path(zntrack.nwd / "model_outs")
+    trajectory_dir_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "trajectories")
 
     def build_molecule(self, element, distance) -> ase.Atoms:
         return ase.Atoms([element, element], positions=[(0, 0, 0), (0, 0, distance)])
@@ -69,6 +71,8 @@ class HomonuclearDiatomics(zntrack.Node):
         self.frames = []
         self.results = pd.DataFrame()
         self.model_outs.mkdir(exist_ok=True, parents=True)
+        self.trajectory_dir_path.mkdir(exist_ok=True, parents=True)
+        
         (self.model_outs / "mlipx.txt").write_text("Thank you for using MLIPX!")
         calc = self.model.get_calculator(directory=self.model_outs)
         e_v = {}
@@ -78,33 +82,74 @@ class HomonuclearDiatomics(zntrack.Node):
             for atoms in self.data:
                 elements.update(set(atoms.symbols))
 
+        results_list = []
         for element in elements:
-            energies = []
-            if self.eq_distance == "covalent-radiuis":
-                # convert element to atomic number
-                distances = np.linspace(
-                    self.min_distance * covalent_radii[atomic_numbers[element]],
-                    self.max_distance * covalent_radii[atomic_numbers[element]],
-                    self.n_points,
+            
+            traj_frames = []
+            try:
+                energies = []
+                forces = []
+                if self.eq_distance == "covalent-radiuis":
+                    # convert element to atomic number
+                    # issue: get differnet distance for different elements this way
+                    rmin = 0.9 * covalent_radii[atomic_numbers[element]]
+                    rvdw = vdw_alvarez.vdw_radii[atomic_numbers[element]] if atomic_numbers[element] < len(vdw_alvarez.vdw_radii) else np.nan
+                    rmax = 3.1 * rvdw if not np.isnan(rvdw) else 6
+                    rstep = 0.01
+                    npts = int((rmax - rmin) / rstep)
+                    distances = np.linspace(rmin, rmax, npts)
+                    # distances = np.linspace(
+                    #     self.min_distance * covalent_radii[atomic_numbers[element]],
+                    #     self.max_distance * covalent_radii[atomic_numbers[element]],
+                    #     self.n_points,
+                    # )
+
+                else:
+                    distances = np.linspace(
+                        self.min_distance, self.max_distance, self.n_points
+                    )
+                tbar = tqdm.tqdm(
+                    distances, desc=f"{element}-{element} bond ({distances[0]:.2f} Å)"
                 )
-            else:
-                distances = np.linspace(
-                    self.min_distance, self.max_distance, self.n_points
+                for distance in tbar:
+                    tbar.set_description(f"{element}-{element} bond ({distance:.2f} Å)")
+                    molecule = self.build_molecule(element, distance)
+                    molecule.calc = calc
+                    energies.append(molecule.get_potential_energy())
+                    forces.append(molecule.get_forces())
+                    self.frames.append(freeze_copy_atoms(molecule))
+                    traj_frames.append(freeze_copy_atoms(molecule))
+                e_v[element] = pd.DataFrame(energies, index=distances, columns=[element])
+                
+                ase.io.write(
+                    (self.trajectory_dir_path / f"{element}2.extxyz"),
+                    traj_frames,
+                    append=True,
                 )
-            tbar = tqdm.tqdm(
-                distances, desc=f"{element}-{element} bond ({distances[0]:.2f} Å)"
-            )
-            for distance in tbar:
-                tbar.set_description(f"{element}-{element} bond ({distance:.2f} Å)")
-                molecule = self.build_molecule(element, distance)
-                molecule.calc = calc
-                energies.append(molecule.get_potential_energy())
-                self.frames.append(freeze_copy_atoms(molecule))
-            e_v[element] = pd.DataFrame(energies, index=distances, columns=[element])
+                
+                for distance, energy in zip(distances, energies):
+                    results_list.append({
+                        "element": element,
+                        "distance": distance,
+                        "energy": energy,
+                    })
+
+                
+            except Exception as e:
+                print(f"Skipping element {element}: {e}")
+                continue
+        
+        #self.results = pd.DataFrame(results_list)
+
         self.results = functools.reduce(
             lambda x, y: pd.merge(x, y, left_index=True, right_index=True, how="outer"),
             e_v.values(),
         )
+        
+
+    def get_traj(self, element) -> list[ase.Atoms]:
+
+        return ase.io.read(self.trajectory_dir_path / f"{element}2.extxyz", index=":")
 
     @property
     def figures(self) -> dict:
@@ -248,3 +293,33 @@ class HomonuclearDiatomics(zntrack.Node):
                 figures[f"{element}-{element} bond (adjusted)"] = fig
 
         return {"frames": nodes[0].frames, "figures": figures}
+
+
+
+
+
+    # ------ interactive plotting ------
+
+
+
+    @staticmethod
+    def mae_plot_interactive(
+        node_dict,
+        run_interactive: bool = True,
+        ui: str | None = None,
+    ):
+        
+        diatomics_dict = {}
+        
+        for model_name, node in node_dict.items():
+            
+            results = node.results # df:  | dist | H-H | He-He | Li-Li | ...
+            
+            results.index.name = "distance"
+            results.reset_index(inplace=True)
+            
+            diatomics_dict[model_name] = results
+        
+        
+        
+            

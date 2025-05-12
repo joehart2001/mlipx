@@ -1,0 +1,32 @@
+import mlipx
+import zntrack
+
+from models import MODELS
+
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+project = zntrack.Project()
+{% endif %}
+
+diatomic_dict = {}
+diatomic_list = []
+for model_name, model in MODELS_subset.items():
+    with project.group(model_name, "homonuclear-diatomics"):
+        diatomic = mlipx.HomonuclearDiatomics(
+            elements=chemical_symbols,
+            #data=sum(frames, []),  # Use all elements from all frames
+            model=model,
+            n_points=100,
+            min_distance=0.1,
+            max_distance=6.0,
+            eq_distance=None
+        )
+        diatomic_dict[model_name] = diatomic
+        diatomic_list.append(diatomic)
+        
+{% if standalone %}
+project.build()
+{% endif %}

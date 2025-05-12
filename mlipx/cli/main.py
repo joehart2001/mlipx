@@ -21,6 +21,9 @@ import os
 
 from mlipx import benchmark, recipes
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from tqdm import tqdm
+
 app = typer.Typer()
 app.add_typer(recipes.app, name="recipes")
 app.add_typer(benchmark.app, name="benchmark")
@@ -225,6 +228,9 @@ def phonon_compare(
     )
     
 # ------ helper funcitons -------
+
+
+
 def load_node_objects(
     nodes: list[str],
     glob: bool,
@@ -253,8 +259,17 @@ def load_node_objects(
 
     # Instantiate nodes
     node_objects = {}
-    for name in selected_nodes:
-        node_objects[name] = zntrack.from_rev(name)
+    def load_node(name):
+        return name, zntrack.from_rev(name)
+
+    with ThreadPoolExecutor() as executor:
+        futures = {executor.submit(load_node, name): name for name in selected_nodes}
+        for future in tqdm(as_completed(futures), total=len(futures), desc="Loading ZnTrack nodes"):
+            name, obj = future.result()
+            node_objects[name] = obj
+        
+    # for name in selected_nodes:
+    #     node_objects[name] = zntrack.from_rev(name)
 
     return node_objects
     

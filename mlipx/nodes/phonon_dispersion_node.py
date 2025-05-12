@@ -556,64 +556,64 @@ class PhononDispersion(zntrack.Node):
         model_benchmarks_dict = {} # max_freq, min_freq ...
         plot_stats_dict = {}
         
-        # -----------
-        from functools import partial
+        # # -----------
+        # from functools import partial
         
-        benchmarks = ['max_freq', 'S', 'F', 'C_V']
-        ref_node_dict_data = {k: v for k, v in ref_node_dict.items() if k in pred_node_dict}
-        pred_node_dict_data = pred_node_dict
+        # benchmarks = ['max_freq', 'S', 'F', 'C_V']
+        # ref_node_dict_data = {k: v for k, v in ref_node_dict.items() if k in pred_node_dict}
+        # pred_node_dict_data = pred_node_dict
 
-        worker_func = partial(
-            PhononDispersion.process_structure_worker,
-            ref_node_dict_data=ref_node_dict_data,
-            pred_node_dict_data=pred_node_dict_data,
-            benchmarks=benchmarks
-        )
+        # worker_func = partial(
+        #     PhononDispersion.process_structure_worker,
+        #     ref_node_dict_data=ref_node_dict_data,
+        #     pred_node_dict_data=pred_node_dict_data,
+        #     benchmarks=benchmarks
+        # )
 
-        with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-            results = list(tqdm(executor.map(worker_func, pred_node_dict.keys()), total=len(pred_node_dict), desc="Parallel processing"))
+        # with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
+        #     results = list(tqdm(executor.map(worker_func, pred_node_dict.keys()), total=len(pred_node_dict), desc="Parallel processing"))
 
-        # Now merge results
-        for result in results:
-            if result is None or isinstance(result, str):
-                if isinstance(result, str):
-                    print(result)
-                continue
+        # # Now merge results
+        # for result in results:
+        #     if result is None or isinstance(result, str):
+        #         if isinstance(result, str):
+        #             print(result)
+        #         continue
 
-            mp_id, ref_band, ref_bench, pred_bench, model_bench, stats, scatter_map, paths, point_map = result
+        #     mp_id, ref_band, ref_bench, pred_bench, model_bench, stats, scatter_map, paths, point_map = result
 
-            ref_band_data_dict[mp_id] = ref_band[mp_id]
-            ref_benchmarks_dict[mp_id] = ref_bench[mp_id]
-            pred_benchmarks_dict[mp_id] = pred_bench[mp_id]
+        #     ref_band_data_dict[mp_id] = ref_band[mp_id]
+        #     ref_benchmarks_dict[mp_id] = ref_bench[mp_id]
+        #     pred_benchmarks_dict[mp_id] = pred_bench[mp_id]
 
-            for model in model_bench:
-                if model not in model_benchmarks_dict:
-                    model_benchmarks_dict[model] = model_bench[model]
-                else:
-                    for b in model_bench[model]:
-                        model_benchmarks_dict[model][b]['ref'].extend(model_bench[model][b]['ref'])
-                        model_benchmarks_dict[model][b]['pred'].extend(model_bench[model][b]['pred'])
+        #     for model in model_bench:
+        #         if model not in model_benchmarks_dict:
+        #             model_benchmarks_dict[model] = model_bench[model]
+        #         else:
+        #             for b in model_bench[model]:
+        #                 model_benchmarks_dict[model][b]['ref'].extend(model_bench[model][b]['ref'])
+        #                 model_benchmarks_dict[model][b]['pred'].extend(model_bench[model][b]['pred'])
 
-            for model in stats:
-                if model not in plot_stats_dict:
-                    plot_stats_dict[model] = stats[model]
-                else:
-                    for b in stats[model]:
-                        plot_stats_dict[model][b]['RMSE'].extend(stats[model][b]['RMSE'])
-                        plot_stats_dict[model][b]['MAE'].extend(stats[model][b]['MAE'])
+        #     for model in stats:
+        #         if model not in plot_stats_dict:
+        #             plot_stats_dict[model] = stats[model]
+        #         else:
+        #             for b in stats[model]:
+        #                 plot_stats_dict[model][b]['RMSE'].extend(stats[model][b]['RMSE'])
+        #                 plot_stats_dict[model][b]['MAE'].extend(stats[model][b]['MAE'])
 
-            for model in scatter_map:
-                if model not in scatter_to_dispersion_map:
-                    scatter_to_dispersion_map[model] = scatter_map[model]
-                else:
-                    scatter_to_dispersion_map[model]['hover'].extend(scatter_map[model]['hover'])
-                    scatter_to_dispersion_map[model]['point_map'].extend(scatter_map[model]['point_map'])
-                    scatter_to_dispersion_map[model]['img_paths'].update(scatter_map[model]['img_paths'])
+        #     for model in scatter_map:
+        #         if model not in scatter_to_dispersion_map:
+        #             scatter_to_dispersion_map[model] = scatter_map[model]
+        #         else:
+        #             scatter_to_dispersion_map[model]['hover'].extend(scatter_map[model]['hover'])
+        #             scatter_to_dispersion_map[model]['point_map'].extend(scatter_map[model]['point_map'])
+        #             scatter_to_dispersion_map[model]['img_paths'].update(scatter_map[model]['img_paths'])
 
-            for mpid in paths:
-                phonon_plot_paths[mpid] = paths[mpid]
+        #     for mpid in paths:
+        #         phonon_plot_paths[mpid] = paths[mpid]
 
-            point_index_to_id.extend(point_map)
+        #     point_index_to_id.extend(point_map)
         
         
         
@@ -621,28 +621,28 @@ class PhononDispersion(zntrack.Node):
             
             
         # Process each structure
-        # for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
-        #     if not PhononDispersion.process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, 
-        #                                 ref_benchmarks_dict, pred_benchmarks_dict):
-        #         continue
+        for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
+            if not PhononDispersion.process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, 
+                                        ref_benchmarks_dict, pred_benchmarks_dict):
+                continue
             
-        #     # Initialize phonon plot paths for this mp_id
-        #     phonon_plot_paths[mp_id] = {}
+            # Initialize phonon plot paths for this mp_id
+            phonon_plot_paths[mp_id] = {}
             
-        #     # Process prediction data for each model
-        #     PhononDispersion.process_prediction_data(
-        #         pred_node_dict[mp_id], 
-        #         ref_node_dict[mp_id], 
-        #         mp_id,
-        #         ref_benchmarks_dict,
-        #         pred_benchmarks_dict,
-        #         model_benchmarks_dict,
-        #         plot_stats_dict,
-        #         scatter_to_dispersion_map,
-        #         phonon_plot_paths,
-        #         point_index_to_id,
-        #         benchmarks
-        #     )
+            # Process prediction data for each model
+            PhononDispersion.process_prediction_data(
+                pred_node_dict[mp_id], 
+                ref_node_dict[mp_id], 
+                mp_id,
+                ref_benchmarks_dict,
+                pred_benchmarks_dict,
+                model_benchmarks_dict,
+                plot_stats_dict,
+                scatter_to_dispersion_map,
+                phonon_plot_paths,
+                point_index_to_id,
+                benchmarks
+            )
         
         # Calculate summary statistics and generate plots
         mae_summary_df = PhononDispersion.calculate_summary_statistics(
