@@ -417,7 +417,7 @@ def load_nodes_model(node_objects, models, split_str):
         }
     return benchmark_node_dict
 
-    
+
 
 @app.command()
 def bulk_crystal_benchmark(

@@ -19,7 +19,7 @@ project = zntrack.Project()
 {% set standalone = false %}
 {% include "GMTKN55_benchmark.py.jinja2" %}
 
-with project.group('mol-crystal-benchmark'):
+with project.group('mol-benchmark'):
     mol_benchmark = mlipx.MolecularBenchmark(
         GMTKN55_list = GMTKN55_node_list,
     )

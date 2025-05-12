@@ -30,6 +30,9 @@ dependencies = [
     "kaleido>=0.2.1",
     "pywebview>=5.4",
     "weas-widget>=0.1.26",
+    "cctk>=0.2.26",
+    "matcalc>=0.3.3",
+    "matminer>=0.9.3",
 ]
 
 [dependency-groups]
