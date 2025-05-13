@@ -541,7 +541,7 @@ def load_nodes_and_ref_node_lat(node_objects, models, split_str):
     for name, node in node_objects.items():
         model = name.split(split_str)[0]
         formula = name.split("LatticeConst-")[-1]
-        if "ref" in name:
+        if "ref" in model:
             ref_node = node
         else:
             benchmark_node_dict.setdefault(formula, {})[model] = node
@@ -691,6 +691,7 @@ def full_benchmark_compare(
     #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
     ):
     
     nodes = [
@@ -752,17 +753,31 @@ def full_benchmark_compare(
     print('\n UI = ', ui)
     
     from mlipx import FullBenchmark
-    FullBenchmark.benchmark_interactive(
-        phonon_ref_data=phonon_ref_node_dict,
-        phonon_pred_data=phonon_pred_node_dict,
-        elasticity_data=elasticity_dict,
-        lattice_const_data=lattice_const_dict,
-        lattice_const_ref_node=lattice_const_ref_node,
-        X23_data=X23_dict,
-        DMC_ICE_data=ICE_DMC_dict,
-        GMTKN55_data=GMTKN55_dict,
-        ui=ui
-    )
+    if return_app:
+        return FullBenchmark.benchmark_interactive(
+            phonon_ref_data=phonon_ref_node_dict,
+            phonon_pred_data=phonon_pred_node_dict,
+            elasticity_data=elasticity_dict,
+            lattice_const_data=lattice_const_dict,
+            lattice_const_ref_node=lattice_const_ref_node,
+            X23_data=X23_dict,
+            DMC_ICE_data=ICE_DMC_dict,
+            GMTKN55_data=GMTKN55_dict,
+            ui=ui,
+            return_app = return_app
+        )
+    else:
+        FullBenchmark.benchmark_interactive(
+            phonon_ref_data=phonon_ref_node_dict,
+            phonon_pred_data=phonon_pred_node_dict,
+            elasticity_data=elasticity_dict,
+            lattice_const_data=lattice_const_dict,
+            lattice_const_ref_node=lattice_const_ref_node,
+            X23_data=X23_dict,
+            DMC_ICE_data=ICE_DMC_dict,
+            GMTKN55_data=GMTKN55_dict,
+            ui=ui,
+        )
     
     
     

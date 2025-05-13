@@ -20,14 +20,14 @@ lat_const_dir = get_benchmark_data("lattice_constants.zip", force=True) / "latti
 ref_path_const = lat_const_dir / 'lattice_constants_ref.json'
 ref_path_type = lat_const_dir / 'lattice_constants_ref_types.json'
 
-with project.group("lattice-constant-ref-data", "lattice-constant-ref"):
+with project.group("ref", "lattice-constant"):
     ref_lat_const_node = mlipx.RefToNode(
         ref_path=str(ref_path_const),
         name="LatticeConst-ref")
-with project.group("lattice-constant-ref-data", "lattice-constant-ref-types"):
     ref_lat_type_node = mlipx.RefToNode(
         ref_path=str(ref_path_type),
         name="Lattice-ref-types")
+
     
 with open(ref_path_const) as f:
     ref_lat_const = json.load(f)

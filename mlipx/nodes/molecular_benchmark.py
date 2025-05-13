@@ -54,7 +54,7 @@ class MolecularBenchmark(zntrack.Node):
     """
     # inputs
     GMTKN55_list: List[GMTKN55Benchmark] = zntrack.deps()
-    diatomic_list: List[HomonuclearDiatomics] = zntrack.deps()
+    #diatomic_list: List[HomonuclearDiatomics] = zntrack.deps()
     
     
     # outputs
@@ -72,7 +72,7 @@ class MolecularBenchmark(zntrack.Node):
     @staticmethod
     def benchmark_interactive(
         GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
-        diatomic_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
+        #diatomic_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
         ui: str = "browser",
         full_benchmark: bool = False,
     ):
@@ -90,11 +90,11 @@ class MolecularBenchmark(zntrack.Node):
             value_extractor=lambda node: node
         )
         
-        diatomic_dict = process_data(
-            diatomic_data,
-            key_extractor=lambda node: node.name.split("_homonuclear-diatomics")[0],
-            value_extractor=lambda node: node
-        )
+        # diatomic_dict = process_data(
+        #     diatomic_data,
+        #     key_extractor=lambda node: node.name.split("_homonuclear-diatomics")[0],
+        #     value_extractor=lambda node: node
+        # )
         
     
         app_GMTKN55, wtmad_df_GMTKN55, mae_df_GMTKN55 = mlipx.GMTKN55Benchmark.mae_plot_interactive(

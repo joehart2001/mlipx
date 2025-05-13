@@ -330,7 +330,7 @@ def get_homonuclear_diatomic_stats(models):
         ]
     )
     
-    return table
+    return table.round(3)
 
     # subset=[
     #     "Conservation deviation [eV/Å]",

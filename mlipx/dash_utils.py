@@ -77,7 +77,7 @@ def dash_table_interactive(
             columns=[{"name": col, "id": col} for col in df.columns],
             data=df.to_dict('records'),
             style_cell={'textAlign': 'center', 'fontSize': '14px'},
-            style_header={'fontWeight': 'bold'},
+            style_header={'fontWeight': 'bold',"whiteSpace": "normal"},
             cell_selectable=True,
         ),
 

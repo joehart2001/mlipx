@@ -82,7 +82,9 @@ class FullBenchmark(zntrack.Node):
         
         GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
         
-        ui: str = "browser"
+        ui: str = "browser",
+        
+        return_app: bool = False,
     ):
         
         # extract apps
@@ -179,7 +181,9 @@ class FullBenchmark(zntrack.Node):
             return tab_layouts[tab_name]
 
 
-
+        if return_app:
+            return app_summary
+        
         from mlipx.dash_utils import run_app
         return run_app(app_summary, ui=ui)
     
