@@ -32,6 +32,7 @@ dependencies = [
     "cctk>=0.2.26",
     "matcalc>=0.3.3",
     "matminer>=0.9.3",
+    "bs4>=0.0.2",
 ]
 
 [dependency-groups]
