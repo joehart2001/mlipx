@@ -247,6 +247,8 @@ def load_node_objects(
                 model = name.split(split_str)[0]
                 if not models or model in models:
                     selected_nodes.append(name)
+                elif "ref" in name or "reference" in name:
+                    selected_nodes.append(name)
     else:
         for name in nodes:
             model = name.split(split_str)[0]
@@ -532,6 +534,7 @@ def lattice_constants_compare(
         ui=ui
     )
     
+    
 def load_nodes_and_ref_node_lat(node_objects, models, split_str):
     """Load nodes which are structured: Dict["model_name": zntrack.Node]
     and a single reference node
@@ -540,10 +543,12 @@ def load_nodes_and_ref_node_lat(node_objects, models, split_str):
     
     for name, node in node_objects.items():
         model = name.split(split_str)[0]
-        formula = name.split("LatticeConst-")[-1]
+        
         if "ref" in model:
+            print(f"Found reference node: {name}, {node}")
             ref_node = node
         else:
+            formula = name.split("LatticeConst-")[-1]
             benchmark_node_dict.setdefault(formula, {})[model] = node
     if models:
         # filter to selected models
@@ -737,14 +742,14 @@ def full_benchmark_compare(
         split_str_GMTKN55="_GMTKN55Benchmark",
     )
     
-    print('phonon_pred_node_dict = ', phonon_pred_node_dict)
-    print('phonon_ref_node_dict = ', phonon_ref_node_dict)
-    print('elasticity_dict = ', elasticity_dict)
-    print('lattice_const_dict = ', lattice_const_dict)
-    print('lattice_const_ref_node = ', lattice_const_ref_node)
-    print('X23_dict = ', X23_dict)
-    print('ICE_DMC_dict = ', ICE_DMC_dict)
-    print('GMTKN55_dict = ', GMTKN55_dict)
+    # print('phonon_pred_node_dict = ', phonon_pred_node_dict)
+    # print('phonon_ref_node_dict = ', phonon_ref_node_dict)
+    # print('elasticity_dict = ', elasticity_dict)
+    # print('lattice_const_dict = ', lattice_const_dict)
+    # print('lattice_const_ref_node = ', lattice_const_ref_node)
+    # print('X23_dict = ', X23_dict)
+    # print('ICE_DMC_dict = ', ICE_DMC_dict)
+    # print('GMTKN55_dict = ', GMTKN55_dict)
     
     
     if ui not in {None, "browser"}:
