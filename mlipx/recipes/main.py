@@ -635,3 +635,40 @@ def full_benchmark(
         smiles=smiles,
         n_materials=n_materials,
     )
+    
+    
+
+@app.command()
+def homonuclear_diatomics_benchmark(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run homonuclear diatomics calculations."""
+    if models is not None:
+        models_lst = models.split(",")
+        orcashell = ""
+        if "orca" in models_lst:
+            if "MLIPX_ORCA" not in os.environ:
+                orcashell = typer.prompt("Enter the path to the Orca executable")
+            else:
+                orcashell = None
+
+        render_template(
+            CWD / "models.py.jinja2",
+            "models.py",
+            models=models_lst,
+            orcashell=orcashell,
+        )
+
+    handle_recipe(
+        "homonuclear_diatomics_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+    )

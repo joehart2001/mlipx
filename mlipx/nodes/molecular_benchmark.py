@@ -33,7 +33,7 @@ from typing import List, Dict, Any, Optional
 
 
 import mlipx
-from mlipx import PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark
+from mlipx import GMTKN55Benchmark, HomonuclearDiatomics
 
 
 
@@ -54,6 +54,7 @@ class MolecularBenchmark(zntrack.Node):
     """
     # inputs
     GMTKN55_list: List[GMTKN55Benchmark] = zntrack.deps()
+    diatomic_list: List[HomonuclearDiatomics] = zntrack.deps()
     
     
     # outputs
@@ -70,7 +71,8 @@ class MolecularBenchmark(zntrack.Node):
 
     @staticmethod
     def benchmark_interactive(
-        GMTKN55_data: List[X23Benchmark] | Dict[str, X23Benchmark],
+        GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
+        diatomic_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
         ui: str = "browser",
         full_benchmark: bool = False,
     ):
@@ -88,11 +90,18 @@ class MolecularBenchmark(zntrack.Node):
             value_extractor=lambda node: node
         )
         
+        diatomic_dict = process_data(
+            diatomic_data,
+            key_extractor=lambda node: node.name.split("_homonuclear-diatomics")[0],
+            value_extractor=lambda node: node
+        )
+        
     
         app_GMTKN55, wtmad_df_GMTKN55, mae_df_GMTKN55 = mlipx.GMTKN55Benchmark.mae_plot_interactive(
             node_dict=GMTKN55_dict,
             run_interactive=False,
         )
+        
 
         # from mlipx.dash_utils import combine_mae_tables
         # combined_mae_table = combine_mae_tables(

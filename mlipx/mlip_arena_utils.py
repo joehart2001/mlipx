@@ -15,7 +15,7 @@ from mlipx.benchmark_download_utils import get_benchmark_data
 
 
 
-def get_homonuclear_diatomic_properties(model, node):
+def get_homonuclear_diatomic_properties(model, node, pbe_ref = False):
     
 
     df = pd.DataFrame(
@@ -39,8 +39,10 @@ def get_homonuclear_diatomic_properties(model, node):
             "spearman-ascending-force",
             "spearman-repulsion-energy",
             "spearman-attraction-energy",
-            "pbe-energy-mae",
-            "pbe-force-mae",
+            "num-energy-minima",
+            "num-energy-inflections",
+            #"pbe-energy-mae",
+            #"pbe-force-mae",
         ]
     )
 
@@ -86,6 +88,13 @@ def get_homonuclear_diatomic_properties(model, node):
 
         de_dr = np.gradient(es, rs)
         d2e_dr2 = np.gradient(de_dr, rs)
+        
+        # no. of minima
+        # finite diff to approximate deriv, convert to signs of slope, diff again to see how many times it crosses zero
+        num_minima = np.sum((np.diff(np.sign(np.diff(es))) > 0))
+        # no. of inflections
+        # sign changes of 2nd derivative
+        num_inflections = np.sum(np.diff(np.sign(d2e_dr2)) != 0)
 
         # avoid numerical sensitity close to zero
         rounded_fs = np.copy(fs)
@@ -116,41 +125,42 @@ def get_homonuclear_diatomic_properties(model, node):
         ejump = (
             np.abs(ediff[:-1][ediff_flip]).sum() + np.abs(ediff[1:][ediff_flip]).sum()
         )
+        
+        if pbe_ref:
+            try:
+                pbe_traj = read(f"./vasp/{da}/PBE.extxyz", index=":")
 
-        try:
-            pbe_traj = read(f"./vasp/{da}/PBE.extxyz", index=":")
+                pbe_rs, pbe_es, pbe_fs = [], [], []
 
-            pbe_rs, pbe_es, pbe_fs = [], [], []
+                for atoms in pbe_traj:
+                    vec = atoms.positions[1] - atoms.positions[0]
+                    r = np.linalg.norm(vec)
+                    pbe_rs.append(r)
+                    pbe_es.append(atoms.get_potential_energy())
+                    pbe_fs.append(np.inner(vec / r, atoms.get_forces()[1]))
 
-            for atoms in pbe_traj:
-                vec = atoms.positions[1] - atoms.positions[0]
-                r = np.linalg.norm(vec)
-                pbe_rs.append(r)
-                pbe_es.append(atoms.get_potential_energy())
-                pbe_fs.append(np.inner(vec / r, atoms.get_forces()[1]))
+                pbe_rs = np.array(pbe_rs)
+                pbe_es = np.array(pbe_es)
+                pbe_fs = np.array(pbe_fs)
 
-            pbe_rs = np.array(pbe_rs)
-            pbe_es = np.array(pbe_es)
-            pbe_fs = np.array(pbe_fs)
+                indices = np.argsort(pbe_rs)
+                pbe_rs = pbe_rs[indices]
+                pbe_es = pbe_es[indices]
+                pbe_fs = pbe_fs[indices]
 
-            indices = np.argsort(pbe_rs)
-            pbe_rs = pbe_rs[indices]
-            pbe_es = pbe_es[indices]
-            pbe_fs = pbe_fs[indices]
+                pbe_es -= pbe_es[-1]
 
-            pbe_es -= pbe_es[-1]
+                xs = np.linspace(pbe_rs.min(), pbe_rs.max(), int(1e3))
 
-            xs = np.linspace(pbe_rs.min(), pbe_rs.max(), int(1e3))
+                cs = UnivariateSpline(pbe_rs, pbe_es, s=0)
+                pbe_energy_mae = np.mean(np.abs(es - cs(rs)))
 
-            cs = UnivariateSpline(pbe_rs, pbe_es, s=0)
-            pbe_energy_mae = np.mean(np.abs(es - cs(rs)))
-
-            cs = UnivariateSpline(pbe_rs, pbe_fs, s=0)
-            pbe_force_mae = np.mean(np.abs(fs - cs(rs)))
-        except Exception as e:
-            print(e)
-            pbe_energy_mae = None
-            pbe_force_mae = None
+                cs = UnivariateSpline(pbe_rs, pbe_fs, s=0)
+                pbe_force_mae = np.mean(np.abs(fs - cs(rs)))
+            except Exception as e:
+                print(e)
+                pbe_energy_mae = None
+                pbe_force_mae = None
 
         conservation_deviation = np.mean(np.abs(fs + de_dr))
 
@@ -185,8 +195,10 @@ def get_homonuclear_diatomic_properties(model, node):
             "spearman-attraction-energy": stats.spearmanr(
                 rs[:imine], es[:imine]
             ).statistic,
-            "pbe-energy-mae": pbe_energy_mae,
-            "pbe-force-mae": pbe_force_mae,
+            "num-energy-minima": num_minima,
+            "num-energy-inflections": num_inflections,
+            #"pbe-energy-mae": pbe_energy_mae,
+            #"pbe-force-mae": pbe_force_mae,
         }
 
         df = pd.concat([df, pd.DataFrame([data])], ignore_index=True)
@@ -232,23 +244,25 @@ def get_homonuclear_diatomic_stats(models):
         new_row = {
             "Model": model,
             "Conservation deviation [eV/Å]": rows["conservation-deviation"].mean(),
+            "Tortuosity": rows["tortuosity"].mean(),
+            "Energy jump [eV]": rows["energy-jump"].mean(),
+            "Force flips": rows["force-flip-times"].mean(),
+            "No. energy minima": rows["num-energy-minima"].mean(),
+            "No. energy inflections": rows["num-energy-inflections"].mean(),
             "Spearman's coeff. (E: repulsion)": rows[
                 "spearman-repulsion-energy"
             ].mean(),
             "Spearman's coeff. (F: descending)": rows[
                 "spearman-descending-force"
             ].mean(),
-            "Tortuosity": rows["tortuosity"].mean(),
-            "Energy jump [eV]": rows["energy-jump"].mean(),
-            "Force flips": rows["force-flip-times"].mean(),
             "Spearman's coeff. (E: attraction)": rows[
                 "spearman-attraction-energy"
             ].mean(),
             "Spearman's coeff. (F: ascending)": rows[
                 "spearman-ascending-force"
             ].mean(),
-            "PBE energy MAE [eV]": rows["pbe-energy-mae"].mean(),
-            "PBE force MAE [eV/Å]": rows["pbe-force-mae"].mean(),
+            #"PBE energy MAE [eV]": rows["pbe-energy-mae"].mean(),
+            #"PBE force MAE [eV/Å]": rows["pbe-force-mae"].mean(),
         }
 
         table = pd.concat([table, pd.DataFrame([new_row])], ignore_index=True)
@@ -283,6 +297,12 @@ def get_homonuclear_diatomic_stats(models):
 
     table.sort_values("Force flips", ascending=True, inplace=True)
     table["Rank"] += np.argsort(np.abs(table["Force flips"].to_numpy() - 1))
+    
+    table.sort_values("No. energy minima", ascending=True, inplace=True)
+    table["Rank"] += np.argsort(table["No. energy minima"].to_numpy())
+    
+    table.sort_values("No. energy inflections", ascending=True, inplace=True)
+    table["Rank"] += np.argsort(table["No. energy inflections"].to_numpy())
 
     table["Rank"] += 1
 
@@ -296,13 +316,15 @@ def get_homonuclear_diatomic_stats(models):
             "Rank",
             "Rank aggr.",
             "Conservation deviation [eV/Å]",
-            "PBE energy MAE [eV]",
-            "PBE force MAE [eV/Å]",
-            "Spearman's coeff. (E: repulsion)",
-            "Spearman's coeff. (F: descending)",
+            #"PBE energy MAE [eV]",
+            #"PBE force MAE [eV/Å]",
             "Energy jump [eV]",
             "Force flips",
             "Tortuosity",
+            "No. energy minima",
+            "No. energy inflections",
+            "Spearman's coeff. (E: repulsion)",
+            "Spearman's coeff. (F: descending)",
             "Spearman's coeff. (E: attraction)",
             "Spearman's coeff. (F: ascending)",
         ]

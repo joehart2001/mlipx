@@ -102,6 +102,7 @@ class LatticeConstant(zntrack.Node):
         ref_node,
         ui: str | None = None,
         run_interactive: bool = True,
+        use_render: bool = False,
     ):
 
         ref_dict = ref_node.get_ref
