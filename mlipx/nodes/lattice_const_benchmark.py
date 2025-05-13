@@ -105,6 +105,9 @@ class LatticeConstant(zntrack.Node):
         use_render: bool = False,
     ):
 
+        print(ref_node)
+        print(ref_node.output_path)
+        print(ref_node.get_ref)
         ref_dict = ref_node.get_ref
         
         
