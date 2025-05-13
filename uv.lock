@@ -3232,7 +3232,6 @@ dependencies = [
     { name = "plotly" },
     { name = "rdkit2ase" },
     { name = "typer" },
-    { name = "zndraw" },
     { name = "znh5md" },
     { name = "zntrack" },
 ]
@@ -3292,7 +3291,6 @@ requires-dist = [
     { name = "sevenn", marker = "extra == 'sevenn'", specifier = ">=0.11.0" },
     { name = "tensorpotential", marker = "extra == 'grace'", specifier = ">=0.5.1" },
     { name = "typer", specifier = ">=0.15.1" },
-    { name = "zndraw", specifier = ">=0.5.10" },
     { name = "znh5md", specifier = ">=0.4.4" },
     { name = "zntrack", specifier = ">=0.8.5" },
 ]
@@ -7020,34 +7018,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/5b/83/a5432aa08312fc834ea594473385c005525e6a80d768a2ad246e78877afd/zc.lockfile-3.0.post1.tar.gz", hash = "sha256:adb2ee6d9e6a2333c91178dcb2c9b96a5744c78edb7712dc784a7d75648e81ec", size = 10190 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/aa/47f00f32605177a945f3a1b36a1b2bb9a39260566541280fcee27cbff5cf/zc.lockfile-3.0.post1-py3-none-any.whl", hash = "sha256:ddb2d71088c061dc8a5edbaa346b637d742ca1e1564be75cb98e7dcae715de19", size = 9770 },
-]
-
-[[package]]
-name = "zndraw"
-version = "0.5.10"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "ase" },
-    { name = "celery" },
-    { name = "eventlet" },
-    { name = "flask" },
-    { name = "flask-socketio" },
-    { name = "networkx" },
-    { name = "pandas" },
-    { name = "plotly" },
-    { name = "pydantic" },
-    { name = "python-socketio", extra = ["client"] },
-    { name = "redis" },
-    { name = "splines" },
-    { name = "sqlalchemy" },
-    { name = "tqdm" },
-    { name = "typer" },
-    { name = "znjson" },
-    { name = "znsocket" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/1f/6c/2d8ac15d26bf4c29d677bfd50fa7b73565d5419d634584654ccb984e6f43/zndraw-0.5.10.tar.gz", hash = "sha256:bc4336494b4e50697538f8c09dd26d5e979b1b5e83f5c61625ac5de8e4ba2952", size = 6852599 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/79/0b/a430a1fc2cbcfc35c91eba53bdf3b1b66b16abccc0d95f878b0059af10dd/zndraw-0.5.10-py3-none-any.whl", hash = "sha256:cbd850d548fb41777826c64e5a68c5b8afd243578ee258fd294b6cb3d84fc4ca", size = 3442726 },
 ]
 
 [[package]]
