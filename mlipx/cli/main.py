@@ -16,7 +16,7 @@ from rich.console import Console
 from rich.table import Table
 from tqdm import tqdm
 from typing_extensions import Annotated
-from zndraw import ZnDraw
+#from zndraw import ZnDraw
 import os
 
 from mlipx import benchmark, recipes
@@ -91,99 +91,99 @@ def info():
     console.print(mlip_table)
 
 
-@app.command()
-def compare(  # noqa C901
-    nodes: Annotated[list[str], typer.Argument(help="Path to the node to compare")],
-    zndraw_url: Annotated[
-        str,
-        typer.Option(
-            envvar="ZNDRAW_URL",
-            help="URL of the ZnDraw server to visualize the results",
-        ),
-    ],
-    kwarg: Annotated[list[str], typer.Option("--kwarg", "-k")] = None,
-    token: Annotated[str, typer.Option("--token")] = None,
-    glob: Annotated[
-        bool, typer.Option("--glob", help="Allow glob patterns to select nodes.")
-    ] = False,
-    convert_nan: Annotated[bool, typer.Option()] = False,
-    browser: Annotated[
-        bool,
-        typer.Option(
-            help="""Whether to open the ZnDraw GUI in the default web browser."""
-        ),
-    ] = True,
-    figures_path: Annotated[
-        str | None,
-        typer.Option(
-            help="Provide a path to save the figures to."
-            "No figures will be saved by default."
-        ),
-    ] = None,
-):
-    """Compare mlipx nodes and visualize the results using ZnDraw."""
-    # TODO: allow for glob patterns
-    if kwarg is None:
-        kwarg = []
-    node_names, revs, remotes = [], [], []
-    if glob:
-        fs = dvc.api.DVCFileSystem()
-        with fs.open("zntrack.json", mode="r") as f:
-            all_nodes = list(json.load(f).keys())
+# @app.command()
+# def compare(  # noqa C901
+#     nodes: Annotated[list[str], typer.Argument(help="Path to the node to compare")],
+#     zndraw_url: Annotated[
+#         str,
+#         typer.Option(
+#             envvar="ZNDRAW_URL",
+#             help="URL of the ZnDraw server to visualize the results",
+#         ),
+#     ],
+#     kwarg: Annotated[list[str], typer.Option("--kwarg", "-k")] = None,
+#     token: Annotated[str, typer.Option("--token")] = None,
+#     glob: Annotated[
+#         bool, typer.Option("--glob", help="Allow glob patterns to select nodes.")
+#     ] = False,
+#     convert_nan: Annotated[bool, typer.Option()] = False,
+#     browser: Annotated[
+#         bool,
+#         typer.Option(
+#             help="""Whether to open the ZnDraw GUI in the default web browser."""
+#         ),
+#     ] = True,
+#     figures_path: Annotated[
+#         str | None,
+#         typer.Option(
+#             help="Provide a path to save the figures to."
+#             "No figures will be saved by default."
+#         ),
+#     ] = None,
+# ):
+#     """Compare mlipx nodes and visualize the results using ZnDraw."""
+#     # TODO: allow for glob patterns
+#     if kwarg is None:
+#         kwarg = []
+#     node_names, revs, remotes = [], [], []
+#     if glob:
+#         fs = dvc.api.DVCFileSystem()
+#         with fs.open("zntrack.json", mode="r") as f:
+#             all_nodes = list(json.load(f).keys())
 
-    for node in nodes:
-        # can be name or name@rev or name@remote@rev
-        parts = node.split("@")
-        if glob:
-            filtered_nodes = [x for x in all_nodes if fnmatch.fnmatch(x, parts[0])]
-        else:
-            filtered_nodes = [parts[0]]
-        for x in filtered_nodes:
-            node_names.append(x)
-            if len(parts) == 1:
-                revs.append(None)
-                remotes.append(None)
-            elif len(parts) == 2:
-                revs.append(parts[1])
-                remotes.append(None)
-            elif len(parts) == 3:
-                remotes.append(parts[1])
-                revs.append(parts[2])
-            else:
-                raise ValueError(f"Invalid node format: {node}")
+#     for node in nodes:
+#         # can be name or name@rev or name@remote@rev
+#         parts = node.split("@")
+#         if glob:
+#             filtered_nodes = [x for x in all_nodes if fnmatch.fnmatch(x, parts[0])]
+#         else:
+#             filtered_nodes = [parts[0]]
+#         for x in filtered_nodes:
+#             node_names.append(x)
+#             if len(parts) == 1:
+#                 revs.append(None)
+#                 remotes.append(None)
+#             elif len(parts) == 2:
+#                 revs.append(parts[1])
+#                 remotes.append(None)
+#             elif len(parts) == 3:
+#                 remotes.append(parts[1])
+#                 revs.append(parts[2])
+#             else:
+#                 raise ValueError(f"Invalid node format: {node}")
 
-    node_instances = {}
-    for node_name, rev, remote in tqdm(
-        zip(node_names, revs, remotes), desc="Loading nodes"
-    ):
-        node_instances[node_name] = zntrack.from_rev(node_name, remote=remote, rev=rev)
+#     node_instances = {}
+#     for node_name, rev, remote in tqdm(
+#         zip(node_names, revs, remotes), desc="Loading nodes"
+#     ):
+#         node_instances[node_name] = zntrack.from_rev(node_name, remote=remote, rev=rev)
 
-    if len(node_instances) == 0:
-        typer.echo("No nodes to compare")
-        return
+#     if len(node_instances) == 0:
+#         typer.echo("No nodes to compare")
+#         return
 
-    typer.echo(f"Comparing {len(node_instances)} nodes")
+#     typer.echo(f"Comparing {len(node_instances)} nodes")
 
-    kwargs = {}
-    for arg in kwarg:
-        key, value = arg.split("=", 1)
-        kwargs[key] = value
-    result = node_instances[node_names[0]].compare(*node_instances.values(), **kwargs)
+#     kwargs = {}
+#     for arg in kwarg:
+#         key, value = arg.split("=", 1)
+#         kwargs[key] = value
+#     result = node_instances[node_names[0]].compare(*node_instances.values(), **kwargs)
 
-    token = token or str(uuid.uuid4())
-    typer.echo(f"View the results at {zndraw_url}/token/{token}")
-    vis = ZnDraw(zndraw_url, token=token, convert_nan=convert_nan)
-    length = len(vis)
-    vis.extend(result["frames"])
-    del vis[:length]  # temporary fix
-    vis.figures = result["figures"]
-    if browser:
-        webbrowser.open(f"{zndraw_url}/token/{token}")
-    if figures_path:
-        for desc, fig in result["figures"].items():
-            pio.write_json(fig, pathlib.Path(figures_path) / f"{desc}.json")
+#     token = token or str(uuid.uuid4())
+#     typer.echo(f"View the results at {zndraw_url}/token/{token}")
+#     vis = ZnDraw(zndraw_url, token=token, convert_nan=convert_nan)
+#     length = len(vis)
+#     vis.extend(result["frames"])
+#     del vis[:length]  # temporary fix
+#     vis.figures = result["figures"]
+#     if browser:
+#         webbrowser.open(f"{zndraw_url}/token/{token}")
+#     if figures_path:
+#         for desc, fig in result["figures"].items():
+#             pio.write_json(fig, pathlib.Path(figures_path) / f"{desc}.json")
 
-    vis.socket.sleep(5)
+#     vis.socket.sleep(5)
 
 
 
@@ -259,17 +259,17 @@ def load_node_objects(
 
     # Instantiate nodes
     node_objects = {}
-    def load_node(name):
-        return name, zntrack.from_rev(name)
+    # def load_node(name):
+    #     return name, zntrack.from_rev(name)
 
-    with ThreadPoolExecutor() as executor:
-        futures = {executor.submit(load_node, name): name for name in selected_nodes}
-        for future in tqdm(as_completed(futures), total=len(futures), desc="Loading ZnTrack nodes"):
-            name, obj = future.result()
-            node_objects[name] = obj
+    # with ThreadPoolExecutor() as executor:
+    #     futures = {executor.submit(load_node, name): name for name in selected_nodes}
+    #     for future in tqdm(as_completed(futures), total=len(futures), desc="Loading ZnTrack nodes"):
+    #         name, obj = future.result()
+    #         node_objects[name] = obj
         
-    # for name in selected_nodes:
-    #     node_objects[name] = zntrack.from_rev(name)
+    for name in selected_nodes:
+        node_objects[name] = zntrack.from_rev(name)
 
     return node_objects
     
@@ -499,7 +499,7 @@ def get_bulk_crystal_benchmark_node_dicts(
     
     phonon_pred_node_dict, phonon_ref_node_dict = load_nodes_mpid_model(phonon_node_objects, models, split_str=split_str_phonons)
     elasticity_dict = load_nodes_model(elasticity_node_objects, models, split_str=split_str_elasticity)
-    lattice_const_dict, lattice_const_ref_node = load_nodes_and_ref_node(lattice_const_node_objects, models, split_str=split_str_lattice_const)
+    lattice_const_dict, lattice_const_ref_node = load_nodes_and_ref_node_lat(lattice_const_node_objects, models, split_str=split_str_lattice_const)
     
     return phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node
     
@@ -518,7 +518,7 @@ def lattice_constants_compare(
         all_nodes = list(json.load(f).keys())
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_lattice-constant")
     
-    benchmark_node_dict, lattice_const_ref_node = load_nodes_and_ref_node(node_objects, models, split_str="_lattice-constant")
+    benchmark_node_dict, lattice_const_ref_node = load_nodes_and_ref_node_lat(node_objects, models, split_str="_lattice-constant")
     
     
     if ui not in {None, "browser"}:
@@ -532,7 +532,7 @@ def lattice_constants_compare(
         ui=ui
     )
     
-def load_nodes_and_ref_node(node_objects, models, split_str):
+def load_nodes_and_ref_node_lat(node_objects, models, split_str):
     """Load nodes which are structured: Dict["model_name": zntrack.Node]
     and a single reference node
     """
@@ -815,3 +815,10 @@ def get_mol_benchmark_node_dicts(
     GMTKN55_dict = load_nodes_model(GMTKN55_node_objects, models, split_str=split_str_GMTKN55)
     
     return GMTKN55_dict
+
+
+
+
+@app.command()
+def diatomics_compare():
+    pass

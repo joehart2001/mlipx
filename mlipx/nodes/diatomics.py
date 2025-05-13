@@ -309,8 +309,9 @@ class HomonuclearDiatomics(zntrack.Node):
         ui: str | None = None,
     ):
         
-        diatomics_dict = {}
         
+        results_dict = {}
+
         for model_name, node in node_dict.items():
             
             results = node.results # df:  | dist | H-H | He-He | Li-Li | ...
@@ -318,8 +319,42 @@ class HomonuclearDiatomics(zntrack.Node):
             results.index.name = "distance"
             results.reset_index(inplace=True)
             
-            diatomics_dict[model_name] = results
+            results_dict[model_name] = results
+                
+
+
+            from mlipx.mlip_arena_utils import get_homonuclear_diatomic_properties, get_homonuclear_diatomic_stats
+
+            for model in node_dict.keys():
+                get_homonuclear_diatomic_properties(model, node_dict[model])
+                    
+                    
+        
+        stats_df = get_homonuclear_diatomic_stats(list(node_dict.keys()))
+                    
+
         
         
+        # ---- Dash app ----
         
-            
+        import dash
+        app = dash.Dash(__name__)
+        
+        from mlipx.dash_utils import dash_table_interactive
+        
+        app.layout = dash_table_interactive(
+            df = stats_df,
+            id = 'diatomics-stats-table',
+            title = "Homonuclear Diatomics Statistics",
+        )
+        
+        
+        #LatticeConstant.register_callbacks(app, mae_df, lat_const_df)
+        
+
+        from mlipx.dash_utils import run_app
+
+        if not run_interactive:
+            return app
+
+        return run_app(app, ui=ui)
