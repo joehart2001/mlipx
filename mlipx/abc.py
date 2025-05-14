@@ -12,6 +12,7 @@ import plotly.graph_objects as go
 import znh5md
 import zntrack
 from ase.calculators.calculator import Calculator
+from mace.calculators import Calculator
 from ase.md.md import MolecularDynamics
 
 T = t.TypeVar("T", bound=zntrack.Node)
@@ -36,6 +37,7 @@ class ASEKeys(str, Enum):
 
 class NodeWithCalculator(t.Protocol[T]):
     def get_calculator(self, **kwargs) -> Calculator: ...
+    
 
 
 class NodeWithMolecularDynamics(t.Protocol[T]):

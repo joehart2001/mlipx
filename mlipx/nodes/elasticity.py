@@ -88,7 +88,7 @@ class Elasticity(zntrack.Node):
 
     def run(self):
         
-        calc = self.model.get_calculator()
+        calc = self.model.get_calculator(device_override="cpu")
         # TODO: issue with using GPU for this calculation
         
         # with open(self.dataset_path, "r") as f:

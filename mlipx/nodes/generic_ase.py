@@ -44,11 +44,13 @@ class GenericASECalculator:
     kwargs: dict[str, t.Any] | None = None
     device: t.Literal["auto", "cpu", "cuda"] | None = None
 
-    def get_calculator(self, **kwargs) -> Calculator:
+    def get_calculator(self, device_override = None, **kwargs) -> Calculator:
         if self.kwargs is not None:
             kwargs.update(self.kwargs)
         module = importlib.import_module(self.module)
         cls = getattr(module, self.class_name)
+        if device_override:
+            self.device = device_override
         if self.device is None:
             return cls(**kwargs)
         elif self.device == "auto":
@@ -63,3 +65,5 @@ class GenericASECalculator:
             return True
         except ImportError:
             return False
+        
+
