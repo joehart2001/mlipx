@@ -99,22 +99,22 @@ class FullBenchmark(zntrack.Node):
             report=report,
         )
         
-        # mol_crystal_benchmark_app, mol_crystal_benchmark_score_df, mol_crystal_register_callbacks = MolecularCrystalBenchmark.benchmark_interactive(
-        #     X23_data=X23_data,
-        #     DMC_ICE_data=DMC_ICE_data,
-        #     full_benchmark=True,
-        # )
+        mol_crystal_benchmark_app, mol_crystal_benchmark_score_df, mol_crystal_register_callbacks = MolecularCrystalBenchmark.benchmark_interactive(
+            X23_data=X23_data,
+            DMC_ICE_data=DMC_ICE_data,
+            full_benchmark=True,
+        )
         
-        # mol_benchmark_app, mol_benchmark_score_df, mol_register_callbacks = MolecularBenchmark.benchmark_interactive(
-        #     GMTKN55_data=GMTKN55_data,
-        #     full_benchmark=True,
-        # )
+        mol_benchmark_app, mol_benchmark_score_df, mol_register_callbacks = MolecularBenchmark.benchmark_interactive(
+            GMTKN55_data=GMTKN55_data,
+            full_benchmark=True,
+        )
 
         # df with score for each benchmark and model
         scores_all_df = FullBenchmark.get_overall_score_df(
             (bulk_benchmark_score_df, "Bulk Crystal"),
-            # (mol_crystal_benchmark_score_df, "Molecular Crystal"),
-            # (mol_benchmark_score_df, "Molecular"),
+            (mol_crystal_benchmark_score_df, "Molecular Crystal"),
+            (mol_benchmark_score_df, "Molecular"),
         )
         
         if not os.path.exists("benchmark_stats/"):
@@ -149,14 +149,14 @@ class FullBenchmark(zntrack.Node):
         tab_layouts = {
             "Overall Benchmark": summary_layout,
             "Bulk Crystal": bulk_benchmark_app.layout,
-            # "Molecular Crystal": mol_crystal_benchmark_app.layout,
-            # "Molecular": mol_benchmark_app.layout,
+            "Molecular Crystal": mol_crystal_benchmark_app.layout,
+            "Molecular": mol_benchmark_app.layout,
         }
         
         # Register callbacks for each app
         bulk_register_callbacks(app_summary)
-        # mol_crystal_register_callbacks(app_summary)
-        # mol_register_callbacks(app_summary)
+        mol_crystal_register_callbacks(app_summary)
+        mol_register_callbacks(app_summary)
         
         app_summary.layout = html.Div([
             dcc.Tabs(
