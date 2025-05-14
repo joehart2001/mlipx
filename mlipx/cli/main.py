@@ -697,6 +697,7 @@ def full_benchmark_compare(
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+    report: Annotated[bool, Option("--report", help="Generate a report")] = True,
     ):
     
     nodes = [
@@ -770,6 +771,7 @@ def full_benchmark_compare(
             GMTKN55_data=GMTKN55_dict,
             ui=ui,
             return_app = return_app
+            report=report,
         )
     else:
         FullBenchmark.benchmark_interactive(
@@ -782,6 +784,7 @@ def full_benchmark_compare(
             DMC_ICE_data=ICE_DMC_dict,
             GMTKN55_data=GMTKN55_dict,
             ui=ui,
+            report=report,
         )
     
     

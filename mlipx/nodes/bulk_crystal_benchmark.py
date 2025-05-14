@@ -95,6 +95,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
         ui: str = "browser",
         full_benchmark: bool = False,
+        report: bool = True,
     ):
         
         
@@ -174,12 +175,13 @@ class BulkCrystalBenchmark(zntrack.Node):
         
         md_path_list = [elas_md_path, lattice_const_md_path, phonon_md_path]
     
-        # BulkCrystalBenchmark.generate_report(
-        #     bulk_crystal_benchmark_score_df=bulk_crystal_benchmark_score_df,
-        #     md_report_paths=md_path_list,
-        #     markdown_path="benchmark_stats/bulk_crystal_benchmark/bulk_crystal_benchmark_report.md",
-        #     combined_mae_table=combined_mae_table,
-        # )
+        if report:
+            BulkCrystalBenchmark.generate_report(
+                bulk_crystal_benchmark_score_df=bulk_crystal_benchmark_score_df,
+                md_report_paths=md_path_list,
+                markdown_path="benchmark_stats/bulk_crystal_benchmark/bulk_crystal_benchmark_report.md",
+                combined_mae_table=combined_mae_table,
+            )
 
 
         if ui is None and not full_benchmark:
