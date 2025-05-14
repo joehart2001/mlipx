@@ -12,7 +12,6 @@ import plotly.graph_objects as go
 import znh5md
 import zntrack
 from ase.calculators.calculator import Calculator
-from mace.calculators import Calculator
 from ase.md.md import MolecularDynamics
 
 T = t.TypeVar("T", bound=zntrack.Node)
