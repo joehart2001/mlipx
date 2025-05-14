@@ -770,7 +770,7 @@ def full_benchmark_compare(
             DMC_ICE_data=ICE_DMC_dict,
             GMTKN55_data=GMTKN55_dict,
             ui=ui,
-            return_app = return_app
+            return_app = return_app,
             report=report,
         )
     else:
