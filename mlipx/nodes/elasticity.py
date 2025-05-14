@@ -101,6 +101,7 @@ class Elasticity(zntrack.Node):
                                         relax_structure=self.relax_structure,
                                         norm_strains = self.norm_strains,
                                         shear_strains = self.shear_strains,
+                                        benchmark_name = "mp-pbe-elasticity-2025.3.json.gz"
         )
         
         
