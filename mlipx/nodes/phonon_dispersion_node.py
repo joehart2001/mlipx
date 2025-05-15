@@ -361,6 +361,8 @@ class PhononDispersion(zntrack.Node):
         distances_ref = band_structure_ref["distances"]
         frequencies_ref = band_structure_ref["frequencies"]
         dos_freqs_ref, dos_values_ref = node_ref.dos
+        # remove points of zero density to avoid artifacts in the plot
+        dos_freqs_pred, dos_values_pred = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
 
 
         
@@ -467,49 +469,6 @@ class PhononDispersion(zntrack.Node):
 
 
 
-    def process_structure_worker(mp_id, ref_node_dict_data, pred_node_dict_data, benchmarks):
-        try:
-            ref_node = ref_node_dict_data[mp_id]
-            pred_nodes = pred_node_dict_data[mp_id]
-
-            ref_band_data = {}
-            ref_benchmarks = {}
-            pred_benchmarks = {}
-
-            if not PhononDispersion.process_reference_data(
-                {mp_id: ref_node}, mp_id, ref_band_data, ref_benchmarks, pred_benchmarks
-            ):
-                return None
-
-            model_benchmarks = {}
-            plot_stats = {}
-            scatter_map = {}
-            phonon_paths = {}
-            point_map = []
-
-            PhononDispersion.process_prediction_data(
-                pred_nodes,
-                ref_node,
-                mp_id,
-                ref_benchmarks,
-                pred_benchmarks,
-                model_benchmarks,
-                plot_stats,
-                scatter_map,
-                phonon_paths,
-                point_map,
-                benchmarks
-            )
-
-            return mp_id, ref_band_data, ref_benchmarks, pred_benchmarks, model_benchmarks, plot_stats, scatter_map, phonon_paths, point_map
-
-        except Exception as e:
-            return f"Error processing {mp_id}: {e}"
-
-
-
-
-
     @staticmethod
     def benchmark_interactive(pred_node_dict, ref_node_dict, ui = None, run_interactive = True):
         """
@@ -533,13 +492,15 @@ class PhononDispersion(zntrack.Node):
         point_index_to_id = []
         
         benchmarks = [
-            'max_freq', 
+            'max_freq',
+            'min_freq',
             'S',
             'F',
             'C_V',
         ]
         benchmark_units = {
             'max_freq': 'THz', 
+            'min_freq': 'THz',
             'S': '[J/K/mol]',
             'F': '[kJ/mol]',
             'C_V': '[J/K/mol]',
@@ -547,6 +508,7 @@ class PhononDispersion(zntrack.Node):
         
         pretty_benchmark_labels = {
             'max_freq': 'ω_max [THz]',
+            'min_freq': 'ω_min [THz]',
             'S': 'S [J/mol·K]',
             'F': 'F [kJ/mol]',
             'C_V': 'C_V [J/mol·K]'
@@ -555,66 +517,6 @@ class PhononDispersion(zntrack.Node):
 
         model_benchmarks_dict = {} # max_freq, min_freq ...
         plot_stats_dict = {}
-        
-        # # -----------
-        # from functools import partial
-        
-        # benchmarks = ['max_freq', 'S', 'F', 'C_V']
-        # ref_node_dict_data = {k: v for k, v in ref_node_dict.items() if k in pred_node_dict}
-        # pred_node_dict_data = pred_node_dict
-
-        # worker_func = partial(
-        #     PhononDispersion.process_structure_worker,
-        #     ref_node_dict_data=ref_node_dict_data,
-        #     pred_node_dict_data=pred_node_dict_data,
-        #     benchmarks=benchmarks
-        # )
-
-        # with ProcessPoolExecutor(max_workers=os.cpu_count()) as executor:
-        #     results = list(tqdm(executor.map(worker_func, pred_node_dict.keys()), total=len(pred_node_dict), desc="Parallel processing"))
-
-        # # Now merge results
-        # for result in results:
-        #     if result is None or isinstance(result, str):
-        #         if isinstance(result, str):
-        #             print(result)
-        #         continue
-
-        #     mp_id, ref_band, ref_bench, pred_bench, model_bench, stats, scatter_map, paths, point_map = result
-
-        #     ref_band_data_dict[mp_id] = ref_band[mp_id]
-        #     ref_benchmarks_dict[mp_id] = ref_bench[mp_id]
-        #     pred_benchmarks_dict[mp_id] = pred_bench[mp_id]
-
-        #     for model in model_bench:
-        #         if model not in model_benchmarks_dict:
-        #             model_benchmarks_dict[model] = model_bench[model]
-        #         else:
-        #             for b in model_bench[model]:
-        #                 model_benchmarks_dict[model][b]['ref'].extend(model_bench[model][b]['ref'])
-        #                 model_benchmarks_dict[model][b]['pred'].extend(model_bench[model][b]['pred'])
-
-        #     for model in stats:
-        #         if model not in plot_stats_dict:
-        #             plot_stats_dict[model] = stats[model]
-        #         else:
-        #             for b in stats[model]:
-        #                 plot_stats_dict[model][b]['RMSE'].extend(stats[model][b]['RMSE'])
-        #                 plot_stats_dict[model][b]['MAE'].extend(stats[model][b]['MAE'])
-
-        #     for model in scatter_map:
-        #         if model not in scatter_to_dispersion_map:
-        #             scatter_to_dispersion_map[model] = scatter_map[model]
-        #         else:
-        #             scatter_to_dispersion_map[model]['hover'].extend(scatter_map[model]['hover'])
-        #             scatter_to_dispersion_map[model]['point_map'].extend(scatter_map[model]['point_map'])
-        #             scatter_to_dispersion_map[model]['img_paths'].update(scatter_map[model]['img_paths'])
-
-        #     for mpid in paths:
-        #         phonon_plot_paths[mpid] = paths[mpid]
-
-        #     point_index_to_id.extend(point_map)
-        
         
         
         #-------------
@@ -650,7 +552,10 @@ class PhononDispersion(zntrack.Node):
             pretty_benchmark_labels, 
             benchmarks
         )
-        #mae_summary_df
+        # Add stability classification column using static method
+        mae_summary_df = PhononDispersion.add_stability_classification_column(mae_summary_df, model_benchmarks_dict)
+        mae_summary_df = PhononDispersion.add_band_mae_column(mae_summary_df, scatter_to_dispersion_map)
+        
         
         PhononDispersion.generate_and_save_plots(
             scatter_to_dispersion_map,
@@ -670,38 +575,49 @@ class PhononDispersion(zntrack.Node):
         if ui is None and run_interactive:
             return
 
-        
         # --------------------------------- Dash app ---------------------------------
 
-        # Dash app
+        from mlipx.dash_utils import dash_table_interactive
         app = dash.Dash(__name__)
 
-        app.layout = html.Div([
-            html.H2("Phonon dispersion MAE Summary Table (300 K)", style={"color": "black"}),
+        # Separate the "Stability Classification (F1)" column for the stability table
+        summary_columns = [col for col in mae_summary_df.columns if col != "Stability Classification (F1)"]
+        stability_columns = ["Model", "Stability Classification (F1)"] if "Stability Classification (F1)" in mae_summary_df.columns else []
 
-            dash_table.DataTable(
-                id='phonon-mae-summary-table',
-                columns=[{"name": col, "id": col} for col in mae_summary_df.columns],
-                data=mae_summary_df.to_dict('records'),
-                style_cell={'textAlign': 'center', 'fontSize': '14px'},
-                style_header={'fontWeight': 'bold'},
-                style_data_conditional=[
-                    {
-                        'if': {'row_index': 'odd'},
-                        'backgroundColor': 'rgb(248, 248, 248)'
-                    }
-                ],
-                cell_selectable=True
-            ),
+        # Use shared dash_table_interactive for summary table
+        summary_table_layout = dash_table_interactive(
+            df=mae_summary_df[summary_columns],
+            id='phonon-mae-summary-table',
+            title="Phonon dispersion MAE Summary Table (300 K)",
+            extra_components=[
+                dcc.Store(id="phonon-summary-table-last-clicked"),
+                html.Div(id="phonon-summary-plot-container"),
+            ],
+        )
 
-            dcc.Store(id="phonon-mae-table-last-clicked"),
+        # Use shared dash_table_interactive for stability table
+        stability_table_layout = dash_table_interactive(
+            df=mae_summary_df[stability_columns],
+            id='phonon-stability-table',
+            title=html.Span([
+                "Stability Classification: imaginary modes (threshold |ω",
+                html.Sub("imag"),
+                "| < 0.05 THz)"
+            ]),
+            extra_components=[
+                dcc.Store(id="phonon-stability-table-last-clicked"),
+                html.Div(id="phonon-stability-plot-container"),
+            ],
+        )
 
-            html.Br(),
-
-            #html.H2("Pair Correlation Plot: Predicted vs Reference", style={"color": "black"}),
-
-            html.Div(id="model-graphs-container")
-        ], style={"backgroundColor": "white", "padding": "20px"})
+        app.layout = html.Div(
+            [
+                summary_table_layout,
+                html.Br(),
+                stability_table_layout,
+            ],
+            style={"backgroundColor": "white", "padding": "20px"}
+        )
 
         # Register callbacks using the static method
         PhononDispersion.register_callbacks(
@@ -711,7 +627,6 @@ class PhononDispersion(zntrack.Node):
             model_benchmarks_dict=model_benchmarks_dict,
         )
 
-    
         from mlipx.dash_utils import run_app
 
         if not run_interactive:
@@ -733,79 +648,86 @@ class PhononDispersion(zntrack.Node):
 
     @staticmethod
     def register_callbacks(
-        app, 
-        mae_df, 
-        scatter_to_dispersion_map, 
-        model_benchmarks_dict, 
+        app,
+        mae_df,
+        scatter_to_dispersion_map,
+        model_benchmarks_dict,
     ):
-
-
+        from dash import callback_context
+        import numpy as np
+        # Callback for summary table plot
         @app.callback(
-            Output("model-graphs-container", "children"),
-            Output("phonon-mae-table-last-clicked", "data"),
+            Output("phonon-summary-plot-container", "children"),
+            Output("phonon-summary-table-last-clicked", "data"),
             Input("phonon-mae-summary-table", "active_cell"),
-            State("phonon-mae-table-last-clicked", "data"),
+            State("phonon-summary-table-last-clicked", "data"),
             prevent_initial_call=True
         )
-        def update_single_model_plot(active_cell, last_clicked):
-            if active_cell is None:
-                raise PreventUpdate
-
+        def update_summary_plot(summary_active_cell, summary_last_clicked):
+            ctx = callback_context
+            triggered_id = ctx.triggered_id
             pretty_benchmark_labels = {
                 'max_freq': 'ω_max [THz]',
+                'min_freq': 'ω_min [THz]',
                 'S': 'S [J/mol·K]',
                 'F': 'F [kJ/mol]',
                 'C_V': 'C_V [J/mol·K]'
             }
-            
             label_to_key = {v: k for k, v in pretty_benchmark_labels.items()}
-            
-            
-            row = active_cell["row"]
-            col = active_cell["column_id"]
+            if summary_active_cell is None:
+                raise PreventUpdate
+            row = summary_active_cell["row"]
+            col = summary_active_cell["column_id"]
             model_name = mae_df.loc[row, "Model"]
+            # Only allow property columns (not "Model" or "Stability Classification (F1)")
             if col not in mae_df.columns or col == "Model":
-                return None, active_cell
-
-            if last_clicked is not None and (
-                active_cell["row"] == last_clicked.get("row") and
-                active_cell["column_id"] == last_clicked.get("column_id")
+                return None, summary_active_cell
+            if summary_last_clicked is not None and (
+                summary_active_cell["row"] == summary_last_clicked.get("row") and
+                summary_active_cell["column_id"] == summary_last_clicked.get("column_id")
             ):
                 return None, None
-
+            if col == "Stability Classification (F1)":
+                return None, summary_active_cell
+            if col == "Avg Band MAE":
+                band_error_dict = scatter_to_dispersion_map[model_name].get("band_errors", {})
+                all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
+                import plotly.express as px
+                fig = px.violin(
+                    y=all_errors,
+                    box=True,
+                    points="outliers",
+                    title=f"{model_name} - Band MAE Distribution",
+                    labels={"y": "Absolute Error (THz)"}
+                )
+                return html.Div([dcc.Graph(figure=fig)]), summary_active_cell
             selected_property = label_to_key.get(col)
             if selected_property is None:
-                return html.Div("Invalid property selected."), active_cell
-
+                return html.Div("Invalid property selected."), summary_active_cell
             data = model_benchmarks_dict[model_name]
-
             ref_vals = data[selected_property]['ref']
             pred_vals = data[selected_property]['pred']
-
             pretty_label = pretty_benchmark_labels[selected_property]
             mae = mae_df.loc[mae_df["Model"] == model_name, pretty_label].values[0]
-
-            
             scatter_fig = PhononDispersion.create_scatter_plot(
-                ref_vals, 
-                pred_vals, 
-                model_name, 
-                selected_property, 
-                mae, 
+                ref_vals,
+                pred_vals,
+                model_name,
+                selected_property,
+                mae,
                 pretty_benchmark_labels
             )
-            
-            
             return html.Div([
-                html.H4(f"{model_name} - {selected_property.replace('_', ' ').title()}", style={"color": "black"}),
+                #html.H4(f"{model_name} - {selected_property.replace('_', ' ').title()}", style={"color": "black"}),
+                html.P("Info: Click on a point to view its phonon dispersion plot.", style={"fontSize": "14px", "color": "#555"}),
                 html.Div([
                     dcc.Graph(
-                        id={'type': 'pair-plot', 'index': model_name},
+                        id={'type': 'mae-summary-pair-plot', 'index': model_name},
                         figure=scatter_fig,
                         style={"width": "45vw", "height": "60vh"}
                     ),
                     html.Div(
-                        id={'type': 'plot-display', 'index': model_name},
+                        id={'type': 'mae-summary-plot-display', 'index': model_name},
                         style={
                             "width": "50vw",
                             "height": "60vh",
@@ -824,14 +746,98 @@ class PhononDispersion(zntrack.Node):
                     "justifyContent": "space-between",
                     "marginBottom": "40px"
                 })
-            ]), active_cell
+            ]), summary_active_cell
 
+        # Callback for stability table plot
         @app.callback(
-            Output({'type': 'plot-display', 'index': MATCH}, 'children'),
-            Input({'type': 'pair-plot', 'index': MATCH}, 'clickData'),
-            State({'type': 'pair-plot', 'index': MATCH}, 'id')
+            Output("phonon-stability-plot-container", "children"),
+            Output("phonon-stability-table-last-clicked", "data"),
+            Input("phonon-stability-table", "active_cell"),
+            State("phonon-stability-table-last-clicked", "data"),
+            prevent_initial_call=True
         )
-        def display_phonon_plot(clickData, graph_id):
+        def update_stability_plot(stability_active_cell, stability_last_clicked):
+            ctx = callback_context
+            if stability_active_cell is None:
+                raise PreventUpdate
+            row = stability_active_cell["row"]
+            col = stability_active_cell["column_id"]
+            model_name = mae_df.loc[row, "Model"]
+            # Only allow clicking the F1 for stability
+            if col != "Stability Classification (F1)":
+                return None, stability_active_cell
+            if stability_last_clicked is not None and (
+                stability_active_cell["row"] == stability_last_clicked.get("row") and
+                stability_active_cell["column_id"] == stability_last_clicked.get("column_id")
+            ):
+                return None, None
+            threshold = -0.05
+            data = model_benchmarks_dict[model_name]
+            ref_vals = np.array(data["min_freq"]['ref'])
+            pred_vals = np.array(data["min_freq"]['pred'])
+            labels = []
+            for r, p in zip(ref_vals, pred_vals):
+                ref_stable = r > threshold
+                pred_stable = p > threshold
+                if ref_stable and pred_stable:
+                    labels.append("TN")
+                elif not ref_stable and not pred_stable:
+                    labels.append("TP")
+                elif not ref_stable and pred_stable:
+                    labels.append("FN")
+                else:
+                    labels.append("FP")
+            scatter_fig = PhononDispersion.create_stability_scatter_plot(ref_vals, pred_vals, labels)
+            tn = sum(l == "TN" for l in labels)
+            fp = sum(l == "FP" for l in labels)
+            fn = sum(l == "FN" for l in labels)
+            tp = sum(l == "TP" for l in labels)
+            conf_matrix = np.array([[tn, fp], [fn, tp]])
+            confusion_fig = PhononDispersion.create_confusion_matrix_figure(conf_matrix, labels=["Stable", "Not Stable"], model_name=model_name)
+            visuals = html.Div([
+                html.P("Info: Click on a point to view its phonon dispersion plot.", style={"fontSize": "14px", "color": "#555"}),
+                html.Div([
+                    dcc.Graph(
+                        id={'type': 'stability-pair-plot', 'index': model_name},
+                        figure=scatter_fig,
+                        style={"width": "45vw", "height": "60vh"}
+                    ),
+                    html.Div(
+                        id={'type': 'stability-plot-display', 'index': model_name},
+                        style={
+                            "width": "50vw",
+                            "height": "60vh",
+                            "marginLeft": "2vw",
+                            "display": "flex",
+                            "alignItems": "center",
+                            "justifyContent": "center",
+                            "border": "1px solid #ccc",
+                            "padding": "10px",
+                        }
+                    )
+                ], style={
+                    "display": "flex",
+                    "flexDirection": "row",
+                    "alignItems": "center",
+                    "justifyContent": "space-between",
+                    "marginBottom": "20px"
+                }),
+                dcc.Graph(
+                    id={'type': 'confusion-matrix', 'index': model_name},
+                    figure=confusion_fig,
+                    style={"width": "90vw", "height": "45vh", "marginTop": "10px"}
+                ),
+            ])
+            return visuals, stability_active_cell
+
+        # Callback for clicking on summary pair plot (distinct ID namespace)
+        @app.callback(
+            Output({'type': 'mae-summary-plot-display', 'index': MATCH}, 'children'),
+            Input({'type': 'mae-summary-pair-plot', 'index': MATCH}, 'clickData'),
+            State({'type': 'mae-summary-pair-plot', 'index': MATCH}, 'id'),
+            prevent_initial_call=True
+        )
+        def display_summary_phonon_plot(clickData, graph_id):
             model_name = graph_id['index']
             if clickData is None:
                 return html.Div("Click on a point to view its phonon dispersion plot.")
@@ -848,6 +854,32 @@ class PhononDispersion(zntrack.Node):
                     "border": "2px solid black"
                 }
             )
+
+        # Callback for clicking on stability pair plot (distinct ID namespace)
+        @app.callback(
+            Output({'type': 'stability-plot-display', 'index': MATCH}, 'children'),
+            Input({'type': 'stability-pair-plot', 'index': MATCH}, 'clickData'),
+            State({'type': 'stability-pair-plot', 'index': MATCH}, 'id'),
+            prevent_initial_call=True
+        )
+        def display_stability_phonon_plot(clickData, graph_id):
+            model_name = graph_id['index']
+            if clickData is None:
+                return html.Div("Click on a point to view its phonon dispersion plot.")
+            point_index = clickData['points'][0]['pointIndex']
+            mp_id, _ = scatter_to_dispersion_map[model_name]['point_map'][point_index]
+            img_path = scatter_to_dispersion_map[model_name]['img_paths'][mp_id]
+            encoded_img = base64.b64encode(open(img_path, 'rb').read()).decode()
+            return html.Img(
+                src=f'data:image/png;base64,{encoded_img}',
+                style={
+                    "width": "80%",
+                    "height": "80%",
+                    "objectFit": "contain",
+                    "border": "2px solid black"
+                }
+            )
+
 
 
     def generate_phonon_report(
@@ -942,6 +974,8 @@ class PhononDispersion(zntrack.Node):
             
         try:
             dos_freqs_ref, dos_values_ref = node_ref.dos
+            # remove values with zero density to avoid artifacts in the plot + min/max freq calulations
+            dos_freqs_ref, dos_values_ref = dos_freqs_ref[dos_values_ref > 0], dos_values_ref[dos_values_ref > 0]
         except FileNotFoundError:
             print(f"Skipping {node_ref.name} — dos file not found at {node_ref.dos_path}")
             return False
@@ -956,6 +990,7 @@ class PhononDispersion(zntrack.Node):
         # Calculate reference benchmarks
         T_300K_index = node_ref.get_thermal_properties['temperatures'].index(300)
         ref_benchmarks_dict[mp_id]['max_freq'] = np.max(dos_freqs_ref)
+        ref_benchmarks_dict[mp_id]['min_freq'] = np.min(dos_freqs_ref)
         ref_benchmarks_dict[mp_id]['S'] = node_ref.get_thermal_properties['entropy'][T_300K_index]
         ref_benchmarks_dict[mp_id]['F'] = node_ref.get_thermal_properties['free_energy'][T_300K_index]
         ref_benchmarks_dict[mp_id]['C_V'] = node_ref.get_thermal_properties['heat_capacity'][T_300K_index]
@@ -972,6 +1007,8 @@ class PhononDispersion(zntrack.Node):
         for model_name in pred_nodes.keys():
             try:
                 dos_freqs_pred, dos_values_pred = pred_nodes[model_name].dos
+                # remove values with zero density to avoid artifacts in the plot + min/max freq calulations
+                dos_freqs_pred, dos_values_pred = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
             except FileNotFoundError:
                 print(f"Skipping {model_name} — dos file not found at {pred_nodes[model_name].dos_path}")
                 continue
@@ -981,9 +1018,14 @@ class PhononDispersion(zntrack.Node):
             T_300K_index = pred_nodes[model_name].get_thermal_properties['temperatures'].index(300)
             
             pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(dos_freqs_pred)
+            pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(dos_freqs_pred)
             pred_benchmarks_dict[mp_id][model_name]['S'] = pred_nodes[model_name].get_thermal_properties['entropy'][T_300K_index]
             pred_benchmarks_dict[mp_id][model_name]['F'] = pred_nodes[model_name].get_thermal_properties['free_energy'][T_300K_index]
             pred_benchmarks_dict[mp_id][model_name]['C_V'] = pred_nodes[model_name].get_thermal_properties['heat_capacity'][T_300K_index]
+            
+            ref_freqs = node_ref.band_structure["frequencies"]
+            pred_freqs = pred_nodes[model_name].band_structure["frequencies"]
+
             
             # Generate phonon dispersion plot
             phonon_plot_path = PhononDispersion.compare_reference(
@@ -998,6 +1040,32 @@ class PhononDispersion(zntrack.Node):
             
             # Initialize model data if needed
             PhononDispersion.initialize_model_data(model_name, model_benchmarks_dict, plot_stats_dict, scatter_to_dispersion_map, benchmarks)
+            
+            # Initialize if needed
+            if model_name not in scatter_to_dispersion_map:
+                scatter_to_dispersion_map[model_name] = {'hover': [], 'point_map': [], 'img_paths': {}}
+            if "band_errors" not in scatter_to_dispersion_map[model_name]:
+                scatter_to_dispersion_map[model_name]["band_errors"] = {}
+
+            # Compute and store band errors
+            band_errors = np.mean(np.abs(np.concatenate([
+                np.array(p) - np.array(r)
+                for p, r in zip(pred_freqs, ref_freqs)
+            ])))
+            scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
+
+
+
+
+            # band mae: combined mae for all bands for one material and one model
+            # band_mae = np.mean([
+            #     np.mean(np.abs(np.array(p) - np.array(r)))
+            #     for p, r in zip(pred_freqs, ref_freqs)
+            # ])
+            # scatter_to_dispersion_map[model_name].setdefault("band_errors", {})[mp_id] = band_mae  
+            
+            
+            
             
             # Update benchmark data for the model
             PhononDispersion.update_model_benchmarks(mp_id, model_name, ref_benchmarks_dict, pred_benchmarks_dict, 
@@ -1120,6 +1188,8 @@ class PhononDispersion(zntrack.Node):
                     pretty_benchmark_labels
                 )
                 
+
+                
                 model_figures_dict[model_name][benchmark] = fig
                 fig.write_image(scatter_dir / f"{benchmark}.png", width=800, height=600)
         
@@ -1188,10 +1258,127 @@ class PhononDispersion(zntrack.Node):
 
 
 
- 
+    @staticmethod
+    def create_stability_scatter_plot(ref_vals, pred_vals, labels):
+        """Create a scatter plot of predicted vs reference, colored by classification (TP, TN, FP, FN)"""
+        import plotly.express as px
+        color_map = {
+            "TP": "green",
+            "TN": "blue",
+            "FP": "orange",
+            "FN": "red"
+        }
+        fig = px.scatter(
+            x=ref_vals,
+            y=pred_vals,
+            color=labels,
+            color_discrete_map=color_map,
+            labels={
+                "x": "Reference ω_min [THz]",
+                "y": "Predicted ω_min [THz]",
+                "color": "Class"
+            },
+            title="Stability Classification: Predicted vs Reference",
+        )
+        # y=x
+        combined_min = min(min(ref_vals), min(pred_vals), 0)
+        combined_max = max(max(ref_vals), max(pred_vals))
+        fig.add_shape(
+            type="line",
+            x0=combined_min,
+            y0=combined_min,
+            x1=combined_max,
+            y1=combined_max,
+            xref='x',
+            yref='y',
+            line=dict(color="black", dash="dash")
+        )
+        fig.update_layout(
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            font_color="black",
+            xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1),
+            yaxis=dict(showgrid=True, gridcolor="lightgray")
+        )
+        return fig
 
 
+    @staticmethod
+    def create_confusion_matrix_figure(conf_matrix, labels, model_name):
+        """Create a Plotly heatmap for a confusion matrix with labels and percent per quadrant."""
+        import plotly.graph_objects as go
+        import numpy as np
+        total = np.sum(conf_matrix)
+        percent = conf_matrix / total * 100 if total > 0 else np.zeros_like(conf_matrix, dtype=float)
+        quadrant_labels = [["True Negative", "False Positive"], ["False Negative", "True Positive"]]
 
+        fig = go.Figure(
+            data=go.Heatmap(
+                z=conf_matrix,
+                x=["Stable", "Not Stable"],  # Predicted
+                y=["Stable", "Not Stable"],  # True
+                colorscale="Blues",
+                showscale=True,
+                colorbar=dict(title="Count"),
+                hovertemplate='%{y} (DFT) vs %{x} (MLIP): %{z}<extra></extra>'
+            )
+        )
+
+        fig.update_layout(
+            title="Confusion Matrix",
+            xaxis_title=model_name,
+            yaxis_title="DFT PBE",
+            xaxis=dict(tickmode="array", tickvals=[0, 1], ticktext=["Stable", "Not Stable"], side="top"),
+            yaxis=dict(tickmode="array", tickvals=[0, 1], ticktext=["Stable", "Not Stable"], autorange="reversed"),
+            font=dict(color="black"),
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            
+            annotations=[
+                dict(
+                    x=j,
+                    y=i,
+                    text=f"{quadrant_labels[i][j]}<br>{percent[i, j]:.1f}%",
+                    showarrow=False,
+                    font=dict(size=16, color="black")
+                )
+                for i in range(2) for j in range(2)
+            ]
+        )
+        return fig
+
+    @staticmethod
+    def add_stability_classification_column(mae_summary_df, model_benchmarks_dict):
+        from sklearn.metrics import f1_score
+
+        threshold = -0.05
+        f1_scores = []
+        for model in mae_summary_df["Model"]:
+            ref_vals = np.array(model_benchmarks_dict[model]["min_freq"]["ref"])
+            pred_vals = np.array(model_benchmarks_dict[model]["min_freq"]["pred"])
+            y_true = ref_vals > threshold
+            y_pred = pred_vals > threshold
+            f1 = f1_score(y_true, y_pred)
+            f1_scores.append(round(f1, 3))
+
+        # Insert the new column after "C_V"
+        cv_col = next(col for col in mae_summary_df.columns if col.startswith("C_V"))
+        insert_idx = list(mae_summary_df.columns).index(cv_col) + 1
+        mae_summary_df.insert(insert_idx, "Stability Classification (F1)", f1_scores)
+        return mae_summary_df
     
-
-
+    @staticmethod
+    def add_band_mae_column(mae_summary_df, scatter_to_dispersion_map):
+        band_maes = []
+        for model in mae_summary_df["Model"]:
+            band_error_dict = scatter_to_dispersion_map.get(model, {}).get("band_errors", {})
+            all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
+            avg_band_mae = np.mean(np.abs(all_errors)) if all_errors.size > 0 else np.nan
+            band_maes.append(round(avg_band_mae, 3))
+        # Insert the new column after "C_V" or at the end
+        if "ω_min [THz]" in mae_summary_df.columns:
+            insert_idx = mae_summary_df.columns.get_loc("ω_min [THz]") + 1
+            mae_summary_df.insert(insert_idx, "Avg Band MAE", band_maes)
+        else:
+            mae_summary_df["Avg Band MAE"] = band_maes
+        return mae_summary_df

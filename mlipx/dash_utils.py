@@ -49,6 +49,7 @@ def dash_table_interactive(
                 df: pd.DataFrame, 
                 id: str, 
                 title: str,
+                info: str = "Info: click on an interactive cell to show plots, click on the models column to collapse",
                 extra_components: list = None,
 ) -> html.Div:
     
@@ -71,6 +72,7 @@ def dash_table_interactive(
     
     return html.Div([
         html.H2(title, style={"color": "black"}),
+        html.P(info, style={"fontSize": "14px", "color": "#555"}),
 
         dash_table.DataTable(
             id=id,
@@ -374,17 +376,6 @@ def create_scatter_plot(
     
     combined_min = min(min(ref_vals), min(pred_vals))
     combined_max = max(max(ref_vals), max(pred_vals))
-
-    # fig = px.scatter(
-    #     x=ref_vals,
-    #     y=pred_vals,
-    #     custom_data=hover_data,
-    #     labels={
-    #         "x": f"Reference {metric_label[0]} [{metric_label[1]}]",
-    #         "y": f"{model_name} {metric_label[0]} [{metric_label[1]}]",
-    #     },
-    #     title=f"{model_name} - {metric_label}"
-    # )
 
     fig.add_shape(
         type="line",

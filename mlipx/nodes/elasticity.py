@@ -61,6 +61,7 @@ import csv
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from matcalc.benchmark import ElasticityBenchmark
+from mlipx.dash_utils import dash_table_interactive
 
 
 
@@ -191,28 +192,23 @@ class Elasticity(zntrack.Node):
         # Dash app
         app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
-
         app.layout = html.Div([
-            html.H2("Bulk and Shear Moduli MAEs", style={'color': 'Black', 'padding': '1rem'}),
-            dash_table.DataTable(
+            dash_table_interactive(
+                df=mae_df,
                 id='elas-mae-table',
-                columns=[{"name": col, "id": col} for col in mae_df.columns],
-                data=mae_df.to_dict('records'),
-                style_cell={'textAlign': 'center'},
-                style_header={'fontWeight': 'bold'},
-            ),
-            dcc.Store(id="stored-cell-points"),
-            dcc.Store(id="stored-results-df"),
-            dcc.Store(id='elas-mae-table-last-clicked'),
-            
-            html.Div(id='scatter-plot-container'),
-            
-            dash_table.DataTable(id="material-table"),
+                title="Bulk and Shear Moduli MAEs",
+                extra_components=[
+                    dcc.Store(id="stored-cell-points"),
+                    dcc.Store(id="stored-results-df"),
+                    dcc.Store(id='elas-mae-table-last-clicked'),
+                    html.Div(id='scatter-plot-container'),
+                    dash_table.DataTable(id="material-table"),
+                ]
+            )
         ],
-            style={
-                'backgroundColor': 'white',
-            }
-        )
+        style={
+            'backgroundColor': 'white',
+        })
         
         
         # made into a function so can be called from outside (in the bulk crystal benchmark)
@@ -477,11 +473,17 @@ class Elasticity(zntrack.Node):
             # Serialize for Dash
             serialized = {f"{cx}_{cy}": indices for (cx, cy), indices in cell_points.items()}
 
-            graph = dcc.Graph(
-                id={'type': 'scatter-plot', 'index': 'main'},
-                figure=fig,
-                style={"height": "60vh"}
-            )
+            graph = html.Div([
+                html.P(
+                    "Info: Click on a point to view the underlying materials.",
+                    style={"fontSize": "14px", "color": "#555"}
+                ),
+                dcc.Graph(
+                    id={'type': 'scatter-plot', 'index': 'main'},
+                    figure=fig,
+                    style={"height": "60vh"}
+                )
+            ])
 
             # When returning a new plot, clear the material table until clickData occurs
             return graph, json.dumps(serialized), df.to_json(orient='split'), active_cell, None, None
