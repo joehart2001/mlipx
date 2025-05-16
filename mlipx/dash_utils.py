@@ -51,6 +51,7 @@ def dash_table_interactive(
                 title: str,
                 info: str = "Info: click on an interactive cell to show plots, click on the models column to collapse",
                 extra_components: list = None,
+                interactive: bool = True,
 ) -> html.Div:
     
     """
@@ -72,7 +73,7 @@ def dash_table_interactive(
     
     return html.Div([
         html.H2(title, style={"color": "black"}),
-        html.P(info, style={"fontSize": "14px", "color": "#555"}),
+        html.P(info, style={"fontSize": "14px", "color": "#555"}) if interactive else None,
 
         dash_table.DataTable(
             id=id,
@@ -80,7 +81,7 @@ def dash_table_interactive(
             data=df.to_dict('records'),
             style_cell={'textAlign': 'center', 'fontSize': '14px'},
             style_header={'fontWeight': 'bold',"whiteSpace": "normal"},
-            cell_selectable=True,
+            cell_selectable=interactive,
         ),
 
         html.Br(),
@@ -191,6 +192,7 @@ def combine_apps(
     benchmark_score_df: pd.DataFrame,
     benchmark_title: str,
     apps_list: List[dash.Dash],
+    benchmark_table_info: str = "",
     style_data_conditional: List[Dict[str, Any]] | None = None,
 ):
     """ combines multiple Dash apps into a single app, where the first app is the main app
@@ -201,6 +203,7 @@ def combine_apps(
     
     benchmark_score_table = html.Div([
         html.H2("Benchmark Score Table", style={'color': 'Black', 'padding': '1rem'}),
+        html.P(benchmark_table_info, style={"fontSize": "14px", "color": "#555"}),
         dash_table.DataTable(
             id='benchmark-score-table',
             columns=[{"name": col, "id": col} for col in benchmark_score_df.columns],

@@ -21,6 +21,7 @@ import yaml
 import pandas as pd
 from dash.exceptions import PreventUpdate
 from dash import dash_table
+from mlipx.dash_utils import dash_table_interactive
 import socket
 import time
 from typing import List, Dict, Any, Optional
@@ -247,7 +248,12 @@ class GMTKN55Benchmark(zntrack.Node):
             
 
     @staticmethod
-    def mae_plot_interactive(node_dict, ui = None, run_interactive = True):
+    def mae_plot_interactive(
+        node_dict, 
+        ui = None, 
+        run_interactive = True,
+        normalise_to_model: Optional[str] = None,
+        ):
         
         subsets_path = get_benchmark_data("GMTKN55.zip") / "GMTKN55/subsets.csv"
         
@@ -279,13 +285,6 @@ class GMTKN55Benchmark(zntrack.Node):
                 row[cat] = GMTKN55Benchmark.calculate_weighted_mae(df, subsets_df, category=cat)
             benchmark_tables.append(row)
             
-            # WTMAD for each model
-            # wtmad = node.wtmad
-            # wtmad_table = pd.DataFrame([
-            #     {"Model": model_name, "WTMAD": node.wtmad}
-            #     for model_name, node in benchmark_node_dict.items()
-            # ])
-            # wtmad_table = wtmad_table.sort_values(by="WTMAD")
             
             # weighted total MAE
             
@@ -325,17 +324,22 @@ class GMTKN55Benchmark(zntrack.Node):
 
         
         benchmark_df = pd.DataFrame(benchmark_tables)
-        benchmark_df = benchmark_df.sort_values(by="All (WTMAD)", ascending=True)
         benchmark_df = benchmark_df.map(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
         benchmark_df = benchmark_df.rename(columns={
             col: category_abbreviations.get(col, col) for col in benchmark_df.columns
         })
 
         mae_df = pd.DataFrame(mae_data)
-        wtmad_table = pd.DataFrame(wtmad_rows).sort_values(by="WTMAD")
+        wtmad_table = pd.DataFrame(wtmad_rows)
         wtmad_table = wtmad_table.rename(columns={"WTMAD": "Weighted Total MAD/MAE [kcal/mol] \u2193"})
-        wtmad_table = wtmad_table.round(2)
-        wtmad_table['Rank'] = wtmad_table.index + 1
+        
+        if normalise_to_model:
+            wtmad_table['Score'] = wtmad_table['Weighted Total MAD/MAE [kcal/mol] \u2193'] / wtmad_table[wtmad_table['Model'] == normalise_to_model]['Weighted Total MAD/MAE [kcal/mol] \u2193'].values[0]
+        else:
+            wtmad_table['Score'] = wtmad_table['Weighted Total MAD/MAE [kcal/mol] \u2193']
+            
+        wtmad_table = wtmad_table.round(3)
+        wtmad_table['Rank'] = wtmad_table['Score'].rank(ascending=True)
         # 2 d.p.
         #wtmad_table = wtmad_table.map(lambda x: f"{x:.2f}" if isinstance(x, (int, float)) else x)
 
@@ -379,13 +383,7 @@ class GMTKN55Benchmark(zntrack.Node):
                 except KeyError: continue
                 
                 mae = np.mean(np.abs(np.array(refs) - np.array(preds)))
-                # scatter_fig = px.scatter(x=refs, y=preds, custom_data=[species], labels={"x": "Reference Energy (kcal/mol)", "y": "Predicted Energy (kcal/mol)"}, title=f"{model_name} — {subset_name}: Predicted vs Reference")
-                # scatter_fig.update_traces(hovertemplate="<br>".join(["Species: %{customdata[0]}", "Reference: %{x:.2f} kcal/mol", "Predicted: %{y:.2f} kcal/mol", "<extra></extra>"]))
-                # scatter_fig.add_trace(go.Scatter(x=[min(refs), max(refs)], y=[min(refs), max(refs)], mode="lines", line=dict(dash="dot", color="gray"), name="y = x"))
-                # scatter_fig.add_annotation(xref="paper", yref="paper", x=0.02, y=0.98, text=f"MAE: {mae:.2f}", showarrow=False, align="left", font=dict(size=12, color="black"), bordercolor="black", borderwidth=1, borderpad=4, bgcolor="white", opacity=0.8)
-                # scatter_fig.update_layout(height=500, plot_bgcolor='white', paper_bgcolor='white', font_color='black', margin=dict(t=50, r=30, b=50, l=50), xaxis=dict(showgrid=True, gridcolor='lightgray', scaleanchor="y", scaleratio=1), yaxis=dict(showgrid=True, gridcolor='lightgray'))
-                
-                
+
                 from mlipx.dash_utils import create_scatter_plot
                 scatter_fig = create_scatter_plot(
                     ref_vals = refs, 
@@ -427,32 +425,25 @@ class GMTKN55Benchmark(zntrack.Node):
         app.layout = html.Div([
             html.H1("GMTKN55 Benchmarking Dashboard", style={"color": "black"}),
 
-            html.H2("WTMAD (weighted total mean absolute deviation)", style={"color": "black", "marginTop": "20px"}),
-            dash_table.DataTable(
-                data=wtmad_table.to_dict("records"),
-                columns=[{"name": i, "id": i} for i in wtmad_table.columns],
-                style_table={"overflowX": "auto"},
-                style_cell={"textAlign": "center", "minWidth": "100px", "border": "1px solid black"},
-                style_header={"backgroundColor": "lightgray", "fontWeight": "bold"},
+            dash_table_interactive(
+                df=wtmad_table,
+                id="GMTKN55-wtmad-table",
+                title="WTMAD (weighted total mean absolute deviation)",
+                interactive=False
             ),
 
-            html.H2("MAD/MAE per Category (kcal/mol)", style={"color": "black", "marginTop": "30px"}),
-            dash_table.DataTable(
-                data=benchmark_df.round(3).to_dict("records"),
-                columns=[{"name": i, "id": i} for i in benchmark_df.columns],
-                style_table={"overflowX": "auto"},
-                style_cell={"textAlign": "center", "minWidth": "100px", "border": "1px solid black"},
-                style_header={"backgroundColor": "lightgray", "fontWeight": "bold"},
+            dash_table_interactive(
+                df=benchmark_df.round(3),
+                id="GMTKN55-category-table",
+                title="MAD/MAE per Category (kcal/mol)",
+                interactive=False
             ),
-            
-            #html.Hr(style={"marginTop": "40px", "marginBottom": "30px", "borderTop": "2px solid #bbb"}),
-
 
             html.H2("MAD/MAE per Subset", style={"color": "black", "marginTop": "30px"}),
             html.Div([
                 html.Label("Color by:", style={"marginRight": "10px"}),
                 dcc.RadioItems(
-                    id="color-toggle",
+                    id="GMTKN55-color-toggle",
                     options=[
                         {"label": "Category", "value": "category"},
                         {"label": "Model", "value": "model"},
@@ -461,10 +452,17 @@ class GMTKN55Benchmark(zntrack.Node):
                     labelStyle={"display": "inline-block", "marginRight": "15px"}
                 )
             ], style={"marginBottom": "20px"}),
-            dcc.Graph(id="mae-plot"),
+            html.Div([
+                dcc.Graph(id="GMTKN55-mae-plot", style={"width": "100%"})
+            ]),
 
-            html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
-            dcc.Graph(id="pred-vs-ref-plot")
+            html.Div(
+                id="pred-vs-ref-container",
+                children=[
+                    html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
+                    dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
+                ]
+            ),
 
         ], style={"backgroundColor": "white", "padding": "20px"})
 
@@ -489,20 +487,18 @@ class GMTKN55Benchmark(zntrack.Node):
     
     @staticmethod
     def register_callbacks(
-        app: dash.Dash, 
-        node_dict: Dict[str, NodeWithCalculator], 
+        app: dash.Dash,
+        node_dict: Dict[str, NodeWithCalculator],
         mae_df: pd.DataFrame
     ):
-        
+
         @app.callback(
-            Output("mae-plot", "figure"),
-            Input("color-toggle", "value")
+            Output("GMTKN55-mae-plot", "figure"),
+            Input("GMTKN55-color-toggle", "value")
         )
-        
         def update_mae_plot(color_by):
             symbol_col = "model" if color_by == "category" else "category"
-            
-        
+
             fig = px.scatter(
                 mae_df,
                 x="subset",
@@ -535,23 +531,25 @@ class GMTKN55Benchmark(zntrack.Node):
                 font_color='black',
                 title_font=dict(size=20),
                 margin=dict(t=50, r=30, b=50, l=50),
-                width=800,
+                autosize=True,
                 height=400,
                 xaxis=dict(showgrid=True, gridcolor='lightgray', tickangle=45, tickmode="linear", dtick=1),
                 yaxis=dict(showgrid=True, gridcolor='lightgray')
             )
 
             return fig
-        
 
         @app.callback(
-            Output("pred-vs-ref-plot", "figure"),
-            Input("mae-plot", "clickData"),
+            Output("pred-vs-ref-container", "children"),
+            Input("GMTKN55-mae-plot", "clickData"),
         )
-
         def update_scatter(click_data):
             if click_data is None:
-                raise PreventUpdate
+                # Return the default children (the section header and empty graph)
+                return [
+                    html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
+                    dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
+                ]
 
             model_name, subset_name, *_ = click_data["points"][0]["customdata"]
             subset_name = subset_name.lower()
@@ -563,21 +561,22 @@ class GMTKN55Benchmark(zntrack.Node):
                 species_list = [label for label in node_dict[model_name].predicted_dict[subset_name]]
             except KeyError:
                 print(f"Model {model_name} or subset {subset_name} not found in data.")
-                return go.Figure()
-            
-            
+                # Return the default children (section header and empty graph)
+                return [
+                    html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
+                    dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
+                ]
 
             preds = np.array([i for i in pred_list])
             refs = np.array([i for i in ref_list])
             mae = np.mean(np.abs(refs - preds))
 
-
             from mlipx.dash_utils import create_scatter_plot
             scatter_fig = create_scatter_plot(
-                ref_vals = refs, 
-                pred_vals = preds, 
-                model_name = model_name, 
-                mae = mae, 
+                ref_vals = refs,
+                pred_vals = preds,
+                model_name = model_name,
+                mae = mae,
                 metric_label = ("Energy", "kcal/mol"),
                 hover_data=(species_list, "Species"),
                 hovertemplate="<br>".join([
@@ -587,7 +586,9 @@ class GMTKN55Benchmark(zntrack.Node):
                     "<extra></extra>"
                 ])
             )
-            
 
-            return scatter_fig
+            return [
+                html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
+                dcc.Graph(id="GMTKN55-pred-vs-ref-plot", figure=scatter_fig)
+            ]
     

@@ -133,7 +133,12 @@ class Elasticity(zntrack.Node):
     
     
     @staticmethod
-    def mae_plot_interactive(node_dict, ui = None, run_interactive = True):
+    def mae_plot_interactive(
+        node_dict, 
+        ui = None, 
+        run_interactive = True,
+        normalise_to_model: t.Optional[str] = None,
+    ):
         """Interactive MAE table -> scatter plot for bulk and shear moduli for each model 
         """
         
@@ -167,8 +172,19 @@ class Elasticity(zntrack.Node):
         mae_df = mae_df.round(3)
         
         mae_cols = [col for col in mae_df.columns if col not in ['Model']]
-        mae_df['Elasticity Score (avg)'] = mae_df[mae_cols].mean(axis=1).round(3)
-        mae_df['Rank'] = mae_df['Elasticity Score (avg)'].rank(method='min', ascending=True).astype(int)
+        
+        if normalise_to_model is not None:
+            for model in node_dict.keys():
+                score = 0
+                for col in mae_cols:
+                    #score += mae_df.loc[model, col] / mae_df.loc[normalise_to_model, col]
+                    score += mae_df.loc[mae_df['Model'] == model, col].values[0] / mae_df.loc[mae_df['Model'] == normalise_to_model, col].values[0]
+                mae_df.loc[mae_df['Model'] == model, 'Elasticity Score \u2193'] = score / len(mae_cols)
+        else:
+            mae_df['Elasticity Score \u2193'] = mae_df[mae_cols].mean(axis=1).round(3)
+        
+        mae_df = mae_df.round(3)
+        mae_df['Rank'] = mae_df['Elasticity Score \u2193'].rank(method='min', ascending=True).astype(int)
 
         
             

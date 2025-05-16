@@ -1,7 +1,4 @@
-import mlipx
-import zntrack
 
-from models import MODELS
 from ase.data import chemical_symbols
 
 {% if standalone is not defined %}
@@ -9,6 +6,9 @@ from ase.data import chemical_symbols
 {% endif %}
 
 {% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
 project = zntrack.Project()
 {% endif %}
 

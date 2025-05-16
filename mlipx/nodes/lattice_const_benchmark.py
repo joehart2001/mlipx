@@ -102,7 +102,7 @@ class LatticeConstant(zntrack.Node):
         ref_node,
         ui: str | None = None,
         run_interactive: bool = True,
-        use_render: bool = False,
+        normalise_to_model: t.Optional[str] = None,
     ):
 
         ref_dict = ref_node.get_ref
@@ -137,11 +137,19 @@ class LatticeConstant(zntrack.Node):
                 continue
             diff = lat_const_df[model_name] - lat_const_df["ref"]
             mae = np.mean(np.abs(diff))
-            mae_data.append({"Model": model_name, "Lat Const [Å]": round(mae, 3)})
+            mae_data.append({"Model": model_name, "Lat Const MAE [Å]": round(mae, 3)})
 
         mae_df = pd.DataFrame(mae_data)
+        
+        if normalise_to_model is not None:
+            for model in mae_df["Model"]:
+                mae_df.loc[mae_df["Model"] == model, "Lat Const Score \u2193"] = mae_df.loc[mae_df["Model"] == model, "Lat Const MAE [Å]"] / mae_df.loc[mae_df["Model"] == normalise_to_model, "Lat Const MAE [Å]"].values[0]
+        
+        else:
+            mae_df["Lat Const Score \u2193"] = mae_df["Lat Const MAE [Å]"]
 
-        mae_df['Rank'] = mae_df['Lat Const [Å]'].rank(method='min', ascending=True).astype(int)
+        mae_df = mae_df.round(3)
+        mae_df['Rank'] = mae_df['Lat Const Score \u2193'].rank(method='min', ascending=True).astype(int)
 
 
         # save

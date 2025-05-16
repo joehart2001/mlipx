@@ -33,7 +33,7 @@ from typing import List, Dict, Any, Optional
 
 
 import mlipx
-from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, MolecularBenchmark
+from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, MolecularBenchmark, HomonuclearDiatomics
 
 
 
@@ -81,11 +81,13 @@ class FullBenchmark(zntrack.Node):
         DMC_ICE_data: List[DMCICE13Benchmark] | Dict[str, DMCICE13Benchmark],
         
         GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
+        HD_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
         
         ui: str = "browser",
         
         return_app: bool = False,
         report: bool = True,
+        normalise_to_model: t.Optional[str] = None,
     ):
         
         # extract apps
@@ -97,17 +99,21 @@ class FullBenchmark(zntrack.Node):
             phonon_pred_data=phonon_pred_data,
             full_benchmark=True,
             report=report,
+            normalise_to_model=normalise_to_model,
         )
         
         mol_crystal_benchmark_app, mol_crystal_benchmark_score_df, mol_crystal_register_callbacks = MolecularCrystalBenchmark.benchmark_interactive(
             X23_data=X23_data,
             DMC_ICE_data=DMC_ICE_data,
             full_benchmark=True,
+            normalise_to_model=normalise_to_model,
         )
         
         mol_benchmark_app, mol_benchmark_score_df, mol_register_callbacks = MolecularBenchmark.benchmark_interactive(
             GMTKN55_data=GMTKN55_data,
+            HD_data=HD_data,
             full_benchmark=True,
+            normalise_to_model=normalise_to_model,
         )
 
         # df with score for each benchmark and model
@@ -128,6 +134,7 @@ class FullBenchmark(zntrack.Node):
         
         summary_layout = html.Div([
             html.H1("Overall Benchmark Scores (avg MAE)"),
+            html.P("Scores are avg MAEs normalised to: " + normalise_to_model if normalise_to_model else "Scores are avg MAEs"),
             html.Div([
                 dash_table.DataTable(
                     id="summary-table",
@@ -148,9 +155,9 @@ class FullBenchmark(zntrack.Node):
         # combine apps into one with tabs for each benchmark
         tab_layouts = {
             "Overall Benchmark": summary_layout,
-            "Bulk Crystal": bulk_benchmark_app.layout,
-            "Molecular Crystal": mol_crystal_benchmark_app.layout,
-            "Molecular": mol_benchmark_app.layout,
+            "Bulk Crystal Score": bulk_benchmark_app.layout,
+            "Molecular Crystal Score": mol_crystal_benchmark_app.layout,
+            "Molecular Score": mol_benchmark_app.layout,
         }
         
         # Register callbacks for each app
@@ -200,20 +207,22 @@ class FullBenchmark(zntrack.Node):
     ) -> pd.DataFrame:
         """Combine multiple benchmark DataFrames into an overall score DataFrame.
         """
-        overall_score_df = pd.DataFrame()
+        merged_df = None
         
-        for i, (df, name) in enumerate(dfs_with_names):
-            if i == 0:
-                overall_score_df["Model"] = df["Model"]
-            overall_score_df[name] = df["Avg MAE \u2193"]
-        
-        # average mae across benchmarks
+        for df, name in dfs_with_names:
+            df_renamed = df[["Model", "Avg MAE \u2193"]].rename(columns={"Avg MAE \u2193": name})
+            if merged_df is None:
+                merged_df = df_renamed
+            else:
+                merged_df = pd.merge(merged_df, df_renamed, on="Model", how="outer")
+
+        # Compute average MAE across all benchmarks
         benchmark_cols = [name for _, name in dfs_with_names]
-        overall_score_df["Score (Avg MAE \u2193)"] = overall_score_df[benchmark_cols].mean(axis=1)
-        
-        # sort + and rank
-        overall_score_df = overall_score_df.sort_values(by="Score (Avg MAE \u2193)", ascending=True)
-        overall_score_df = overall_score_df.reset_index(drop=True)
-        overall_score_df["Rank"] = overall_score_df.index + 1
-        
-        return overall_score_df.round(3)
+        merged_df["Overall Score \u2193"] = merged_df[benchmark_cols].mean(axis=1)
+
+        # Sort and rank
+        merged_df = merged_df.sort_values(by="Overall Score \u2193", ascending=True)
+        merged_df = merged_df.reset_index(drop=True)
+        merged_df['Rank'] = merged_df['Overall Score \u2193'].rank(ascending=True)
+
+        return merged_df.round(3)

@@ -698,6 +698,7 @@ def full_benchmark_compare(
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
     report: Annotated[bool, Option("--report", help="Generate a report")] = True,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
     ):
     
     nodes = [
@@ -772,6 +773,7 @@ def full_benchmark_compare(
             ui=ui,
             return_app = return_app,
             report=report,
+            normalise_to_model=normalise_to_model,
         )
     else:
         FullBenchmark.benchmark_interactive(
@@ -785,6 +787,7 @@ def full_benchmark_compare(
             GMTKN55_data=GMTKN55_dict,
             ui=ui,
             report=report,
+            normalise_to_model=normalise_to_model,
         )
     
     

@@ -11,7 +11,7 @@ import json
 
 
 from mlipx.benchmark_download_utils import get_benchmark_data
-
+import warnings
 
 
 
@@ -46,7 +46,7 @@ def get_homonuclear_diatomic_properties(model, node, pbe_ref = False):
         ]
     )
 
-    for symbol in tqdm(chemical_symbols[1:]):
+    for symbol in chemical_symbols[1:]:
         da = symbol + symbol
         
         

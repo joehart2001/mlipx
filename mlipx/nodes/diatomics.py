@@ -10,6 +10,8 @@ from ase import Atoms
 import tqdm
 import zntrack
 from ase.data import atomic_numbers, covalent_radii, vdw_alvarez
+from dash import dcc, html, Input, Output, State, MATCH
+import re
 
 from mlipx.abc import ComparisonResults, NodeWithCalculator
 from mlipx.utils import freeze_copy_atoms
@@ -298,6 +300,9 @@ class HomonuclearDiatomics(zntrack.Node):
 
 
 
+
+
+
     # ------ interactive plotting ------
 
 
@@ -307,77 +312,45 @@ class HomonuclearDiatomics(zntrack.Node):
         node_dict,
         run_interactive: bool = True,
         ui: str | None = None,
+        normalise_to_model: t.Optional[str] = None,
     ):
-        
-        
         results_dict = {}
 
         for model_name, node in node_dict.items():
-            
-            results = node.results # df:  | dist | H-H | He-He | Li-Li | ...
-            
+            results = node.results
             results.index.name = "distance"
             results.reset_index(inplace=True)
-            
             results_dict[model_name] = results
-                
-
 
             from mlipx.mlip_arena_utils import get_homonuclear_diatomic_properties, get_homonuclear_diatomic_stats
-
             get_homonuclear_diatomic_properties(model_name, node_dict[model_name])
-            
             HomonuclearDiatomics.p_table_diatomic_plot(
-                diatomics_df = results_dict[model_name],
-                model_name = model_name,
+                diatomics_df=results_dict[model_name],
+                model_name=model_name,
             )
-        
+
         stats_df = get_homonuclear_diatomic_stats(list(node_dict.keys()))
-                    
+        
+        #if normalise_to_model is not None:
+            #stats_df['Score']
 
-        
-        
         # ---- Dash app ----
-        
         import dash
-        import re
-        app = dash.Dash(__name__, suppress_callback_exceptions=True) # supress error messeages for plots that are created dynamically
-        
+        app = dash.Dash(__name__, suppress_callback_exceptions=True)
+
+
+        from mlipx.mlip_arena_utils import get_homonuclear_diatomic_stats
         from mlipx.dash_utils import dash_table_interactive
-        
-        # app.layout = dash_table_interactive(
-        #     df = stats_df,
-        #     id = 'diatomics-stats-table',
-        #     title = "Homonuclear Diatomics Statistics",
-        # )
-        from dash import html, dcc, dash_table, Input, Output, State, MATCH
-        def process_model(model_name):
-            df = results_dict[model_name]
-            data = []
-            element_columns = {col: col for col in df.columns if col != "distance"}
 
-            for col in element_columns:
-                match = re.match(r"^([A-Z][a-z]?)", col)
-                if not match:
-                    continue
-                el = match.group(1)
-                shift = df[col].iloc[-1]
-                data.append({"Element": el, "Column": col, "Shift": round(shift, 4)})
-
-            df_table = pd.DataFrame(data).drop_duplicates(subset="Element")
-            return df, df_table
 
         app.layout = html.Div([
-            
             # Summary stats table
             dash_table_interactive(
                 df=stats_df,
                 id='diatomics-stats-table',
                 title="Homonuclear Diatomics Statistics"
             ),
-
             html.H2("Homonuclear Diatomic Explorer"),
-
             html.Label("Select Model:"),
             dcc.Dropdown(
                 id="model-dropdown",
@@ -386,86 +359,134 @@ class HomonuclearDiatomics(zntrack.Node):
                 clearable=False,
                 style={"width": "300px", "marginBottom": "20px"}
             ),
-            
-            dash_table.DataTable(
-                id="element-table",
-                columns=[
-                    {"name": "Element", "id": "Element"},
-                    {"name": "Shift", "id": "Shift"}
-                ],
-                data=[],
-                row_selectable="single",
-                style_table={"maxHeight": "500px", "overflowY": "auto"},
-                style_cell={"padding": "4px", "textAlign": "center"},
-                style_header={"backgroundColor": "lightgrey", "fontWeight": "bold"},
+            html.Label("Select Element:"),
+            dcc.Dropdown(
+                id="element-dropdown",
+                options=[{"label": "All", "value": "All"}],  # this will be updated in callback
+                value="All",
+                clearable=False,
+                style={"width": "300px", "marginBottom": "20px"}
             ),
-            
-            dcc.Graph(id="element-plot", style={"height": "500px", "marginTop": "20px"}),
-
-            dcc.Store(id="current-model-df"),
-            dcc.Store(id="current-model-table"),
-            
+            dcc.Graph(id="diatom-element-or-ptable-plot", style={"height": "700px", "width": "100%", "marginTop": "20px"}),
         ], style={"backgroundColor": "white"})
+        
+        
+        
+        # Register callbacks before running the app (+ make the tables etc)
+        HomonuclearDiatomics.register_callbacks(app, node_dict, results_dict)
+        
+        from mlipx.dash_utils import run_app
+        if not run_interactive:
+            return app, results_dict
+        
+        return run_app(app, ui=ui)
 
-        # Populate table and store data for selected model
+
+
+    # ----------- helper functins -----------
+
+
+    def process_model(model_name, results_dict):
+        df = results_dict[model_name]
+        data = []
+        element_columns = {col: col for col in df.columns if col != "distance"}
+        for col in element_columns:
+            match = re.match(r"^([A-Z][a-z]?)", col)
+            if not match:
+                continue
+            el = match.group(1)
+            shift = df[col].iloc[-1]
+            data.append({"Element": el, "Column": col, "Shift": round(shift, 4)})
+        df_table = pd.DataFrame(data).drop_duplicates(subset="Element")
+        return df, df_table
+
+
+
+    @staticmethod
+    def register_callbacks(app, node_dict, results_dict):
+        """Register Dash callbacks for the MAE interactive plot."""
+
+
+        # Callback to update element dropdown options based on model
         @app.callback(
-            Output("element-table", "data"),
-            Output("current-model-df", "data"),
-            Output("current-model-table", "data"),
+            Output("element-dropdown", "options"),
             Input("model-dropdown", "value")
         )
-        def update_model(model_name):
-            df, df_table = process_model(model_name)
-            return (
-                df_table[["Element", "Shift"]].to_dict("records"),
-                df.to_dict("records"),
-                df_table.to_dict("records")
-            )
+        def update_element_dropdown(model_name):
+            df, _ = HomonuclearDiatomics.process_model(model_name, results_dict)
+            options = [{"label": "All", "value": "All"}]
+            for col in df.columns:
+                if col != "distance":
+                    element = re.match(r"^([A-Z][a-z]?)", col).group(1)
+                    options.append({"label": element, "value": element})
+            return options
 
-        # Plot the selected element from the current model
+        # Callback to render periodic table or dimer curve plot
         @app.callback(
-            Output("element-plot", "figure"),
-            Input("element-table", "selected_rows"),
-            State("current-model-df", "data"),
-            State("current-model-table", "data")
+            Output("diatom-element-or-ptable-plot", "figure"),
+            Input("model-dropdown", "value"),
+            Input("element-dropdown", "value")
         )
-        def update_plot(selected_rows, df_data, table_data):
-            if not selected_rows:
-                return go.Figure()
+        def update_element_or_ptable_plot(model_name, element_value):
+            df, _ = HomonuclearDiatomics.process_model(model_name, results_dict)
+            if element_value == "All":
+                fig_path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics") / f"{model_name}_ptable_diatomics.svg"
+                svg_bytes = fig_path.read_bytes()
+                import base64
+                encoded = base64.b64encode(svg_bytes).decode()
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=[0, 1], y=[0, 1],
+                    mode="markers", marker=dict(opacity=0),
+                    showlegend=False, hoverinfo='skip'
+                ))
+                fig.add_layout_image(
+                    dict(
+                        source=f"data:image/svg+xml;base64,{encoded}",
+                        xref="x", yref="y",
+                        x=0, y=0,
+                        sizex=18,  # match columns of periodic table
+                        sizey=10,  # match rows
+                        xanchor="left", yanchor="bottom",
+                        layer="below"
+                    )
+                )
 
-            df = pd.DataFrame(df_data)
-            df_table = pd.DataFrame(table_data)
-
-            row_idx = selected_rows[0]
-            el = df_table.iloc[row_idx]["Element"]
-            col = df_table.iloc[row_idx]["Column"]
-
-            x = df["distance"]
-            y = df[col]
-            shift = y.iloc[-1]
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(x=x, y=y, mode="lines", name=el))
-            fig.add_hline(y=0, line=dict(dash="dash", width=1, color="gray"))
-            fig.update_layout(
-                title=f"{el} Bond Curve (shift at xmax = {shift:.4f})",
-                xaxis_title="Distance",
-                yaxis_title="Energy",
-                xaxis=dict(range=[0, 6]),
-                yaxis=dict(range=[-20, 20])
-            )
-            return fig
-        
-        
-        #LatticeConstant.register_callbacks(app, mae_df, lat_const_df)
-        
-
-        from mlipx.dash_utils import run_app
-
-        if not run_interactive:
-            return app
-
-        return run_app(app, ui=ui)
+                fig.update_layout(
+                    xaxis=dict(
+                        visible=False,
+                        range=[0, 18],  # match sizex
+                        constrain="domain"
+                    ),
+                    yaxis=dict(
+                        visible=False,
+                        range=[0, 10],  # match sizey
+                        scaleanchor="x",
+                        scaleratio=1
+                    ),
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    height=None,
+                    autosize=True,
+                    dragmode="pan",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)"
+                )
+                return fig
+            else:
+                col = element_value
+                if col not in df.columns:
+                    return go.Figure()
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=df["distance"], y=df[col], mode="lines", name=element_value))
+                fig.add_hline(y=0, line=dict(dash="dash", width=1, color="gray"))
+                fig.update_layout(
+                    title=f"{element_value} Bond Curve",
+                    xaxis_title="Distance [Å]",
+                    yaxis_title="Energy [meV]",
+                    xaxis=dict(range=[0, 6]),
+                    yaxis=dict(range=[-20, 20])
+                )
+                return fig
     
     
 
@@ -549,5 +570,5 @@ class HomonuclearDiatomics(zntrack.Node):
         plt.suptitle(f"Homonuclear Diatomics: {model_name}", fontsize=18)
         path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics")
         path.mkdir(parents=True, exist_ok=True)
-        plt.savefig(path / f"{model_name}_ptable_diatomics.pdf")
+        plt.savefig(path / f"{model_name}_ptable_diatomics.svg")
         plt.close(fig)

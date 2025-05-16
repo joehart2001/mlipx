@@ -74,6 +74,7 @@ class MolecularCrystalBenchmark(zntrack.Node):
         DMC_ICE_data: List[DMCICE13Benchmark] | Dict[str, DMCICE13Benchmark],
         ui: str = "browser",
         full_benchmark: bool = False,
+        normalise_to_model: t.Optional[str] = None,
     ):
         
         
@@ -102,10 +103,12 @@ class MolecularCrystalBenchmark(zntrack.Node):
         app_X23, mae_df_X23 = mlipx.X23Benchmark.mae_plot_interactive(
             node_dict=X23_dict,
             run_interactive=False,
+            normalise_to_model=normalise_to_model,
         )
         app_DMC_ICE, mae_df_DMC_ICE, rel_poly_dfs_DMC_ICE = mlipx.DMCICE13Benchmark.mae_plot_interactive(
             node_dict=DMC_ICE_dict,
             run_interactive=False,
+            normalise_to_model=normalise_to_model,
         )
     
         from mlipx.dash_utils import combine_mae_tables
@@ -119,7 +122,7 @@ class MolecularCrystalBenchmark(zntrack.Node):
         mol_crystal_benchmark_score_df = MolecularCrystalBenchmark.mol_crystal_benchmark_score(mae_df_X23, mae_df_DMC_ICE).round(3)
         mol_crystal_benchmark_score_df = mol_crystal_benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True)
         mol_crystal_benchmark_score_df = mol_crystal_benchmark_score_df.reset_index(drop=True)
-        mol_crystal_benchmark_score_df['Rank'] = mol_crystal_benchmark_score_df.index + 1
+        mol_crystal_benchmark_score_df['Rank'] = mol_crystal_benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
         
         if not os.path.exists("benchmark_stats/molecular_crystal_benchmark/"):
             os.makedirs("benchmark_stats/molecular_crystal_benchmark/")
@@ -149,10 +152,12 @@ class MolecularCrystalBenchmark(zntrack.Node):
 
         from mlipx.dash_utils import combine_apps
         apps_list = [app_X23, app_DMC_ICE]
+        benchmark_table_info = f"Scores normalised to: {normalise_to_model}" if normalise_to_model else ""
         layout = combine_apps(
             benchmark_score_df=mol_crystal_benchmark_score_df,
             benchmark_title="Molecular Crystal Benchmark",
             apps_list=apps_list,
+            benchmark_table_info=benchmark_table_info,
             style_data_conditional=style_data_conditional,
         )
         app.layout = layout
@@ -191,15 +196,19 @@ class MolecularCrystalBenchmark(zntrack.Node):
         for model in model_list:
             scores[model] = 0
             
-            for benchmark in mae_df_X23.columns[1:]: # first col model
-                mae = mae_df_X23.loc[mae_df_X23['Model'] == model, benchmark].values[0]
-                scores[model] += mae     
+            scores[model] += mae_df_X23.loc[mae_df_X23['Model'] == model, 'Score'].values[0]
+            scores[model] += mae_df_DMC_ICE.loc[mae_df_DMC_ICE['Model'] == model, 'Score'].values[0]
+            scores[model] = scores[model] / 2
+            
+            # for benchmark in mae_df_X23.columns[1:]: # first col model
+            #     mae = mae_df_X23.loc[mae_df_X23['Model'] == model, benchmark].values[0]
+            #     scores[model] += mae     
                 
-            for benchmark in mae_df_DMC_ICE.columns[1:]: # first col model
-                mae = mae_df_DMC_ICE.loc[mae_df_DMC_ICE['Model'] == model, benchmark].values[0]
-                scores[model] += mae                    
+            # for benchmark in mae_df_DMC_ICE.columns[1:]: # first col model
+            #     mae = mae_df_DMC_ICE.loc[mae_df_DMC_ICE['Model'] == model, benchmark].values[0]
+            #     scores[model] += mae                    
             
             
-            scores[model] = scores[model] / (len(mae_df_X23.columns[1:]) + len(mae_df_DMC_ICE.columns[1:]))
+            # scores[model] = scores[model] / (len(mae_df_X23.columns[1:]) + len(mae_df_DMC_ICE.columns[1:]))
             
         return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})

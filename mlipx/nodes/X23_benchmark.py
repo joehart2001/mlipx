@@ -175,10 +175,12 @@ class X23Benchmark(zntrack.Node):
         node_dict: dict[str, "X23Benchmark"],
         ui: str | None = None,
         run_interactive: bool = True,
+        normalise_to_model: t.Optional[str] = None,
+
     ):
-        from mlipx.dash_utils import run_app
+        from mlipx.dash_utils import run_app, dash_table_interactive
         import plotly.express as px
-        from dash import Dash, dcc, html, dash_table
+        from dash import Dash, dcc, html
 
         # Collect data
         mae_dict = {}
@@ -201,6 +203,15 @@ class X23Benchmark(zntrack.Node):
                 lattice_e_df_all = lattice_e_df_all.merge(lat_df.drop(columns=["ref"]), on="System")
 
         mae_df = pd.DataFrame(mae_dict.items(), columns=["Model", "MAE (kJ/mol)"])
+        
+        if normalise_to_model is not None:
+            for model_name in node_dict.keys():
+                mae_df['Score'] = mae_df['MAE (kJ/mol)'] / mae_df.loc[mae_df['Model'] == normalise_to_model, 'MAE (kJ/mol)'].values[0]
+                
+        else:
+            mae_df['Score'] = mae_df['MAE (kJ/mol)']
+        
+        mae_df['Rank'] = mae_df['Score'].rank(ascending=True)
         
         save_path = Path("benchmark_stats/molecular_crystal_benchmark/X23")
         save_path.mkdir(parents=True, exist_ok=True)
@@ -232,13 +243,14 @@ class X23Benchmark(zntrack.Node):
             html.H1("X23 Dataset"),
 
             html.H2("MAE (kJ/mol)"),
-            dash_table.DataTable(
-                data=mae_df.round(3).to_dict("records"),
-                columns=[{"name": i, "id": i} for i in mae_df.columns],
+            dash_table_interactive(
+                df=mae_df.round(3),
+                id="x23-mae-table",
+                title="MAE (kJ/mol)",
             ),
-            
+
             tabs,
-        
+
         ], style={"backgroundColor": "white", "padding": "20px"})
 
         if not run_interactive:

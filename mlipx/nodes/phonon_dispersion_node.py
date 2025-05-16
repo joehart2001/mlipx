@@ -470,7 +470,13 @@ class PhononDispersion(zntrack.Node):
 
 
     @staticmethod
-    def benchmark_interactive(pred_node_dict, ref_node_dict, ui = None, run_interactive = True):
+    def benchmark_interactive(
+        pred_node_dict, 
+        ref_node_dict, 
+        ui = None, 
+        run_interactive = True,
+        normalise_to_model: t.Optional[str] = None,
+    ):
         """
         Main benchmarking function that coordinates the benchmarking process.
         
@@ -550,12 +556,31 @@ class PhononDispersion(zntrack.Node):
         mae_summary_df = PhononDispersion.calculate_summary_statistics(
             plot_stats_dict, 
             pretty_benchmark_labels, 
-            benchmarks
+            benchmarks,
         )
         # Add stability classification column using static method
         mae_summary_df = PhononDispersion.add_stability_classification_column(mae_summary_df, model_benchmarks_dict)
         mae_summary_df = PhononDispersion.add_band_mae_column(mae_summary_df, scatter_to_dispersion_map)
         
+        # recalculate phonon score (avg) to include band MAE
+        mae_cols = [col for col in mae_summary_df.columns if col not in ['Model', 'Phonon Score \u2193', 'Rank']]
+
+        model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
+        
+        if normalise_to_model is not None:
+            # Normalise the MAE values to the specified model
+            for model in model_list:
+                score = 0
+                for col in mae_cols:
+                    score += mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0] / mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0]
+                mae_summary_df.loc[mae_summary_df['Model'] == model, 'Phonon Score \u2193'] = score / len(mae_cols)
+            
+        else:
+            # recalc score with band mae included
+            mae_summary_df['Phonon Score \u2193'] = mae_summary_df[mae_cols].mean(axis=1).round(3)
+        
+        mae_summary_df = mae_summary_df.round(3)
+        mae_summary_df['Rank'] = mae_summary_df['Phonon Score \u2193'].rank(method='min').astype(int)
         
         PhononDispersion.generate_and_save_plots(
             scatter_to_dispersion_map,
@@ -689,7 +714,7 @@ class PhononDispersion(zntrack.Node):
                 return None, None
             if col == "Stability Classification (F1)":
                 return None, summary_active_cell
-            if col == "Avg Band MAE":
+            if col == "Avg BZ MAE":
                 band_error_dict = scatter_to_dispersion_map[model_name].get("band_errors", {})
                 all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
                 import plotly.express as px
@@ -697,7 +722,7 @@ class PhononDispersion(zntrack.Node):
                     y=all_errors,
                     box=True,
                     points="outliers",
-                    title=f"{model_name} - Band MAE Distribution",
+                    title=f"{model_name} - BZ MAE Distribution",
                     labels={"y": "Absolute Error (THz)"}
                 )
                 return html.Div([dcc.Graph(figure=fig)]), summary_active_cell
@@ -1054,17 +1079,6 @@ class PhononDispersion(zntrack.Node):
             ])))
             scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
 
-
-
-
-            # band mae: combined mae for all bands for one material and one model
-            # band_mae = np.mean([
-            #     np.mean(np.abs(np.array(p) - np.array(r)))
-            #     for p, r in zip(pred_freqs, ref_freqs)
-            # ])
-            # scatter_to_dispersion_map[model_name].setdefault("band_errors", {})[mp_id] = band_mae  
-            
-            
             
             
             # Update benchmark data for the model
@@ -1145,8 +1159,8 @@ class PhononDispersion(zntrack.Node):
         mae_summary_df.reset_index(inplace=True)
         
         mae_cols = [col for col in mae_summary_df.columns if col not in ['Model']]
-        mae_summary_df['Phonon Score (avg)'] = mae_summary_df[mae_cols].mean(axis=1).round(3)
-        mae_summary_df['Rank'] = mae_summary_df['Phonon Score (avg)'].rank(method='min', ascending=True).astype(int)
+        mae_summary_df['Phonon Score \u2193'] = mae_summary_df[mae_cols].mean(axis=1).round(3)
+        mae_summary_df['Rank'] = mae_summary_df['Phonon Score \u2193'].rank(method='min', ascending=True).astype(int)
 
         
         return mae_summary_df
@@ -1378,7 +1392,7 @@ class PhononDispersion(zntrack.Node):
         # Insert the new column after "C_V" or at the end
         if "ω_min [THz]" in mae_summary_df.columns:
             insert_idx = mae_summary_df.columns.get_loc("ω_min [THz]") + 1
-            mae_summary_df.insert(insert_idx, "Avg Band MAE", band_maes)
+            mae_summary_df.insert(insert_idx, "Avg BZ MAE", band_maes)
         else:
-            mae_summary_df["Avg Band MAE"] = band_maes
+            mae_summary_df["Avg BZ MAE"] = band_maes
         return mae_summary_df

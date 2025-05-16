@@ -54,7 +54,7 @@ class MolecularBenchmark(zntrack.Node):
     """
     # inputs
     GMTKN55_list: List[GMTKN55Benchmark] = zntrack.deps()
-    #diatomic_list: List[HomonuclearDiatomics] = zntrack.deps()
+    diatomic_list: List[HomonuclearDiatomics] = zntrack.deps()
     
     
     # outputs
@@ -72,9 +72,10 @@ class MolecularBenchmark(zntrack.Node):
     @staticmethod
     def benchmark_interactive(
         GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
-        #diatomic_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
+        HD_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
         ui: str = "browser",
         full_benchmark: bool = False,
+        normalise_to_model: t.Optional[str] = None,
     ):
         
         
@@ -90,16 +91,25 @@ class MolecularBenchmark(zntrack.Node):
             value_extractor=lambda node: node
         )
         
-        # diatomic_dict = process_data(
-        #     diatomic_data,
-        #     key_extractor=lambda node: node.name.split("_homonuclear-diatomics")[0],
-        #     value_extractor=lambda node: node
-        # )
+        # Homonuclear Diatomics
+        HD_dict = process_data(
+            HD_data,
+            key_extractor=lambda node: node.name.split("_homonuclear-diatomics")[0],
+            value_extractor=lambda node: node
+        )
+        
         
     
         app_GMTKN55, wtmad_df_GMTKN55, mae_df_GMTKN55 = mlipx.GMTKN55Benchmark.mae_plot_interactive(
             node_dict=GMTKN55_dict,
             run_interactive=False,
+            normalise_to_model=normalise_to_model,
+        )
+        
+        app_HD, results_df_HD = mlipx.HomonuclearDiatomics.mae_plot_interactive(
+            node_dict=HD_dict,
+            run_interactive=False,
+            normalise_to_model=normalise_to_model,
         )
         
 
@@ -114,7 +124,7 @@ class MolecularBenchmark(zntrack.Node):
         mol_benchmark_score_df = MolecularBenchmark.mol_benchmark_score(wtmad_df_GMTKN55).round(3)
         mol_benchmark_score_df = mol_benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True)
         mol_benchmark_score_df = mol_benchmark_score_df.reset_index(drop=True)
-        mol_benchmark_score_df['Rank'] = mol_benchmark_score_df.index + 1
+        mol_benchmark_score_df['Rank'] = mol_benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
         
         if not os.path.exists("benchmark_stats/molecular_benchmark/"):
             os.makedirs("benchmark_stats/molecular_benchmark/")
@@ -143,24 +153,27 @@ class MolecularBenchmark(zntrack.Node):
         app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
         from mlipx.dash_utils import combine_apps
-        apps_list = [app_GMTKN55]
+        apps_list = [app_GMTKN55, app_HD]
+        benchmark_table_info = f"Scores normalised to: {normalise_to_model}" if normalise_to_model else ""
         layout = combine_apps(
             benchmark_score_df=mol_benchmark_score_df,
             benchmark_title="Molecular Benchmark",
             apps_list=apps_list,
+            benchmark_table_info=benchmark_table_info,
             style_data_conditional=style_data_conditional,
         )
         app.layout = layout
         
         # app_list[0] is the main app now
         GMTKN55Benchmark.register_callbacks(app, GMTKN55_dict, mae_df_GMTKN55)
-        
+        HomonuclearDiatomics.register_callbacks(app, HD_dict, results_df_HD)
         
         from mlipx.dash_utils import run_app
 
         if full_benchmark:
             return app, mol_benchmark_score_df, lambda app: (
                 GMTKN55Benchmark.register_callbacks(app, GMTKN55_dict, mae_df_GMTKN55),
+                HomonuclearDiatomics.register_callbacks(app, HD_dict, results_df_HD),
             )
         
         return run_app(app, ui=ui)        
@@ -174,7 +187,7 @@ class MolecularBenchmark(zntrack.Node):
 
     def mol_benchmark_score(
         wtmad_df_GMTKN55, 
-        #mae_df_DMC_ICE, 
+        
     ):
         """ Currently avg mae
         """
@@ -188,13 +201,8 @@ class MolecularBenchmark(zntrack.Node):
         for model in model_list:
             scores[model] = 0
             
-            for benchmark in wtmad_df_GMTKN55.columns[1:]: # first col model
-                mae = wtmad_df_GMTKN55.loc[wtmad_df_GMTKN55['Model'] == model, benchmark].values[0]
-                scores[model] += mae     
-                
-               
+            scores[model] += wtmad_df_GMTKN55.loc[wtmad_df_GMTKN55['Model'] == model, 'Score'].values[0]
             
-            
-            scores[model] = scores[model] / (len(wtmad_df_GMTKN55.columns[1:]))
+            scores[model] = scores[model] / 1
             
         return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})

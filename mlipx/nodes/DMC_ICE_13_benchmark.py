@@ -25,6 +25,7 @@ import re
 import pandas as pd
 from dash.exceptions import PreventUpdate
 from dash import dash_table
+from mlipx.dash_utils import dash_table_interactive
 import socket
 import time
 from typing import List, Dict, Any, Optional
@@ -148,11 +149,14 @@ class DMCICE13Benchmark(zntrack.Node):
         node_dict: dict[str, "DMCICE13Benchmark"],
         ui: str | None = None,
         run_interactive: bool = True,
+        normalise_to_model: t.Optional[str] = None,
+
     ):
         from mlipx.dash_utils import run_app
 
         mae_dict = {}
         rel_ih_dict = {}
+        rel_poly_mae_dict = {}
         lattice_e_all_df = None
         ref_df = None
         rel_poly_dfs = {}
@@ -180,6 +184,7 @@ class DMCICE13Benchmark(zntrack.Node):
             rel_ih_dict[model_name] = abs(rel_model[model_name] - rel_ref["Ref"]).mean()
 
             # All relative plots
+            per_poly_maes = []
             for poly in lat_df.index:
                 rel_model = lat_df - lat_df.loc[poly]
                 rel_ref = ref - ref.loc[poly]
@@ -190,13 +195,25 @@ class DMCICE13Benchmark(zntrack.Node):
                     rel_poly_dfs[poly] = rel_ref
                 rel_poly_dfs[poly] = rel_poly_dfs[poly].merge(rel_model, left_index=True, right_index=True)
 
+                per_poly_maes.append(abs(rel_model[model_name] - rel_ref["Ref"]).mean())
+            
+            rel_poly_mae_dict[model_name] = np.mean(per_poly_maes)
+
             if ref_df is None:
                 ref_df = ref
 
         mae_df = (
             pd.DataFrame(mae_dict.items(), columns=["Model", "MAE (meV)"])
-            .merge(pd.DataFrame(rel_ih_dict.items(), columns=["Model", "MAE relative to Ih (meV)"]), on="Model")
-        )
+            .merge(pd.DataFrame(rel_poly_mae_dict.items(), columns=["Model", "Avg MAE relative to all polymorphs (meV)"]), on="Model")
+        )            
+        
+        mae_df["Score"] = mae_df[["MAE (meV)", "Avg MAE relative to all polymorphs (meV)"]].mean(axis=1)
+        
+        if normalise_to_model is not None:
+            mae_df["Score"] = mae_df["Score"] / mae_df[mae_df["Model"] == normalise_to_model]["Score"].values[0]
+
+        mae_df['Rank'] = mae_df['Score'].rank(ascending=True)
+
 
         save_path = Path("benchmark_stats/molecular_crystal_benchmark/DMC-ICE13")
         save_path.mkdir(parents=True, exist_ok=True)
@@ -253,9 +270,10 @@ class DMCICE13Benchmark(zntrack.Node):
             html.H1("DMC-ICE13 Dataset"),
 
             html.H2("MAE Table (meV)"),
-            dash_table.DataTable(
-                data=mae_df.round(3).to_dict("records"),
-                columns=[{"name": i, "id": i} for i in mae_df.columns],
+            dash_table_interactive(
+                df=mae_df.round(3),
+                id="dmc-ice-mae-table",
+                title="MAE Table (meV)",
             ),
 
             tabs,
