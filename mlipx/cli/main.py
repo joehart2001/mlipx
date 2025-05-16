@@ -708,6 +708,7 @@ def full_benchmark_compare(
         "*X23Benchmark*",
         "*DMCICE13Benchmark*",
         "*GMTKN55Benchmark*"
+        "*HomonuclearDiatomics*",
     ]
     glob = True
     
@@ -736,13 +737,16 @@ def full_benchmark_compare(
         split_str_ICE="_DMCICE13Benchmark",
     )
     # molecular benchmark
-    GMTKN55_dict = get_mol_benchmark_node_dicts(
+    GMTKN55_dict, HD_dict = get_mol_benchmark_node_dicts(
         nodes,
         glob,
         models,
         all_nodes,
         split_str_GMTKN55="_GMTKN55Benchmark",
+        split_str_HD="_homonuclear-diatomics",
     )
+    
+
     
     # print('phonon_pred_node_dict = ', phonon_pred_node_dict)
     # print('phonon_ref_node_dict = ', phonon_ref_node_dict)
@@ -770,6 +774,7 @@ def full_benchmark_compare(
             X23_data=X23_dict,
             DMC_ICE_data=ICE_DMC_dict,
             GMTKN55_data=GMTKN55_dict,
+            HD_data=HD_dict,
             ui=ui,
             return_app = return_app,
             report=report,
@@ -785,6 +790,7 @@ def full_benchmark_compare(
             X23_data=X23_dict,
             DMC_ICE_data=ICE_DMC_dict,
             GMTKN55_data=GMTKN55_dict,
+            HD_data=HD_dict,
             ui=ui,
             report=report,
             normalise_to_model=normalise_to_model,
@@ -831,16 +837,20 @@ def get_mol_benchmark_node_dicts(
     glob: bool,
     models: list[str] | None,
     all_nodes: list[str],
-    split_str_GMTKN55: str,
+    split_str_GMTKN55: str = "_GMTKN55Benchmark",
+    split_str_HD: str = "_homonuclear-diatomics",
 ) -> dict[str, zntrack.Node]:
     
     GMTKN55_nodes = [node for node in all_nodes if "GMTKN55Benchmark" in node]
+    HD_nodes = [node for node in all_nodes if "HomonuclearDiatomics" in node]
     
     GMTKN55_node_objects = load_node_objects(nodes, glob, models, GMTKN55_nodes, split_str=split_str_GMTKN55)
+    HD_node_objects = load_node_objects(nodes, glob, models, HD_nodes, split_str=split_str_HD)
     
     GMTKN55_dict = load_nodes_model(GMTKN55_node_objects, models, split_str=split_str_GMTKN55)
+    HD_dict = load_nodes_model(HD_node_objects, models, split_str=split_str_HD)
     
-    return GMTKN55_dict
+    return GMTKN55_dict, HD_dict
 
 
 

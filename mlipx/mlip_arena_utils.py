@@ -267,7 +267,7 @@ def get_homonuclear_diatomic_stats(models):
 
         table = pd.concat([table, pd.DataFrame([new_row])], ignore_index=True)
 
-    table.set_index("Model", inplace=True)
+    #table.set_index("Model", inplace=True)
 
     table.sort_values("Conservation deviation [eV/Å]", ascending=True, inplace=True)
     table["Rank"] = np.argsort(table["Conservation deviation [eV/Å]"].to_numpy())
@@ -308,13 +308,14 @@ def get_homonuclear_diatomic_stats(models):
 
     table.sort_values(["Rank", "Conservation deviation [eV/Å]"], ascending=True, inplace=True)
 
-    table["Rank aggr."] = table["Rank"]
-    table["Rank"] = table["Rank aggr."].rank(method='min').astype(int)
+    #table["Rank aggr."] = table["Rank"]
+    #table["Rank"] = table["Rank aggr."].rank(method='min').astype(int)
 
     table = table.reindex(
         columns=[
+            "Model",
             "Rank",
-            "Rank aggr.",
+            #"Rank aggr.",
             "Conservation deviation [eV/Å]",
             #"PBE energy MAE [eV]",
             #"PBE force MAE [eV/Å]",

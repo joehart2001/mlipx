@@ -267,13 +267,10 @@ class DMCICE13Benchmark(zntrack.Node):
 
 
         app.layout = html.Div([
-            html.H1("DMC-ICE13 Dataset"),
-
-            html.H2("MAE Table (meV)"),
             dash_table_interactive(
                 df=mae_df.round(3),
                 id="dmc-ice-mae-table",
-                title="MAE Table (meV)",
+                title="DMC-ICE-13 Dataset: MAE Table (meV)",
             ),
 
             tabs,

@@ -212,8 +212,10 @@ def combine_apps(
             style_header={'fontWeight': 'bold'},
             style_data_conditional=style_data_conditional if style_data_conditional else None,
         ),
-    ])
+    ], style={"backgroundColor": "white", "padding": "20px"})
     
+
+
     app_layout_dict = {f"app_{i}": app.layout for i, app in enumerate(apps_list)}
     
     children = [

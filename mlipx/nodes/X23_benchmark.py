@@ -240,13 +240,10 @@ class X23Benchmark(zntrack.Node):
         )
 
         app.layout = html.Div([
-            html.H1("X23 Dataset"),
-
-            html.H2("MAE (kJ/mol)"),
             dash_table_interactive(
                 df=mae_df.round(3),
                 id="x23-mae-table",
-                title="MAE (kJ/mol)",
+                title="X23 dataset: MAE Table (kJ/mol)",
             ),
 
             tabs,
