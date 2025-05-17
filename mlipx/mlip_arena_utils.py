@@ -205,7 +205,7 @@ def get_homonuclear_diatomic_properties(model, node, pbe_ref = False):
         
         
 
-    json_fpath = Path(f"HD-stats/{model}/homonuclear-diatomics.json")
+    json_fpath = Path(f"benchmark_stats/molecular_benchmark/homonuclear_diatomics/stats/{model}-homonuclear-diatomics.json")
 
     # if json_fpath.exists():
     #     df0 = pd.read_json(json_fpath)
@@ -227,10 +227,10 @@ def get_homonuclear_diatomic_stats(models):
 
 
 
-    DATA_DIR = Path("HD-stats")
+    DATA_DIR = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/stats/")
 
     dfs = [
-        pd.read_json(DATA_DIR / f"{model}/homonuclear-diatomics.json")
+        pd.read_json(DATA_DIR / f"{model}-homonuclear-diatomics.json")
         for model in models
     ]
     df = pd.concat(dfs, ignore_index=True)

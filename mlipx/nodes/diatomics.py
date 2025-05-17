@@ -551,6 +551,7 @@ class HomonuclearDiatomics(zntrack.Node):
             
             # shift to zero at xmax
             shift = y.iloc[-1]
+            y = y - shift
 
             ax.plot(x, y, linewidth=1, zorder = 1)
             ax.set_title(f"{el}, shift: {shift:.4f}", fontsize=10)
@@ -568,7 +569,7 @@ class HomonuclearDiatomics(zntrack.Node):
                     axes[r, c].axis("off")
 
         plt.suptitle(f"Homonuclear Diatomics: {model_name}", fontsize=18)
-        path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics")
+        path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/plots/")
         path.mkdir(parents=True, exist_ok=True)
         plt.savefig(path / f"{model_name}_ptable_diatomics.svg")
         plt.close(fig)
