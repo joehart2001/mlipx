@@ -707,7 +707,7 @@ def full_benchmark_compare(
         "*LatticeConst*",
         "*X23Benchmark*",
         "*DMCICE13Benchmark*",
-        "*GMTKN55Benchmark*"
+        "*GMTKN55Benchmark*",
         "*HomonuclearDiatomics*",
     ]
     glob = True
@@ -813,12 +813,13 @@ def molecular_benchmark(
         all_nodes = list(json.load(f).keys())
     
     
-    GMTKN55_dict = get_mol_benchmark_node_dicts(
+    GMTKN55_dict, HD_dict = get_mol_benchmark_node_dicts(
         nodes,
         glob,
         models,
         all_nodes,
         split_str_GMTKN55="_GMTKN55Benchmark",
+        split_str_HD="_homonuclear-diatomics",
     )
     
     if ui not in {None, "browser"}:
@@ -826,8 +827,9 @@ def molecular_benchmark(
         raise typer.Exit(1)
     print('\n UI = ', ui)
     from mlipx import MolecularBenchmark
-    MolecularBenchmark.mae_plot_interactive(
-        node_dict=GMTKN55_dict,
+    MolecularBenchmark.benchmark_interactive(
+        GMTKN55_data=GMTKN55_dict,
+        HD_data=HD_dict,
         ui=ui
     )
     
