@@ -102,6 +102,7 @@ class LatticeConstant(zntrack.Node):
         ref_node,
         ui: str | None = None,
         run_interactive: bool = True,
+        report: bool = True,
         normalise_to_model: t.Optional[str] = None,
     ):
 
@@ -157,12 +158,16 @@ class LatticeConstant(zntrack.Node):
         
         # report
         models_list = [col for col in lat_const_df.columns if col != "ref"]
-        md_path = LatticeConstant.generate_lattice_const_report(
-            mae_df=mae_df,
-            models_list=models_list,
-            markdown_path="benchmark_stats/bulk_crystal_benchmark/lattice_constants/lattice_const_report.md",
-            lat_const_df=lat_const_df,
-        )
+        
+        if report:
+            md_path = LatticeConstant.generate_lattice_const_report(
+                mae_df=mae_df,
+                models_list=models_list,
+                markdown_path="benchmark_stats/bulk_crystal_benchmark/lattice_constants/lattice_const_report.md",
+                lat_const_df=lat_const_df,
+            )
+        else:
+            md_path = None
 
         
 

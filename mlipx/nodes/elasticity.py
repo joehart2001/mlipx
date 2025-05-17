@@ -138,6 +138,7 @@ class Elasticity(zntrack.Node):
         node_dict, 
         ui = None, 
         run_interactive = True,
+        report = True,
         normalise_to_model: t.Optional[str] = None,
     ):
         """Interactive MAE table -> scatter plot for bulk and shear moduli for each model 
@@ -196,11 +197,14 @@ class Elasticity(zntrack.Node):
         )
         
         models_list = list(node_dict.keys())
-        md_path = Elasticity.generate_elasticity_report(
-            mae_df=mae_df,
-            models_list=models_list,
-            
-        )
+        if report:
+            md_path = Elasticity.generate_elasticity_report(
+                mae_df=mae_df,
+                models_list=models_list,
+                
+            )
+        else:
+            md_path = None
         
         if ui is None and run_interactive:
             return

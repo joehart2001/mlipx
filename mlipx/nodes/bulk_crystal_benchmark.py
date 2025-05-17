@@ -138,12 +138,14 @@ class BulkCrystalBenchmark(zntrack.Node):
             pred_node_dict=phonon_dict_pred,
             ref_node_dict=phonon_dict_ref,
             run_interactive=False,
+            report=report,
             normalise_to_model=normalise_to_model,
         )
         
         app_elasticity, mae_df_elas, elas_md_path = mlipx.Elasticity.mae_plot_interactive(
             node_dict=elasticity_dict,
             run_interactive=False,
+            report=report,
             normalise_to_model=normalise_to_model,
         )
         
@@ -152,6 +154,7 @@ class BulkCrystalBenchmark(zntrack.Node):
             node_dict=lattice_const_dict,
             ref_node = lattice_const_ref_node,
             run_interactive=False,
+            report=report,
             normalise_to_model=normalise_to_model,
         )
 

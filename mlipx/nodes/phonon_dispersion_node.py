@@ -475,6 +475,7 @@ class PhononDispersion(zntrack.Node):
         ref_node_dict, 
         ui = None, 
         run_interactive = True,
+        report = True,
         normalise_to_model: t.Optional[str] = None,
     ):
         """
@@ -592,10 +593,13 @@ class PhononDispersion(zntrack.Node):
         
         model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
         
-        md_path = PhononDispersion.generate_phonon_report(
-            mae_summary_df=mae_summary_df,
-            models_list=model_list,
-        )
+        if report:
+            md_path = PhononDispersion.generate_phonon_report(
+                mae_summary_df=mae_summary_df,
+                models_list=model_list,
+            )
+        else:
+            md_path = None
         
         if ui is None and run_interactive:
             return
