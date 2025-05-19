@@ -71,7 +71,7 @@ class PhononDispersion(zntrack.Node):
     total_no_nodes: int = zntrack.params(None)
     
 
-    qpoints_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
+    #qpoints_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
     labels_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
     connections_input_path: t.Optional[pathlib.Path] = zntrack.deps(None)
     
@@ -96,10 +96,10 @@ class PhononDispersion(zntrack.Node):
         phonons = load_phonopy(str(self.phonopy_yaml_path))
 
         
-        if self.qpoints_input_path:
+        if self.labels_input_path:
             # calculate phonon structure along the reference path to ensure a valid comparison
-            with open(self.qpoints_input_path, "rb") as f:
-                qpoints = pickle.load(f)
+            # with open(self.qpoints_input_path, "rb") as f:
+            #     qpoints = pickle.load(f)
             with open(self.labels_input_path, "r") as f:
                 labels = json.load(f)
             with open(self.connections_input_path, "r") as f:
@@ -114,8 +114,8 @@ class PhononDispersion(zntrack.Node):
             
 
             # save, zntrack requires each output declared to be an output
-            with open(self.qpoints_path, "wb") as f:
-                pickle.dump(qpoints, f)
+            # with open(self.qpoints_path, "wb") as f:
+            #     pickle.dump(qpoints, f)
             with open(self.labels_path, "w") as f:
                 json.dump(labels, f)
             with open(self.connections_path, "w") as f:
@@ -136,8 +136,8 @@ class PhononDispersion(zntrack.Node):
                 path_connections=connections,
             )
             
-            with open(self.qpoints_path, "wb") as f:
-                pickle.dump(qpoints, f)
+            # with open(self.qpoints_path, "wb") as f:
+            #     pickle.dump(qpoints, f)
             with open(self.labels_path, "w") as f:
                 json.dump(labels, f)
             with open(self.connections_path, "w") as f:
@@ -170,10 +170,10 @@ class PhononDispersion(zntrack.Node):
             now = datetime.now().strftime("%H:%M:%S")
             print(f"[{now}] Phonons {self.node_idx}/{self.total_no_nodes} predicted.")        
 
-    @property
-    def qpoints(self):
-        with open(self.qpoints_path, "rb") as f:
-            return pickle.load(f)
+    # @property
+    # def qpoints(self):
+    #     with open(self.qpoints_path, "rb") as f:
+    #         return pickle.load(f)
 
     @property
     def labels(self):
