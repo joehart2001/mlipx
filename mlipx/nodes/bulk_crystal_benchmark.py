@@ -277,21 +277,7 @@ class BulkCrystalBenchmark(zntrack.Node):
             
             scores[model] = scores[model] / 3
             
-            # for benchmark in mae_df_lattice_const.columns[1:]: # first col model
-            #     mae = mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, benchmark].values[0]
-            #     scores[model] += mae     
-                
-            # for benchmark in phonon_mae_df.columns[1:]: # first col model
-            #     mae = phonon_mae_df.loc[phonon_mae_df['Model'] == model, benchmark].values[0]
-            #     scores[model] += mae                    
-                
-            
-            # for benchmark in mae_df_elas.columns[1:]: # first col model
-            #     mae = mae_df_elas.loc[mae_df_elas['Model'] == model, benchmark].values[0]
-            #     scores[model] += mae
-            
-            #scores[model] = scores[model] / (len(phonon_mae_df.columns[1:]) + len(mae_df_elas.columns[1:]) + len(mae_df_lattice_const.columns[1:]))
-            
+
             
             
         return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})

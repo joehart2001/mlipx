@@ -380,7 +380,7 @@ class Elasticity(zntrack.Node):
         if mae is not None:
             fig.add_annotation(
                 xref="paper", yref="paper", x=0.02, y=0.98,
-                text=f"{label} MAE: {mae} GPa",
+                text=f"{label} MAE: {mae} GPa<br>Total points: {len(x)}",
                 showarrow=False,
                 font=dict(size=14, color="black"),
                 bordercolor="black", borderwidth=1,

@@ -12,7 +12,7 @@ from ase import Atoms, units
 from ase.build import bulk
 from ase.phonons import Phonons
 from ase.dft.kpoints import bandpath
-from ase.optimize import LBFGS
+from ase.optimize import LBFGS, FIRE
 from dataclasses import field
 
 import warnings
@@ -79,6 +79,10 @@ class PhononForceConstants(zntrack.Node):
             atoms = self.data[self.material_idx]
                     
             atoms.calc = calc
+            
+            # relax the structure
+            opt = FIRE(atoms)
+            opt.run(fmax=0.05, steps=1000)
             
             # initialize Phonopy with displacements
             phonons = init_phonopy(

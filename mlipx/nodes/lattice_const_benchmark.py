@@ -61,7 +61,7 @@ class LatticeConstant(zntrack.Node):
     def run(self):
 
         structure = self.structure[-1]
-        
+
         if structure.info['lattice_type'] == '2H-SiC' or structure.info['lattice_type'] == 'hcp':
             lattice_const_a = structure.cell.lengths()[0]
             lattice_const_c = structure.cell.lengths()[2]
