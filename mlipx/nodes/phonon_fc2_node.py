@@ -23,7 +23,7 @@ from tqdm import tqdm
 from phonopy.api_phonopy import Phonopy
 import yaml
 from typing import Union
-
+from ase.filters import FrechetCellFilter
 
 from scipy.stats import gaussian_kde
 
@@ -81,8 +81,9 @@ class PhononForceConstants(zntrack.Node):
             atoms.calc = calc
             
             # relax the structure
-            opt = FIRE(atoms)
-            opt.run(fmax=0.05, steps=1000)
+            ecf = FrechetCellFilter(atoms)
+            opt = FIRE(ecf)
+            opt.run(fmax=0.005, steps=1000)
             
             # initialize Phonopy with displacements
             phonons = init_phonopy(
@@ -102,6 +103,10 @@ class PhononForceConstants(zntrack.Node):
             displacement_dataset = phonons.dataset
             atoms = phonopy2aseatoms(phonons)
             atoms.calc = calc
+            
+            ecf = FrechetCellFilter(atoms)
+            opt = FIRE(ecf)
+            opt.run(fmax=0.005, steps=1000)
             
             # primitive matrix not always available in reference data e.g. mp-30056
             if "primitive_matrix" in atoms.info.keys():
@@ -149,7 +154,10 @@ class PhononForceConstants(zntrack.Node):
         
         # thermal properties
         phonons.run_mesh([20, 20, 20])
-        phonons.run_thermal_properties(temperatures=self.thermal_properties_temperatures)
+        phonons.run_thermal_properties(
+            temperatures=self.thermal_properties_temperatures,
+            cutoff_frequency = 0.05 # cuttoff for negative frequencies
+            )
         thermal_properties_dict = phonons.get_thermal_properties_dict()
         
         thermal_properties_dict_safe = {
