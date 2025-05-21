@@ -107,7 +107,7 @@ for mp_id in fc2_dict:
             phonon = mlipx.PhononDispersion(
                 phonopy_yaml_path=fc2.force_constants_path,
                 thermal_properties_path=fc2.get_thermal_properties_path,
-                #qpoints_input_path=ref_phonon.qpoints_path,
+                qpoints_input_path=ref_phonon.qpoints_path,
                 labels_input_path=ref_phonon.labels_path,
                 connections_input_path=ref_phonon.connections_path,
                 #node_idx=idx,

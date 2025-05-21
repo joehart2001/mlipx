@@ -28,7 +28,7 @@ from ase.filters import FrechetCellFilter
 from scipy.stats import gaussian_kde
 
 from mlipx.abc import ComparisonResults, NodeWithCalculator
-
+from ase.constraints import FixSymmetry
 
 from mlipx.phonons_utils import *
 from phonopy import load as load_phonopy
@@ -104,8 +104,9 @@ class PhononForceConstants(zntrack.Node):
             atoms = phonopy2aseatoms(phonons)
             atoms.calc = calc
             
-            ecf = FrechetCellFilter(atoms)
-            opt = FIRE(ecf)
+            atoms_sym = atoms.copy()
+            atoms_sym.set_constraint(FixSymmetry(atoms_sym))
+            opt = FIRE(atoms_sym)
             opt.run(fmax=0.005, steps=1000)
             
             # primitive matrix not always available in reference data e.g. mp-30056
