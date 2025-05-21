@@ -55,7 +55,7 @@ class PhononForceConstants(zntrack.Node):
     
     # parameters
     material_idx: int = zntrack.params(0)
-    N_q_mesh: int = zntrack.params(20)
+    N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
     delta: float = zntrack.params(0.05) # displacement for finite difference calculation
     fmax: float = zntrack.params(0.0001) # max force on atoms for relaxation

@@ -471,8 +471,8 @@ class PhononDispersion(zntrack.Node):
 
     @staticmethod
     def benchmark_interactive(
-        pred_node_dict, 
-        ref_node_dict, 
+        pred_node_dict: t.Dict[str, t.Dict[str, zntrack.Node]],
+        ref_node_dict: t.Dict[str, zntrack.Node],
         ui = None, 
         run_interactive = True,
         report = True,

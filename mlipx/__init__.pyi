@@ -44,6 +44,7 @@ from .nodes.DMC_ICE_13_benchmark import DMCICE13Benchmark
 from .nodes.molecular_crystal_benchmark import MolecularCrystalBenchmark
 from .nodes.molecular_benchmark import MolecularBenchmark
 from .nodes.full_benchmark import FullBenchmark
+from .nodes.phonon_all import PhononAllBatch
 from .project import Project
 from .version import __version__
 
@@ -97,5 +98,6 @@ __all__ = [
     "MolecularCrystalBenchmark",
     "MolecularBenchmark",
     "FullBenchmark",
+    "PhononAllBatch",
     "__version__",
 ]
