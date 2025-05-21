@@ -102,9 +102,9 @@ class PhononForceConstants(zntrack.Node):
             phonons = load_phonopy(str(self.data))
             displacement_dataset = phonons.dataset
             atoms = phonopy2aseatoms(phonons)
-            atoms.calc = calc
             
             atoms_sym = atoms.copy()
+            atoms_sym.calc = calc
             atoms_sym.set_constraint(FixSymmetry(atoms_sym))
             opt = FIRE(atoms_sym)
             opt.run(fmax=0.005, steps=1000)
