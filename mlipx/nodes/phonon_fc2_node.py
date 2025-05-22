@@ -78,11 +78,12 @@ class PhononForceConstants(zntrack.Node):
         if isinstance(self.data, list):
             atoms = self.data[self.material_idx]
                     
-            atoms.calc = calc
             
             # relax the structure
-            ecf = FrechetCellFilter(atoms)
-            opt = FIRE(ecf)
+            atoms_sym = atoms.copy()
+            atoms_sym.calc = calc
+            atoms_sym.set_constraint(FixSymmetry(atoms_sym))
+            opt = FIRE(atoms_sym)
             opt.run(fmax=0.005, steps=1000)
             
             # initialize Phonopy with displacements
