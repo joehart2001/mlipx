@@ -154,7 +154,7 @@ class LatticeConstant(zntrack.Node):
 
 
         # save
-        LatticeConstant.save_lattice_const_plots_tables(lat_const_df)
+        LatticeConstant.save_lattice_const_plots_tables(lat_const_df, mae_df)
         
         # report
         models_list = [col for col in lat_const_df.columns if col != "ref"]
@@ -291,7 +291,7 @@ class LatticeConstant(zntrack.Node):
     
     
     @staticmethod
-    def save_lattice_const_plots_tables(lat_const_df, save_dir="benchmark_stats/bulk_crystal_benchmark/lattice_constants"):
+    def save_lattice_const_plots_tables(lat_const_df, mae_df, save_dir="benchmark_stats/bulk_crystal_benchmark/lattice_constants"):
         """Save lattice constant scatter plots, Δ tables, and summary table to disk."""
         save_dir = Path(save_dir)
         save_dir.mkdir(parents=True, exist_ok=True)
@@ -344,10 +344,11 @@ class LatticeConstant(zntrack.Node):
             )
 
             fig.write_image(model_dir / "lattice_constants.png", width=800, height=600)
+            
+            #mae_summary.append({"Model": model_name, "MAE (Å)": round(mae, 3)})
 
-            mae_summary.append({"Model": model_name, "MAE (Å)": round(mae, 3)})
-
-        pd.DataFrame(mae_summary).to_csv(save_dir / "mae_summary.csv", index=False)
+        #pd.DataFrame(mae_summary).to_csv(save_dir / "mae_summary.csv", index=False)
+        mae_df.to_csv(save_dir / "mae_summary.csv", index=False)
     
 
 

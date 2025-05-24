@@ -92,9 +92,18 @@ def get_homonuclear_diatomic_properties(model, node, pbe_ref = False):
         # no. of minima
         # finite diff to approximate deriv, convert to signs of slope, diff again to see how many times it crosses zero
         num_minima = np.sum((np.diff(np.sign(np.diff(es))) > 0))
+        
         # no. of inflections
         # sign changes of 2nd derivative
-        num_inflections = np.sum(np.diff(np.sign(d2e_dr2)) != 0)
+        TOL = 0.5
+        d2e = d2e_dr2.copy()
+        signs = np.sign(d2e)
+        sign_changes = np.diff(signs)
+        # Inflection must be a genuine sign change (not 0 → 0)
+        crosses_zero = sign_changes != 0
+        # To filter out weak sign changes across low-magnitude values
+        mask = (np.abs(d2e[:-1]) > TOL) & (np.abs(d2e[1:]) > TOL)
+        num_inflections = np.sum(crosses_zero & mask)
 
         # avoid numerical sensitity close to zero
         rounded_fs = np.copy(fs)
@@ -243,12 +252,12 @@ def get_homonuclear_diatomic_stats(models):
 
         new_row = {
             "Model": model,
-            "Conservation deviation [eV/Å]": rows["conservation-deviation"].mean(),
+            #"Conservation deviation [eV/Å]": rows["conservation-deviation"].mean(),
             "Tortuosity": rows["tortuosity"].mean(),
-            "Energy jump [eV]": rows["energy-jump"].mean(),
+            #"Energy jump [eV]": rows["energy-jump"].mean(),
             "Force flips": rows["force-flip-times"].mean(),
-            "No. energy minima": rows["num-energy-minima"].mean(),
-            "No. energy inflections": rows["num-energy-inflections"].mean(),
+            "Energy minima": rows["num-energy-minima"].mean(),
+            "Energy inflections": rows["num-energy-inflections"].mean(),
             "Spearman's coeff. (E: repulsion)": rows[
                 "spearman-repulsion-energy"
             ].mean(),
@@ -268,9 +277,9 @@ def get_homonuclear_diatomic_stats(models):
         table = pd.concat([table, pd.DataFrame([new_row])], ignore_index=True)
 
     #table.set_index("Model", inplace=True)
-
-    table.sort_values("Conservation deviation [eV/Å]", ascending=True, inplace=True)
-    table["Rank"] = np.argsort(table["Conservation deviation [eV/Å]"].to_numpy())
+    table["Rank"] = 0
+    #table.sort_values("Conservation deviation [eV/Å]", ascending=True, inplace=True)
+    #table["Rank"] = np.argsort(table["Conservation deviation [eV/Å]"].to_numpy())
 
     table.sort_values(
         "Spearman's coeff. (E: repulsion)", ascending=True, inplace=True
@@ -292,21 +301,24 @@ def get_homonuclear_diatomic_stats(models):
     table.sort_values("Tortuosity", ascending=True, inplace=True)
     table["Rank"] += np.argsort(table["Tortuosity"].to_numpy())
 
-    table.sort_values("Energy jump [eV]", ascending=True, inplace=True)
-    table["Rank"] += np.argsort(table["Energy jump [eV]"].to_numpy())
+    #table.sort_values("Energy jump [eV]", ascending=True, inplace=True)
+    #table["Rank"] += np.argsort(table["Energy jump [eV]"].to_numpy())
 
     table.sort_values("Force flips", ascending=True, inplace=True)
     table["Rank"] += np.argsort(np.abs(table["Force flips"].to_numpy() - 1))
     
-    table.sort_values("No. energy minima", ascending=True, inplace=True)
-    table["Rank"] += np.argsort(table["No. energy minima"].to_numpy())
+    table.sort_values("Energy minima", ascending=True, inplace=True)
+    table["Rank"] += np.argsort(table["Energy minima"].to_numpy())
     
-    table.sort_values("No. energy inflections", ascending=True, inplace=True)
-    table["Rank"] += np.argsort(table["No. energy inflections"].to_numpy())
+    table.sort_values("Energy inflections", ascending=True, inplace=True)
+    table["Rank"] += np.argsort(table["Energy inflections"].to_numpy())
 
     table["Rank"] += 1
 
-    table.sort_values(["Rank", "Conservation deviation [eV/Å]"], ascending=True, inplace=True)
+    #table.sort_values(["Rank", "Conservation deviation [eV/Å]"], ascending=True, inplace=True)
+
+    table["Rank"] = table["Rank"].rank(method="min").astype(int)
+    table.sort_values("Rank", inplace=True)
 
     #table["Rank aggr."] = table["Rank"]
     #table["Rank"] = table["Rank aggr."].rank(method='min').astype(int)
@@ -314,16 +326,15 @@ def get_homonuclear_diatomic_stats(models):
     table = table.reindex(
         columns=[
             "Model",
-            "Rank",
             #"Rank aggr.",
-            "Conservation deviation [eV/Å]",
+            #"Conservation deviation [eV/Å]",
             #"PBE energy MAE [eV]",
             #"PBE force MAE [eV/Å]",
-            "Energy jump [eV]",
+            #"Energy jump [eV]",
             "Force flips",
             "Tortuosity",
-            "No. energy minima",
-            "No. energy inflections",
+            "Energy minima",
+            "Energy inflections",
             "Spearman's coeff. (E: repulsion)",
             "Spearman's coeff. (F: descending)",
             "Spearman's coeff. (E: attraction)",

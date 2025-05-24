@@ -170,6 +170,7 @@ class BulkCrystalBenchmark(zntrack.Node):
             phonon_mae_df, 
             mae_df_elas, 
             mae_df_lattice_const, 
+            normalise_to_model=normalise_to_model
         ).round(3)
         bulk_crystal_benchmark_score_df = bulk_crystal_benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True)
         bulk_crystal_benchmark_score_df = bulk_crystal_benchmark_score_df.reset_index(drop=True)
@@ -258,6 +259,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         phonon_mae_df, 
         mae_df_elas, 
         mae_df_lattice_const,
+        normalise_to_model: Optional[str] = None
     ):
         """ Currently avg mae
             (problem with other explored metrics: if we normalise by the max mae, then the models in this test are comparable to each other but not models run in a different test, as they will be normalised differently)
@@ -271,13 +273,15 @@ class BulkCrystalBenchmark(zntrack.Node):
         for model in model_list:
             scores[model] = 0
             
-            scores[model] += mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, "Lat Const Score \u2193"].values[0]
-            scores[model] += phonon_mae_df.loc[phonon_mae_df['Model'] == model, "Phonon Score \u2193"].values[0]
-            scores[model] += mae_df_elas.loc[mae_df_elas['Model'] == model, "Elasticity Score \u2193"].values[0]
+            scores[model] += 0.2 * mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, "Lat Const Score \u2193"].values[0]
+            scores[model] += 1 * phonon_mae_df.loc[phonon_mae_df['Model'] == model, "Phonon Score \u2193"].values[0]
+            scores[model] += 1 * mae_df_elas.loc[mae_df_elas['Model'] == model, "Elasticity Score \u2193"].values[0]
             
             scores[model] = scores[model] / 3
             
-
+        # normalise scores 
+        if normalise_to_model:
+            scores = {k: v / scores[normalise_to_model] for k, v in scores.items()}
             
             
         return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})

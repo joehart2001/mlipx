@@ -330,7 +330,12 @@ class HomonuclearDiatomics(zntrack.Node):
             )
 
         stats_df = get_homonuclear_diatomic_stats(list(node_dict.keys()))
+        stats_df = HomonuclearDiatomics.score_diatomics(stats_df, normalise_to_model=normalise_to_model)
+        stats_df["Rank"] = stats_df["Score"].rank(ascending=True, method="min").astype(int)
         
+        path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/stats")
+        path.mkdir(exist_ok=True, parents=True)
+        stats_df.to_csv(path / "stats.csv", index=False)
         #if normalise_to_model is not None:
             #stats_df['Score']
 
@@ -377,7 +382,7 @@ class HomonuclearDiatomics(zntrack.Node):
         
         from mlipx.dash_utils import run_app
         if not run_interactive:
-            return app, results_dict
+            return app, results_dict, stats_df
         
         return run_app(app, ui=ui)
 
@@ -430,7 +435,7 @@ class HomonuclearDiatomics(zntrack.Node):
         def update_element_or_ptable_plot(model_name, element_value):
             df, _ = HomonuclearDiatomics.process_model(model_name, results_dict)
             if element_value == "All":
-                fig_path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics") / f"{model_name}_ptable_diatomics.svg"
+                fig_path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/plots") / f"{model_name}_ptable_diatomics.svg"
                 svg_bytes = fig_path.read_bytes()
                 import base64
                 encoded = base64.b64encode(svg_bytes).decode()
@@ -573,3 +578,37 @@ class HomonuclearDiatomics(zntrack.Node):
         path.mkdir(parents=True, exist_ok=True)
         plt.savefig(path / f"{model_name}_ptable_diatomics.svg")
         plt.close(fig)
+        
+    @staticmethod
+    def score_diatomics(
+        stats_df: pd.DataFrame,
+        normalise_to_model: t.Optional[str] = None,
+    ) -> pd.DataFrame:
+
+        ideal_scores = {
+            "Force flips": 1,
+            "Tortuosity": 1,
+            "Energy minima": 1,
+            "Energy inflections": 1,
+            "Spearman's coeff. (E: repulsion)": -1,
+            "Spearman's coeff. (F: descending)": -1,
+            "Spearman's coeff. (E: attraction)": 1,
+            "Spearman's coeff. (F: ascending)": 1,
+        }
+        
+        stats_df["Score"] = 0.0
+        stats_df.set_index("Model", inplace=True)
+        
+        for model in stats_df.index:
+            for col, ideal in ideal_scores.items():
+                if col in stats_df.columns:
+                    diff = stats_df.loc[model, col] - ideal
+                    stats_df.loc[model, "Score"] += abs(diff)
+
+        
+        if normalise_to_model:
+            stats_df["Score"] = stats_df["Score"] / stats_df.loc[normalise_to_model, "Score"]
+        stats_df = stats_df.reset_index()
+        
+        return stats_df.round(3)
+    

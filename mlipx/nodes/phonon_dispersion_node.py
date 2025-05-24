@@ -443,6 +443,8 @@ class PhononDispersion(zntrack.Node):
             
             phonon_plot_path = f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.png"
             fig.savefig(phonon_plot_path, bbox_inches='tight')
+            phonon_plot_path_svg = f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.svg"
+            fig.savefig(phonon_plot_path_svg, bbox_inches='tight')
             plt.close(fig)
             return phonon_plot_path
         
@@ -588,7 +590,8 @@ class PhononDispersion(zntrack.Node):
             model_benchmarks_dict,
             plot_stats_dict,
             pretty_benchmark_labels,
-            benchmarks
+            benchmarks,
+            mae_summary_df
         )
         
         model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
@@ -718,7 +721,7 @@ class PhononDispersion(zntrack.Node):
                 return None, None
             if col == "Stability Classification (F1)":
                 return None, summary_active_cell
-            if col == "Avg BZ MAE":
+            if col == "Avg BZ MAE [THz]":
                 band_error_dict = scatter_to_dispersion_map[model_name].get("band_errors", {})
                 all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
                 import plotly.express as px
@@ -817,6 +820,8 @@ class PhononDispersion(zntrack.Node):
                 else:
                     labels.append("FP")
             scatter_fig = PhononDispersion.create_stability_scatter_plot(ref_vals, pred_vals, labels)
+            
+            
             tn = sum(l == "TN" for l in labels)
             fp = sum(l == "FP" for l in labels)
             fn = sum(l == "FN" for l in labels)
@@ -1095,6 +1100,15 @@ class PhononDispersion(zntrack.Node):
             # Update plotting data
             PhononDispersion.update_plotting_data(mp_id, model_name, phonon_plot_path, scatter_to_dispersion_map)
 
+            PhononDispersion.save_stability_outputs(
+                model_name,
+                model_benchmarks_dict[model_name]["min_freq"]["ref"],
+                model_benchmarks_dict[model_name]["min_freq"]["pred"]
+            )
+            PhononDispersion.save_violin_plot_and_data(
+                model_name,
+                scatter_to_dispersion_map[model_name].get("band_errors", {})
+            )
 
     def initialize_model_data(model_name, model_benchmarks_dict, plot_stats_dict, scatter_to_dispersion_map, benchmarks):
         """Initialize data structures for a model if they don't exist yet."""
@@ -1171,7 +1185,7 @@ class PhononDispersion(zntrack.Node):
 
 
     def generate_and_save_plots(scatter_to_dispersion_map, model_benchmarks_dict, plot_stats_dict, 
-                            pretty_benchmark_labels, benchmarks):
+                            pretty_benchmark_labels, benchmarks, mae_summary_df):
         """Generate and save visualization plots for all models."""
         model_figures_dict = {}
         results_dir = Path("benchmark_stats/bulk_crystal_benchmark/phonons/")
@@ -1212,7 +1226,7 @@ class PhononDispersion(zntrack.Node):
                 fig.write_image(scatter_dir / f"{benchmark}.png", width=800, height=600)
         
         # Save summary table to CSV
-        mae_summary_df = PhononDispersion.calculate_summary_statistics(plot_stats_dict, pretty_benchmark_labels, benchmarks)
+        #mae_summary_df = PhononDispersion.calculate_summary_statistics(plot_stats_dict, pretty_benchmark_labels, benchmarks)
         mae_summary_df.to_csv(results_dir / "mae_phonons.csv", index=False)
 
 
@@ -1323,12 +1337,31 @@ class PhononDispersion(zntrack.Node):
 
     @staticmethod
     def create_confusion_matrix_figure(conf_matrix, labels, model_name):
-        """Create a Plotly heatmap for a confusion matrix with labels and percent per quadrant."""
+        """Create a Plotly heatmap for a confusion matrix with labels and dynamic text color based on intensity."""
         import plotly.graph_objects as go
         import numpy as np
+
         total = np.sum(conf_matrix)
         percent = conf_matrix / total * 100 if total > 0 else np.zeros_like(conf_matrix, dtype=float)
         quadrant_labels = [["True Negative", "False Positive"], ["False Negative", "True Positive"]]
+
+        # Normalize values to [0, 1] for brightness check
+        norm_z = conf_matrix.astype(float) / np.max(conf_matrix) if np.max(conf_matrix) > 0 else np.zeros_like(conf_matrix)
+
+        annotations = []
+        for i in range(2):
+            for j in range(2):
+                brightness = norm_z[i, j]
+                text_color = "white" if brightness > 0.5 else "black"
+                annotations.append(
+                    dict(
+                        x=j,
+                        y=i,
+                        text=f"{quadrant_labels[i][j]}<br>{percent[i, j]:.1f}%",
+                        showarrow=False,
+                        font=dict(size=16, color=text_color)
+                    )
+                )
 
         fig = go.Figure(
             data=go.Heatmap(
@@ -1351,19 +1384,10 @@ class PhononDispersion(zntrack.Node):
             font=dict(color="black"),
             plot_bgcolor="white",
             paper_bgcolor="white",
-            
-            annotations=[
-                dict(
-                    x=j,
-                    y=i,
-                    text=f"{quadrant_labels[i][j]}<br>{percent[i, j]:.1f}%",
-                    showarrow=False,
-                    font=dict(size=16, color="black")
-                )
-                for i in range(2) for j in range(2)
-            ]
+            annotations=annotations
         )
         return fig
+
 
     @staticmethod
     def add_stability_classification_column(mae_summary_df, model_benchmarks_dict):
@@ -1378,6 +1402,7 @@ class PhononDispersion(zntrack.Node):
             y_pred = pred_vals > threshold
             f1 = f1_score(y_true, y_pred)
             f1_scores.append(round(f1, 3))
+            
 
         # Insert the new column after "C_V"
         cv_col = next(col for col in mae_summary_df.columns if col.startswith("C_V"))
@@ -1385,6 +1410,48 @@ class PhononDispersion(zntrack.Node):
         mae_summary_df.insert(insert_idx, "Stability Classification (F1)", f1_scores)
         return mae_summary_df
     
+    @staticmethod
+    def save_stability_outputs(model_name, ref_vals, pred_vals, output_dir="benchmark_stats/bulk_crystal_benchmark/phonons"):
+        from sklearn.metrics import confusion_matrix
+
+        threshold = -0.05
+        y_true = np.array(ref_vals) > threshold
+        y_pred = np.array(pred_vals) > threshold
+        cm = confusion_matrix(y_true, y_pred, labels=[True, False])  # [[TN, FP], [FN, TP]]
+        
+        # Save confusion matrix
+        cm_df = pd.DataFrame(cm, index=["Stable (True)", "Not Stable (True)"], columns=["Stable (Pred)", "Not Stable (Pred)"])
+        cm_path = Path(output_dir) / model_name / "stability/stability_confusion_matrix.csv"
+        cm_path.parent.mkdir(parents=True, exist_ok=True)
+        cm_df.to_csv(cm_path)
+        
+        # Save scatter plot
+        labels = []
+        for r, p in zip(ref_vals, pred_vals):
+            ref_stable = r > threshold
+            pred_stable = p > threshold
+            if ref_stable and pred_stable:
+                labels.append("TN")
+            elif not ref_stable and not pred_stable:
+                labels.append("TP")
+            elif not ref_stable and pred_stable:
+                labels.append("FN")
+            else:
+                labels.append("FP")
+
+        scatter_fig = PhononDispersion.create_stability_scatter_plot(ref_vals, pred_vals, labels)
+        scatter_path = Path(output_dir) / model_name / "stability/stability_scatter_plot.png"
+        scatter_fig.write_image(scatter_path, width=800, height=600)
+        scatter_data_path = Path(output_dir) / model_name / "stability/stability_scatter_plot.csv"
+        scatter_df = pd.DataFrame({
+            "Reference ω_min [THz]": ref_vals,
+            "Predicted ω_min [THz]": pred_vals,
+            "Classification": labels
+        })
+        scatter_df.to_csv(scatter_data_path, index=False)
+    
+    
+        
     @staticmethod
     def add_band_mae_column(mae_summary_df, scatter_to_dispersion_map):
         band_maes = []
@@ -1398,5 +1465,42 @@ class PhononDispersion(zntrack.Node):
             insert_idx = mae_summary_df.columns.get_loc("ω_min [THz]") + 1
             mae_summary_df.insert(insert_idx, "Avg BZ MAE", band_maes)
         else:
-            mae_summary_df["Avg BZ MAE"] = band_maes
+            mae_summary_df["Avg BZ MAE [THz]"] = band_maes
         return mae_summary_df
+    
+    
+        
+    @staticmethod
+    def save_violin_plot_and_data(model_name, band_error_dict, output_dir="benchmark_stats/bulk_crystal_benchmark/phonons"):
+
+        # Flatten all band errors
+        all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
+        if all_errors.size == 0:
+            print(f"[Warning] No band errors to save for {model_name}")
+            return
+
+        # Save data to CSV
+        data_df = pd.DataFrame({"BZ MAE [THz]": all_errors})
+        data_dir = Path(output_dir) / model_name / "band_errors"
+        data_dir.mkdir(parents=True, exist_ok=True)
+        #data_df.to_csv(data_dir / "bz_mae_distribution.csv", index=False)
+        
+        per_mp_mae = [(mp_id, np.mean(np.abs(errors))) for mp_id, errors in band_error_dict.items()]
+        per_mp_df = pd.DataFrame(per_mp_mae, columns=["mp_id", "BZ_MAE [THz]"])
+        per_mp_df.to_csv(data_dir / "bz_mae_distribution.csv", index=False)
+
+        # Create and save violin plot
+        fig = px.violin(
+            y=all_errors,
+            box=True,
+            points="outliers",
+            title=f"{model_name} - BZ MAE Distribution",
+            labels={"y": "BZ MAE [THz]"},
+        )
+        fig.update_layout(
+            plot_bgcolor="white",
+            paper_bgcolor="white",
+            font_color="black"
+        )
+        plot_path = data_dir / "bz_mae_distribution.png"
+        fig.write_image(plot_path, width=800, height=600)

@@ -106,7 +106,7 @@ class MolecularBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
-        app_HD, results_df_HD = mlipx.HomonuclearDiatomics.mae_plot_interactive(
+        app_HD, results_df_HD, stats_df_HD = mlipx.HomonuclearDiatomics.mae_plot_interactive(
             node_dict=HD_dict,
             run_interactive=False,
             normalise_to_model=normalise_to_model,
@@ -121,14 +121,14 @@ class MolecularBenchmark(zntrack.Node):
     
 
 
-        mol_benchmark_score_df = MolecularBenchmark.mol_benchmark_score(wtmad_df_GMTKN55).round(3)
+        mol_benchmark_score_df = MolecularBenchmark.mol_benchmark_score(wtmad_df_GMTKN55, stats_df_HD).round(3)
         mol_benchmark_score_df = mol_benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True)
         mol_benchmark_score_df = mol_benchmark_score_df.reset_index(drop=True)
         mol_benchmark_score_df['Rank'] = mol_benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
         
         if not os.path.exists("benchmark_stats/molecular_benchmark/"):
             os.makedirs("benchmark_stats/molecular_benchmark/")
-        mol_benchmark_score_df.to_csv("benchmark_stats/molecular_benchmark/mol_crystal_benchmark_score.csv", index=False)
+        mol_benchmark_score_df.to_csv("benchmark_stats/molecular_benchmark/mol_benchmark_score.csv", index=False)
 
 
         from mlipx.dash_utils import colour_table
@@ -187,6 +187,7 @@ class MolecularBenchmark(zntrack.Node):
 
     def mol_benchmark_score(
         wtmad_df_GMTKN55, 
+        stats_df_HD,
         
     ):
         """ Currently avg mae
@@ -202,7 +203,9 @@ class MolecularBenchmark(zntrack.Node):
             scores[model] = 0
             
             scores[model] += wtmad_df_GMTKN55.loc[wtmad_df_GMTKN55['Model'] == model, 'Score'].values[0]
+            scores[model] += stats_df_HD.loc[stats_df_HD['Model'] == model, 'Score'].values[0]
             
-            scores[model] = scores[model] / 1
+            scores[model] = scores[model] / 2
+            
             
         return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})
