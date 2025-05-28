@@ -436,6 +436,7 @@ class HomonuclearDiatomics(zntrack.Node):
             df, _ = HomonuclearDiatomics.process_model(model_name, results_dict)
             if element_value == "All":
                 fig_path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/plots") / f"{model_name}_ptable_diatomics.svg"
+
                 svg_bytes = fig_path.read_bytes()
                 import base64
                 encoded = base64.b64encode(svg_bytes).decode()
@@ -577,6 +578,7 @@ class HomonuclearDiatomics(zntrack.Node):
         path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/plots/")
         path.mkdir(parents=True, exist_ok=True)
         plt.savefig(path / f"{model_name}_ptable_diatomics.svg")
+        plt.savefig(path / f"{model_name}_ptable_diatomics.pdf")
         plt.close(fig)
         
     @staticmethod

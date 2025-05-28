@@ -443,8 +443,8 @@ class PhononDispersion(zntrack.Node):
             
             phonon_plot_path = f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.png"
             fig.savefig(phonon_plot_path, bbox_inches='tight')
-            phonon_plot_path_svg = f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.svg"
-            fig.savefig(phonon_plot_path_svg, bbox_inches='tight')
+            phonon_plot_path_pdf = f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots/dispersion_{model_name}_{mp_id}.pdf"
+            fig.savefig(phonon_plot_path_pdf, bbox_inches='tight')
             plt.close(fig)
             return phonon_plot_path
         
@@ -574,9 +574,18 @@ class PhononDispersion(zntrack.Node):
             # Normalise the MAE values to the specified model
             for model in model_list:
                 score = 0
+                effective_cols = mae_cols.copy()
                 for col in mae_cols:
                     score += mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0] / mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0]
-                mae_summary_df.loc[mae_summary_df['Model'] == model, 'Phonon Score \u2193'] = score / len(mae_cols)
+                
+                # 1-F1 score
+                f1_model = mae_summary_df.loc[mae_summary_df['Model'] == model, "Stability Classification (F1)"].values[0]
+                f1_base = mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, "Stability Classification (F1)"].values[0]
+                score += (1 - f1_model) / (1 - f1_base) if (1 - f1_base) != 0 else 0
+                effective_cols.append("1 - F1")
+                
+                
+                mae_summary_df.loc[mae_summary_df['Model'] == model, 'Phonon Score \u2193'] = score / len(effective_cols)
             
         else:
             # recalc score with band mae included
