@@ -399,8 +399,10 @@ class PhononDispersion(zntrack.Node):
         
         ax1.set_xticks(xticks, xticklabels)
         ax1.set_xlim(xticks[0], xticks[-1])
-        ax1.set_ylabel("Frequency (THz)")
-        ax1.set_xlabel("Wave Vector")
+        ax1.set_ylabel("Frequency (THz)", fontsize=16)
+        ax1.set_xlabel("Wave Vector", fontsize=16)
+        ax1.tick_params(axis='both', which='major', labelsize=14)
+
         
         pred_freqs_flat = np.concatenate(frequencies_pred).flatten()
         ref_freqs_flat = np.concatenate(frequencies_ref).flatten()
@@ -1472,7 +1474,7 @@ class PhononDispersion(zntrack.Node):
         # Insert the new column after "C_V" or at the end
         if "ω_min [THz]" in mae_summary_df.columns:
             insert_idx = mae_summary_df.columns.get_loc("ω_min [THz]") + 1
-            mae_summary_df.insert(insert_idx, "Avg BZ MAE", band_maes)
+            mae_summary_df.insert(insert_idx, "Avg BZ MAE [THz]", band_maes)
         else:
             mae_summary_df["Avg BZ MAE [THz]"] = band_maes
         return mae_summary_df
