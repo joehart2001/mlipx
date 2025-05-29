@@ -353,7 +353,7 @@ class HomonuclearDiatomics(zntrack.Node):
             dash_table_interactive(
                 df=stats_df,
                 id='diatomics-stats-table',
-                title="Homonuclear Diatomics Statistics"
+                title="Homonuclear Diatomics Statistics",
                 info= "This table is not interactive.",
             ),
             html.H2("Homonuclear Diatomic Explorer"),
