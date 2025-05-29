@@ -175,7 +175,7 @@ class LatticeConstant(zntrack.Node):
             return lat_const_df, mae_df
 
 
-        # === 5. Dash App ===
+        # ------------ Dash App ----------------
         app = dash.Dash(__name__)
         
 
@@ -222,7 +222,6 @@ class LatticeConstant(zntrack.Node):
 
         md.append("# Lattice Constants Report\n")
 
-        # MAE Summary Table
         md.append("## Lattice Constants MAE Table\n")
         md.append(mae_df.to_markdown(index=False))
         md.append("\n")
@@ -262,16 +261,13 @@ class LatticeConstant(zntrack.Node):
             md.append(table_df.to_markdown(index=False))
             md.append("\n")
 
-            # Scatter plot image(s)
             scatter_plot_dir = markdown_path.parent / f"{model}/scatter_plots"
             images = sorted(scatter_plot_dir.glob("*.png"))
             add_image_rows(md, images)
 
-        # Save Markdown file
         markdown_path.write_text("\n".join(md))
         print(f"Markdown report saved to: {markdown_path}")
 
-        # Optional PDF export
         try:
             import subprocess
             subprocess.run(
@@ -309,14 +305,12 @@ class LatticeConstant(zntrack.Node):
             pred_vals = lat_const_df[model_name]
             formulas = lat_const_df.index.tolist()
 
-            # === 1. Save reference/prediction CSV
             pd.DataFrame({
                 "Formula": formulas,
                 "Reference": ref_vals,
                 "Predicted": pred_vals
             }).to_csv(model_dir / "lattice_constants.csv", index=False)
 
-            # === 2. Δ and %Δ table
             abs_diff = pred_vals - ref_vals
             pct_diff = 100 * abs_diff / ref_vals
 
@@ -344,10 +338,7 @@ class LatticeConstant(zntrack.Node):
             )
 
             fig.write_image(model_dir / "lattice_constants.png", width=800, height=600)
-            
-            #mae_summary.append({"Model": model_name, "MAE (Å)": round(mae, 3)})
 
-        #pd.DataFrame(mae_summary).to_csv(save_dir / "mae_summary.csv", index=False)
         mae_df.to_csv(save_dir / "mae_summary.csv", index=False)
     
 
@@ -377,7 +368,7 @@ class LatticeConstant(zntrack.Node):
             if col not in mae_df.columns or col == "Model":
                 return None, active_cell
 
-            # Toggle behavior: if the same model is clicked again, collapse
+            # Toggle: if the same model is clicked again, collapse
             if last_clicked is not None and (
                 active_cell["row"] == last_clicked.get("row") and
                 active_cell["column_id"] == last_clicked.get("column_id")

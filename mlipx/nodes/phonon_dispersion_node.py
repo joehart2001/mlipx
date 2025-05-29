@@ -422,7 +422,7 @@ class PhononDispersion(zntrack.Node):
                     by_label.values(),
                     by_label.keys(),
                     loc='upper center',
-                    bbox_to_anchor=(0.8, 1.02),  # Right of center title
+                    bbox_to_anchor=(0.8, 1.02), 
                     frameon=False,
                     ncol=2,
                     fontsize=14,    
@@ -533,16 +533,14 @@ class PhononDispersion(zntrack.Node):
         #-------------
             
             
-        # Process each structure
         for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
             if not PhononDispersion.process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, 
                                         ref_benchmarks_dict, pred_benchmarks_dict):
                 continue
             
-            # Initialize phonon plot paths for this mp_id
             phonon_plot_paths[mp_id] = {}
             
-            # Process prediction data for each model
+            # process
             PhononDispersion.process_prediction_data(
                 pred_node_dict[mp_id], 
                 ref_node_dict[mp_id], 
@@ -557,7 +555,7 @@ class PhononDispersion(zntrack.Node):
                 benchmarks
             )
         
-        # Calculate summary statistics and generate plots
+        # summary statistics and generate plots
         mae_summary_df = PhononDispersion.calculate_summary_statistics(
             plot_stats_dict, 
             pretty_benchmark_labels, 
@@ -573,7 +571,7 @@ class PhononDispersion(zntrack.Node):
         model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
         
         if normalise_to_model is not None:
-            # Normalise the MAE values to the specified model
+            # normalise MAE values to the specified model
             for model in model_list:
                 score = 0
                 effective_cols = mae_cols.copy()
@@ -627,7 +625,7 @@ class PhononDispersion(zntrack.Node):
         summary_columns = [col for col in mae_summary_df.columns if col != "Stability Classification (F1)"]
         stability_columns = ["Model", "Stability Classification (F1)"] if "Stability Classification (F1)" in mae_summary_df.columns else []
 
-        # Use shared dash_table_interactive for summary table
+
         summary_table_layout = dash_table_interactive(
             df=mae_summary_df[summary_columns],
             id='phonon-mae-summary-table',
@@ -638,7 +636,7 @@ class PhononDispersion(zntrack.Node):
             ],
         )
 
-        # Use shared dash_table_interactive for stability table
+
         stability_table_layout = dash_table_interactive(
             df=mae_summary_df[stability_columns],
             id='phonon-stability-table',
@@ -662,7 +660,7 @@ class PhononDispersion(zntrack.Node):
             style={"backgroundColor": "white", "padding": "20px"}
         )
 
-        # Register callbacks using the static method
+
         PhononDispersion.register_callbacks(
             app=app,
             mae_df=mae_summary_df,
@@ -722,7 +720,7 @@ class PhononDispersion(zntrack.Node):
             row = summary_active_cell["row"]
             col = summary_active_cell["column_id"]
             model_name = mae_df.loc[row, "Model"]
-            # Only allow property columns (not "Model" or "Stability Classification (F1)")
+
             if col not in mae_df.columns or col == "Model":
                 return None, summary_active_cell
             if summary_last_clicked is not None and (
@@ -791,7 +789,7 @@ class PhononDispersion(zntrack.Node):
                 })
             ]), summary_active_cell
 
-        # Callback for stability table plot
+        # stability table plot callback
         @app.callback(
             Output("phonon-stability-plot-container", "children"),
             Output("phonon-stability-table-last-clicked", "data"),
@@ -806,7 +804,7 @@ class PhononDispersion(zntrack.Node):
             row = stability_active_cell["row"]
             col = stability_active_cell["column_id"]
             model_name = mae_df.loc[row, "Model"]
-            # Only allow clicking the F1 for stability
+
             if col != "Stability Classification (F1)":
                 return None, stability_active_cell
             if stability_last_clicked is not None and (
@@ -875,7 +873,7 @@ class PhononDispersion(zntrack.Node):
             ])
             return visuals, stability_active_cell
 
-        # Callback for clicking on summary pair plot (distinct ID namespace)
+        # Callback for clicking on summary pair plot
         @app.callback(
             Output({'type': 'mae-summary-plot-display', 'index': MATCH}, 'children'),
             Input({'type': 'mae-summary-pair-plot', 'index': MATCH}, 'clickData'),
@@ -900,7 +898,7 @@ class PhononDispersion(zntrack.Node):
                 }
             )
 
-        # Callback for clicking on stability pair plot (distinct ID namespace)
+        # Callback for clicking on stability pair plot
         @app.callback(
             Output({'type': 'stability-plot-display', 'index': MATCH}, 'children'),
             Input({'type': 'stability-pair-plot', 'index': MATCH}, 'clickData'),
@@ -972,7 +970,6 @@ class PhononDispersion(zntrack.Node):
             add_image_rows(md, images)
     
     
-        # Save Markdown file
         markdown_path.write_text("\n".join(md))
 
         # Replace unicode terms with LaTeX
@@ -983,7 +980,7 @@ class PhononDispersion(zntrack.Node):
 
         print(f"Markdown report saved to: {markdown_path}")
 
-        # Generate PDF with Pandoc
+        # pdf
         try:
             subprocess.run(
                 ["pandoc", str(markdown_path), "-o", str(pdf_path), "--pdf-engine=xelatex", "--variable=geometry:top=1.5cm,bottom=2cm,left=1cm,right=1cm"],
@@ -1025,14 +1022,14 @@ class PhononDispersion(zntrack.Node):
             print(f"Skipping {node_ref.name} — dos file not found at {node_ref.dos_path}")
             return False
         
-        # Store reference data
+
         ref_benchmarks_dict[mp_id] = {}
         ref_band_data_dict[mp_id] = {}
         pred_benchmarks_dict[mp_id] = {}
         
         ref_band_data_dict[mp_id] = band_structure_ref
         
-        # Calculate reference benchmarks
+
         T_300K_index = node_ref.get_thermal_properties['temperatures'].index(300)
         ref_benchmarks_dict[mp_id]['max_freq'] = np.max(dos_freqs_ref)
         ref_benchmarks_dict[mp_id]['min_freq'] = np.min(dos_freqs_ref)
@@ -1058,7 +1055,7 @@ class PhononDispersion(zntrack.Node):
                 print(f"Skipping {model_name} — dos file not found at {pred_nodes[model_name].dos_path}")
                 continue
             
-            # Calculate prediction benchmarks
+
             pred_benchmarks_dict[mp_id][model_name] = {}
             T_300K_index = pred_nodes[model_name].get_thermal_properties['temperatures'].index(300)
             
@@ -1072,7 +1069,7 @@ class PhononDispersion(zntrack.Node):
             pred_freqs = pred_nodes[model_name].band_structure["frequencies"]
 
             
-            # Generate phonon dispersion plot
+            # phonon dispersion plot
             phonon_plot_path = PhononDispersion.compare_reference(
                 node_pred=pred_nodes[model_name],
                 node_ref=node_ref,
@@ -1092,7 +1089,7 @@ class PhononDispersion(zntrack.Node):
             if "band_errors" not in scatter_to_dispersion_map[model_name]:
                 scatter_to_dispersion_map[model_name]["band_errors"] = {}
 
-            # Compute and store band errors
+
             band_errors = np.mean(np.abs(np.concatenate([
                 np.array(p) - np.array(r)
                 for p, r in zip(pred_freqs, ref_freqs)
@@ -1101,14 +1098,14 @@ class PhononDispersion(zntrack.Node):
 
             
             
-            # Update benchmark data for the model
+            # benchmark data
             PhononDispersion.update_model_benchmarks(mp_id, model_name, ref_benchmarks_dict, pred_benchmarks_dict, 
                                 model_benchmarks_dict, benchmarks)
             
-            # Calculate and store statistics
+            # stats
             PhononDispersion.calculate_benchmark_statistics(model_name, model_benchmarks_dict, plot_stats_dict, benchmarks)
             
-            # Update plotting data
+            # plotting data
             PhononDispersion.update_plotting_data(mp_id, model_name, phonon_plot_path, scatter_to_dispersion_map)
 
             PhononDispersion.save_stability_outputs(
@@ -1123,15 +1120,15 @@ class PhononDispersion(zntrack.Node):
 
     def initialize_model_data(model_name, model_benchmarks_dict, plot_stats_dict, scatter_to_dispersion_map, benchmarks):
         """Initialize data structures for a model if they don't exist yet."""
-        # Initialize model benchmarks dictionary if needed
+        # initialize model benchmarks dictionary
         if model_name not in model_benchmarks_dict:
             model_benchmarks_dict[model_name] = {b: {'ref': [], 'pred': []} for b in benchmarks}
         
-        # Initialize plot stats dictionary if needed
+        # initialize plot stats dictionary if needed
         if model_name not in plot_stats_dict:
             plot_stats_dict[model_name] = {b: {'RMSE': [], 'MAE': []} for b in benchmarks}
         
-        # Initialize model plotting data if needed
+        # initialize model plotting data if needed
         if model_name not in scatter_to_dispersion_map:
             scatter_to_dispersion_map[model_name] = {'hover': [], 'point_map': [], 'img_paths': {}}
 
@@ -1153,13 +1150,9 @@ class PhononDispersion(zntrack.Node):
             ref_values = np.array(model_benchmarks_dict[model_name][benchmark]['ref'])
             pred_values = np.array(model_benchmarks_dict[model_name][benchmark]['pred'])
             
-            # Calculate RMSE
             rmse = np.sqrt(np.mean((ref_values - pred_values)**2))
-            
-            # Calculate MAE
             mae = np.mean(np.abs(ref_values - pred_values))
             
-            # Store statistics
             plot_stats_dict[model_name][benchmark]['RMSE'].append(rmse)
             plot_stats_dict[model_name][benchmark]['MAE'].append(mae)
 
@@ -1182,7 +1175,6 @@ class PhononDispersion(zntrack.Node):
                 mae_value = plot_stats_dict[model_name][benchmark]['MAE'][-1]
                 mae_summary_dict[model_name][pretty_label] = round(mae_value, 3)
         
-        # Create DataFrame from dictionary
         mae_summary_df = pd.DataFrame.from_dict(mae_summary_dict, orient='index')
         mae_summary_df.index.name = 'Model'
         mae_summary_df.reset_index(inplace=True)
@@ -1198,6 +1190,7 @@ class PhononDispersion(zntrack.Node):
     def generate_and_save_plots(scatter_to_dispersion_map, model_benchmarks_dict, plot_stats_dict, 
                             pretty_benchmark_labels, benchmarks, mae_summary_df):
         """Generate and save visualization plots for all models."""
+        
         model_figures_dict = {}
         results_dir = Path("benchmark_stats/bulk_crystal_benchmark/phonons/")
         results_dir.mkdir(exist_ok=True)
@@ -1212,16 +1205,13 @@ class PhononDispersion(zntrack.Node):
                 ref_vals = model_benchmarks_dict[model_name][benchmark]["ref"]
                 pred_vals = model_benchmarks_dict[model_name][benchmark]["pred"]
                 
-                # Save plot data to CSV
                 pd.DataFrame({"Reference": ref_vals, "Predicted": pred_vals}).to_csv(
                     scatter_dir / f"{benchmark}.csv", index=False
                 )
                 
-                # Get statistics
                 rmse = plot_stats_dict[model_name][benchmark]['RMSE'][-1]
                 mae = plot_stats_dict[model_name][benchmark]['MAE'][-1]
                 
-                # Create scatter plot
                 fig = PhononDispersion.create_scatter_plot(
                     ref_vals, 
                     pred_vals, 
@@ -1236,7 +1226,6 @@ class PhononDispersion(zntrack.Node):
                 model_figures_dict[model_name][benchmark] = fig
                 fig.write_image(scatter_dir / f"{benchmark}.png", width=800, height=600)
         
-        # Save summary table to CSV
         #mae_summary_df = PhononDispersion.calculate_summary_statistics(plot_stats_dict, pretty_benchmark_labels, benchmarks)
         mae_summary_df.to_csv(results_dir / "mae_phonons.csv", index=False)
 
@@ -1377,8 +1366,8 @@ class PhononDispersion(zntrack.Node):
         fig = go.Figure(
             data=go.Heatmap(
                 z=conf_matrix,
-                x=["Stable", "Not Stable"],  # Predicted
-                y=["Stable", "Not Stable"],  # True
+                x=["Stable", "Not Stable"],
+                y=["Stable", "Not Stable"],
                 colorscale="Blues",
                 showscale=True,
                 colorbar=dict(title="Count"),
@@ -1430,13 +1419,11 @@ class PhononDispersion(zntrack.Node):
         y_pred = np.array(pred_vals) > threshold
         cm = confusion_matrix(y_true, y_pred, labels=[True, False])  # [[TN, FP], [FN, TP]]
         
-        # Save confusion matrix
         cm_df = pd.DataFrame(cm, index=["Stable (True)", "Not Stable (True)"], columns=["Stable (Pred)", "Not Stable (Pred)"])
         cm_path = Path(output_dir) / model_name / "stability/stability_confusion_matrix.csv"
         cm_path.parent.mkdir(parents=True, exist_ok=True)
         cm_df.to_csv(cm_path)
         
-        # Save scatter plot
         labels = []
         for r, p in zip(ref_vals, pred_vals):
             ref_stable = r > threshold
@@ -1471,7 +1458,8 @@ class PhononDispersion(zntrack.Node):
             all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
             avg_band_mae = np.mean(np.abs(all_errors)) if all_errors.size > 0 else np.nan
             band_maes.append(round(avg_band_mae, 3))
-        # Insert the new column after "C_V" or at the end
+            
+        # Insert the new column after "C_V"
         if "ω_min [THz]" in mae_summary_df.columns:
             insert_idx = mae_summary_df.columns.get_loc("ω_min [THz]") + 1
             mae_summary_df.insert(insert_idx, "Avg BZ MAE [THz]", band_maes)
@@ -1484,23 +1472,20 @@ class PhononDispersion(zntrack.Node):
     @staticmethod
     def save_violin_plot_and_data(model_name, band_error_dict, output_dir="benchmark_stats/bulk_crystal_benchmark/phonons"):
 
-        # Flatten all band errors
+        # flatten band errors
         all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
         if all_errors.size == 0:
             print(f"[Warning] No band errors to save for {model_name}")
             return
 
-        # Save data to CSV
         data_df = pd.DataFrame({"BZ MAE [THz]": all_errors})
         data_dir = Path(output_dir) / model_name / "band_errors"
         data_dir.mkdir(parents=True, exist_ok=True)
-        #data_df.to_csv(data_dir / "bz_mae_distribution.csv", index=False)
         
         per_mp_mae = [(mp_id, np.mean(np.abs(errors))) for mp_id, errors in band_error_dict.items()]
         per_mp_df = pd.DataFrame(per_mp_mae, columns=["mp_id", "BZ_MAE [THz]"])
         per_mp_df.to_csv(data_dir / "bz_mae_distribution.csv", index=False)
 
-        # Create and save violin plot
         fig = px.violin(
             y=all_errors,
             box=True,

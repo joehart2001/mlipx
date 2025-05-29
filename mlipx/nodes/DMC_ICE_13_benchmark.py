@@ -223,9 +223,8 @@ class DMCICE13Benchmark(zntrack.Node):
         if ui is None and run_interactive:
             return mae_df, lattice_e_all_df
 
-        # Plotly figures
+
         # need to melt for custom axes labels
-        
         df_abs_melt = lattice_e_all_df.reset_index().melt(id_vars="Polymorph", var_name="Model", value_name="Absolute Lattice Energy (meV)")
         fig_abs_lat = px.line(
             df_abs_melt.reset_index(), 
@@ -233,7 +232,6 @@ class DMCICE13Benchmark(zntrack.Node):
             y="Absolute Lattice Energy (meV)",
             color="Model",
             markers=True,
-            #labels={"Polymorph": "Polymorph", "Absolute Lattice Energy (meV)": "Absolute Lattice Energy"}
         )
 
         # Default relative figure (vs Ih)

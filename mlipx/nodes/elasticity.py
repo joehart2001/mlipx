@@ -179,7 +179,6 @@ class Elasticity(zntrack.Node):
             for model in node_dict.keys():
                 score = 0
                 for col in mae_cols:
-                    #score += mae_df.loc[model, col] / mae_df.loc[normalise_to_model, col]
                     score += mae_df.loc[mae_df['Model'] == model, col].values[0] / mae_df.loc[mae_df['Model'] == normalise_to_model, col].values[0]
                 mae_df.loc[mae_df['Model'] == model, 'Elasticity Score \u2193'] = score / len(mae_cols)
         else:
@@ -282,7 +281,6 @@ class Elasticity(zntrack.Node):
                 md_lines.append(line + "\n")
 
 
-        # Scatter Plots
         md.append("## Scatter and density Plots\n")
         for model in models_list:
             md.append(f"### {model}\n")
@@ -290,12 +288,10 @@ class Elasticity(zntrack.Node):
             images = sorted(scatter_plot_dir.glob("*.png"))
             add_image_rows(md, images)
             
-        # Save Markdown file
         markdown_path.write_text("\n".join(md))
 
         print(f"Markdown report saved to: {markdown_path}")
 
-        # Generate PDF with Pandoc
         try:
             subprocess.run(
                 ["pandoc", str(markdown_path), "-o", str(pdf_path), "--pdf-engine=xelatex", "--variable=geometry:top=1.5cm,bottom=2cm,left=1cm,right=1cm"],
@@ -506,10 +502,10 @@ class Elasticity(zntrack.Node):
                 )
             ])
 
-            # When returning a new plot, clear the material table until clickData occurs
+            # when returning a new plot, clear the material table until clickData occurs
             return graph, json.dumps(serialized), df.to_json(orient='split'), active_cell, None, None
 
-        # New callback: update the material table based on clickData from the scatter plot
+        # update the material table based on clickData from the scatter plot
         @app.callback(
             Output('material-table', 'data'),
             Output('material-table', 'columns'),

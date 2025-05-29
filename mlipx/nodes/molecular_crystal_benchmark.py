@@ -200,15 +200,5 @@ class MolecularCrystalBenchmark(zntrack.Node):
             scores[model] += mae_df_DMC_ICE.loc[mae_df_DMC_ICE['Model'] == model, 'Score'].values[0]
             scores[model] = scores[model] / 2
             
-            # for benchmark in mae_df_X23.columns[1:]: # first col model
-            #     mae = mae_df_X23.loc[mae_df_X23['Model'] == model, benchmark].values[0]
-            #     scores[model] += mae     
-                
-            # for benchmark in mae_df_DMC_ICE.columns[1:]: # first col model
-            #     mae = mae_df_DMC_ICE.loc[mae_df_DMC_ICE['Model'] == model, benchmark].values[0]
-            #     scores[model] += mae                    
-            
-            
-            # scores[model] = scores[model] / (len(mae_df_X23.columns[1:]) + len(mae_df_DMC_ICE.columns[1:]))
-            
+                        
         return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})

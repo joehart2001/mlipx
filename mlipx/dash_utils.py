@@ -161,7 +161,7 @@ def colour_table(
 
     style_data_conditional = []
 
-    # Choose columns
+
     if all_cols:
         cols_to_color = benchmark_score_df.select_dtypes(include="number").columns
     elif col_name is not None:

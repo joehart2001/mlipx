@@ -93,11 +93,11 @@ class X23Benchmark(zntrack.Node):
             try:
                 return read(path, index=0, format='vasp')
             except Exception:
-                # Strip after atomic coordinates
+                
                 with open(path) as f:
                     lines = f.readlines()
 
-                # Detect the number of atoms
+                # no. of atoms
                 atom_counts_line = lines[6].split()
                 total_atoms = sum(int(x) for x in atom_counts_line)
                 coord_start_line = 8
@@ -182,7 +182,7 @@ class X23Benchmark(zntrack.Node):
         import plotly.express as px
         from dash import Dash, dcc, html
 
-        # Collect data
+
         mae_dict = {}
         abs_error_df_all = None
         lattice_e_df_all = None
@@ -223,13 +223,14 @@ class X23Benchmark(zntrack.Node):
         if ui is None and run_interactive:
             return mae_df, abs_error_df_all, lattice_e_df_all
 
-        # Plotly interactive app
+
         df_abs_long = abs_error_df_all.melt(id_vars="System", var_name="Model", value_name="Absolute Error")
         df_lat_long = lattice_e_df_all.melt(id_vars="System", var_name="Model", value_name="Energy")
 
         fig_abs = px.line(df_abs_long, x="System", y="Absolute Error", color="Model", markers=True)
         fig_lat = px.line(df_lat_long, x="System", y="Energy", color="Model", markers=True)
 
+        # ------- app --------
         app = Dash(__name__)
         
         tabs = X23Benchmark.create_tabs_from_figures(

@@ -547,12 +547,7 @@ class GMTKN55Benchmark(zntrack.Node):
         )
         def update_scatter(click_data):
             if click_data is None:
-                # Return the default children (the section header and empty graph)
                 raise PreventUpdate 
-                # return [
-                #     html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
-                #     dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
-                # ]
 
             model_name, subset_name, *_ = click_data["points"][0]["customdata"]
             subset_name = subset_name.lower()

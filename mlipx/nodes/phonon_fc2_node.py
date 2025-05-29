@@ -171,14 +171,6 @@ class PhononForceConstants(zntrack.Node):
             json.dump(thermal_properties_dict_safe, f)
         print(f"Thermal properties saved to: {self.thermal_properties_path}")
         
-        #print("Forces shape:", atoms.get_forces().shape)
-        #print("Number of atoms:", len(atoms))
-
-        #ase.io.write(self.frames_path, atoms, append=True) use this for a list of atoms
-        #ase.io.write(self.frames_path, atoms)
-        #print(f"Relaxed structure saved to: {self.frames_path}")
-
-
 
 
     @property

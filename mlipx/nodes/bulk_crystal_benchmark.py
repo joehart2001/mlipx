@@ -262,7 +262,6 @@ class BulkCrystalBenchmark(zntrack.Node):
         normalise_to_model: Optional[str] = None
     ):
         """ Currently avg mae
-            (problem with other explored metrics: if we normalise by the max mae, then the models in this test are comparable to each other but not models run in a different test, as they will be normalised differently)
         """
         # Initialize scores
         scores = {}
@@ -328,7 +327,7 @@ class BulkCrystalBenchmark(zntrack.Node):
                 return re.sub(r'(\w+)_(\w+)', r'$\1_{\2}$', col)
             return col
 
-        # Add the required LaTeX package (included in the preamble by Pandoc)
+
         info_str = f"(Normalised to {normalise_to_model})" if normalise_to_model else ""
         combined_md.append(f"## Benchmark Score Table {info_str} \n")
         #combined_md.append("\\rowcolors{2}{gray!10}{white}\n")
@@ -361,7 +360,6 @@ class BulkCrystalBenchmark(zntrack.Node):
         
         print(f"Markdown report saved to: {markdown_path}")
 
-        # Generate PDF with Pandoc
         try:
             subprocess.run(
                 [
@@ -371,7 +369,7 @@ class BulkCrystalBenchmark(zntrack.Node):
                     str(pdf_path),
                     "--pdf-engine=xelatex",
                     "--variable=geometry:top=1.5cm,bottom=2cm,left=1cm,right=1cm",
-                    "--from", "markdown+raw_tex",  # Important for handling raw LaTeX
+                    "--from", "markdown+raw_tex",
                 ],
                 check=True
             )

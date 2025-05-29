@@ -300,7 +300,7 @@ class HomonuclearDiatomics(zntrack.Node):
 
 
 
-
+# above code built into mlipx, my code is below:
 
 
     # ------ interactive plotting ------
@@ -349,7 +349,6 @@ class HomonuclearDiatomics(zntrack.Node):
 
 
         app.layout = html.Div([
-            # Summary stats table
             dash_table_interactive(
                 df=stats_df,
                 id='diatomics-stats-table',
@@ -462,12 +461,12 @@ class HomonuclearDiatomics(zntrack.Node):
                 fig.update_layout(
                     xaxis=dict(
                         visible=False,
-                        range=[0, 18],  # match sizex
+                        range=[0, 18],
                         constrain="domain"
                     ),
                     yaxis=dict(
                         visible=False,
-                        range=[0, 10],  # match sizey
+                        range=[0, 10],
                         scaleanchor="x",
                         scaleratio=1
                     ),
@@ -496,7 +495,9 @@ class HomonuclearDiatomics(zntrack.Node):
                 return fig
     
     
-
+    
+    # insprired by: https://github.com/stenczelt/MACE-MP-work/tree/ba9ac8c2a98d93077ea231c7c4f48f0ad00a8d62/B6_pair-repulsion
+    
     @staticmethod
     def p_table_diatomic_plot(
         diatomics_df: pd.DataFrame,
@@ -505,7 +506,7 @@ class HomonuclearDiatomics(zntrack.Node):
         
         element_columns = {col: col for col in diatomics_df.columns if col != "distance"}
 
-
+        
         ptable_positions = {
             # First row
             "H": (0, 0), "He": (0, 17),
