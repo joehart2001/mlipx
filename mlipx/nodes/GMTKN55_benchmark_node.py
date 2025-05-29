@@ -429,17 +429,18 @@ class GMTKN55Benchmark(zntrack.Node):
                 df=wtmad_table,
                 id="GMTKN55-wtmad-table",
                 title="WTMAD (weighted total mean absolute deviation)",
-                interactive=False
+                info= "This table is not interactive.",
             ),
 
             dash_table_interactive(
                 df=benchmark_df.round(3),
                 id="GMTKN55-category-table",
                 title="MAD/MAE per Category (kcal/mol)",
-                interactive=False
+                info= "This table is not interactive.",
             ),
 
             html.H2("MAD/MAE per Subset", style={"color": "black", "marginTop": "30px"}),
+            html.P("Click on a point to see the scatter plot of predicted vs reference energies used for the MAE calculation."),
             html.Div([
                 html.Label("Color by:", style={"marginRight": "10px"}),
                 dcc.RadioItems(
@@ -458,10 +459,11 @@ class GMTKN55Benchmark(zntrack.Node):
 
             html.Div(
                 id="pred-vs-ref-container",
-                children=[
-                    html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
-                    dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
-                ]
+                children=[],
+                # children=[
+                #     html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
+                #     dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
+                # ]
             ),
 
         ], style={"backgroundColor": "white", "padding": "20px"})
@@ -546,10 +548,11 @@ class GMTKN55Benchmark(zntrack.Node):
         def update_scatter(click_data):
             if click_data is None:
                 # Return the default children (the section header and empty graph)
-                return [
-                    html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
-                    dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
-                ]
+                raise PreventUpdate 
+                # return [
+                #     html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
+                #     dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
+                # ]
 
             model_name, subset_name, *_ = click_data["points"][0]["customdata"]
             subset_name = subset_name.lower()

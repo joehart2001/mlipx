@@ -244,6 +244,7 @@ class X23Benchmark(zntrack.Node):
                 df=mae_df.round(3),
                 id="x23-mae-table",
                 title="X23 dataset: MAE Table (kJ/mol)",
+                info= "This table is not interactive.",
             ),
 
             tabs,

@@ -354,6 +354,7 @@ class HomonuclearDiatomics(zntrack.Node):
                 df=stats_df,
                 id='diatomics-stats-table',
                 title="Homonuclear Diatomics Statistics"
+                info= "This table is not interactive.",
             ),
             html.H2("Homonuclear Diatomic Explorer"),
             html.Label("Select Model:"),

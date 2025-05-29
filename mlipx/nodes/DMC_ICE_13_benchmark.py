@@ -270,6 +270,7 @@ class DMCICE13Benchmark(zntrack.Node):
             dash_table_interactive(
                 df=mae_df.round(3),
                 id="dmc-ice-mae-table",
+                info= "This table is not interactive.",
                 title="DMC-ICE-13 Dataset: MAE Table (meV)",
             ),
 
