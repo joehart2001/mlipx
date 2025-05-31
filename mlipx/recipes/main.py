@@ -405,6 +405,31 @@ def phonons(
     
     
 @app.command()
+def phonons_all(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    n_materials: int | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run phonon calculations."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "phonons_all.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+        n_materials=n_materials,
+    )
+    
+    
+    
+@app.command()
 def gmtkn55(
     initialize: bool = False,
     repro: bool = False,

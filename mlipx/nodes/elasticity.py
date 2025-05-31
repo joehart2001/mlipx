@@ -108,7 +108,7 @@ class Elasticity(zntrack.Node):
         
         
         print(self.model_name)
-        results = benchmark.run(calc, self.model_name, n_jobs=1)
+        results = benchmark.run(calc, self.model_name, n_jobs=1) # njobs
         results.to_csv(self.results_path, index=False)
         
         mae_df = pd.DataFrame()
