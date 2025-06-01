@@ -101,6 +101,40 @@ ALL_MODELS["GRACE-2L-OMAT"] = mlipx.GenericASECalculator(
     # MLIPX-hub model path, adjust as needed
 )
 
+
+@dataclasses.dataclass
+class FairChemCalc:
+    model_name: str
+    task_name: str
+    device: Device | str = "cpu"
+    overrides: dict = dataclasses.field(default_factory=dict)
+
+    def get_calculator(self):
+        from fairchem.core import pretrained_mlip, FAIRChemCalculator
+        import torch
+        torch.serialization.add_safe_globals([slice])
+
+        predictor = pretrained_mlip.get_predict_unit(
+            self.model_name,
+            device=self.device,
+            overrides=self.overrides
+        )
+        return FAIRChemCalculator(predictor, task_name=self.task_name)
+
+    @property
+    def available(self) -> bool:
+        try:
+            from fairchem.core import pretrained_mlip
+            return self.model_name in pretrained_mlip._MODEL_CKPTS.checkpoints
+        except Exception:
+            return False
+
+ALL_MODELS["fairchem-uma-sm"] = FairChemCalc(
+    model_name="uma-sm",
+    task_name="omat",
+    device="cpu"
+)
+
 # OPTIONAL
 # ========
 # If you have custom property names you can use the UpdatedFramesCalc
@@ -125,15 +159,23 @@ with open(Path("{{ model }}"), "r") as f:
     _registry = yaml.safe_load(f)
 
 for _name, _cfg in _registry.items():
-    print(f"Loading model from {{ model }}: {_name}")
-    MODELS[_name] = mlipx.GenericASECalculator(
-        module=_cfg["module"],
-        class_name=_cfg["class_name"],
-        device=_cfg.get("device", "auto"),
-        kwargs=_cfg.get("kwargs", {})
-    )
+    print(f"Loading model from new_model_registry.yaml: {_name}")
 
-{%- else %}
-MODELS["{{ model }}"] = ALL_MODELS["{{ model }}"]
+    if _cfg["class_name"] == "FAIRChemCalculator":
+        kwargs = _cfg.get("kwargs", {})
+        MODELS[_name] = FairChemCalc(
+            model_name=kwargs["model_name"],
+            task_name=kwargs.get("task_name", "omat"),
+            device=_cfg.get("device", "cpu"),
+            overrides=kwargs.get("overrides", {})
+        )
+    else:
+        MODELS[_name] = mlipx.GenericASECalculator(
+            module=_cfg["module"],
+            class_name=_cfg["class_name"],
+            device=_cfg.get("device", "auto"),
+            kwargs=_cfg.get("kwargs", {})
+        )
+
 {%- endif %}
 {%- endfor %}

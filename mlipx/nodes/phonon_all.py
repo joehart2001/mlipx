@@ -146,7 +146,15 @@ class PhononAllBatch(zntrack.Node):
                     pickle.dump(band_structure_pred, f)
                 with open(phonon_pred_dos_path, "wb") as f:
                     pickle.dump(dos_pred, f)
-                
+
+                    
+                # with open(phonon_pred_path / f"{mp_id}_qpoints.npz", "wb") as f:
+                #     pickle.dump(qpoints, f)
+                # with open(phonon_pred_path / f"{mp_id}_labels.json", "w") as f:
+                #     json.dump(labels, f)
+                # with open(phonon_pred_path / f"{mp_id}_connections.json", "w") as f:
+                #     json.dump(connections, f)
+                                  
                 phonons_pred.run_mesh([q_mesh_thermal] * 3) #TODO 20x20x20
                 phonons_pred.run_thermal_properties(
                     temperatures=temperatures,
@@ -166,9 +174,9 @@ class PhononAllBatch(zntrack.Node):
                     "phonon_band_path_dict": str(phonon_pred_band_structure_path),
                     "phonon_dos_dict": phonon_pred_dos_path,
                     "thermal_properties_dict": str(thermal_path),
-                    "phonon_qpoints_dict": str(phonon_pred_path / f"{mp_id}_qpoints.npz"),
-                    "phonon_labels_dict": str(phonon_pred_path / f"{mp_id}_labels.json"),
-                    "phonon_connections_dict": str(phonon_pred_path / f"{mp_id}_connections.json"),
+                    # "phonon_qpoints_dict": str(phonon_pred_path / f"{mp_id}_qpoints.npz"),
+                    # "phonon_labels_dict": str(phonon_pred_path / f"{mp_id}_labels.json"),
+                    # "phonon_connections_dict": str(phonon_pred_path / f"{mp_id}_connections.json"),
                 }
             except Exception as e:
                 print(f"Skipping {mp_id} due to error: {e}")
@@ -195,18 +203,7 @@ class PhononAllBatch(zntrack.Node):
             res["mp_id"]: str(res["thermal_properties_dict"])
             for res in results if res is not None
         }
-        phonon_qpoints_path_dict = {
-            res["mp_id"]: str(res["phonon_qpoints_dict"])
-            for res in results if res is not None
-        }
-        phonon_labels_path_dict = {
-            res["mp_id"]: str(res["phonon_labels_dict"])
-            for res in results if res is not None
-        }
-        phonon_connections_path_dict = {
-            res["mp_id"]: str(res["phonon_connections_dict"])
-            for res in results if res is not None
-        }
+
         
         # Save paths to JSON files
         with open(self.phonon_band_paths, "w") as f:
@@ -215,14 +212,7 @@ class PhononAllBatch(zntrack.Node):
             json.dump(phonon_dos_path_dict, f, indent=4)
         with open(self.thermal_properties_paths, "w") as f:
             json.dump(thermal_properties_path_dict, f, indent=4)
-        with open(self.phonon_qpoints_paths, "w") as f:
-            json.dump(phonon_qpoints_path_dict, f, indent=4)
-        with open(self.phonon_labels_paths, "w") as f:
-            json.dump(phonon_labels_path_dict, f, indent=4)
-        with open(self.phonon_connections_paths, "w") as f:
-            json.dump(phonon_connections_path_dict, f, indent=4)
 
-            
     
     @property
     def get_phonon_band_paths(self) -> dict[str, str]:
@@ -239,21 +229,7 @@ class PhononAllBatch(zntrack.Node):
         """Returns a dictionary of mp_id to thermal properties paths."""
         with open(self.thermal_properties_paths, "r") as f:
             return json.load(f)
-    @property
-    def get_phonon_qpoints_paths(self) -> dict[str, str]:
-        """Returns a dictionary of mp_id to phonon qpoints paths."""
-        with open(self.phonon_qpoints_paths, "r") as f:
-            return json.load(f)
-    @property
-    def get_phonon_labels_paths(self) -> dict[str, str]:
-        """Returns a dictionary of mp_id to phonon labels paths."""
-        with open(self.phonon_labels_paths, "r") as f:
-            return json.load(f)
-    @property
-    def get_phonon_connections_paths(self) -> dict[str, str]:
-        """Returns a dictionary of mp_id to phonon connections paths."""
-        with open(self.phonon_connections_paths, "r") as f:
-            return json.load(f)
+
         
 
     @property
@@ -262,9 +238,6 @@ class PhononAllBatch(zntrack.Node):
         band_paths = self.get_phonon_band_paths
         dos_paths = self.get_phonon_dos_paths
         thermal_paths = self.get_thermal_properties_paths
-        qpoints_paths = self.get_phonon_qpoints_paths
-        labels_paths = self.get_phonon_labels_paths
-        connections_paths = self.get_phonon_connections_paths
 
         def load_pickle(path: str):
             with open(path, "rb") as f:
@@ -284,9 +257,6 @@ class PhononAllBatch(zntrack.Node):
                     "band_structure": load_pickle(band_paths[mp_id]),
                     "dos": load_pickle(dos_paths[mp_id]),
                     "thermal_properties": load_json(thermal_paths[mp_id]),
-                    "qpoints": load_pickle(qpoints_paths[mp_id]),
-                    "labels": load_json(labels_paths[mp_id]),
-                    "connections": load_json(connections_paths[mp_id]),
                 }
             except Exception as e:
                 print(f"Skipping {mp_id} due to loading error: {e}")
@@ -302,12 +272,95 @@ class PhononAllBatch(zntrack.Node):
 
 
 
+    @staticmethod
+    def compare_reference(node_pred, node_ref, correlation_plot_mode=False, model_name=None):
+        import matplotlib.pyplot as plt
+        from matplotlib import gridspec
+
+        band_structure_pred = node_pred.band_structure
+        distances_pred = band_structure_pred["distances"]
+        frequencies_pred = band_structure_pred["frequencies"]
+        dos_freqs_pred, dos_values_pred = node_pred.dos
+        dos_freqs_pred, dos_values_pred = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
+
+        band_structure_ref = node_ref.band_structure
+        distances_ref = band_structure_ref["distances"]
+        frequencies_ref = band_structure_ref["frequencies"]
+        dos_freqs_ref, dos_values_ref = node_ref.dos
+        dos_freqs_ref, dos_values_ref = dos_freqs_ref[dos_values_ref > 0], dos_values_ref[dos_values_ref > 0]
+
+        labels = node_ref.labels
+        connections = node_ref.connections
+        connections = [True] + connections
+
+        # Start plotting
+        fig = plt.figure(figsize=(9, 5))
+        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
+        ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])
+        ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])
+
+        for dist_segment, freq_segment in zip(distances_pred, frequencies_pred):
+            for band in freq_segment.T:
+                ax1.plot(dist_segment, band, lw=1, linestyle='--', label=model_name, color='red')
+
+        for dist_segment, freq_segment in zip(distances_ref, frequencies_ref):
+            for band in freq_segment.T:
+                ax1.plot(dist_segment, band, lw=1, linestyle='-', label="Reference", color='blue')
+
+        ax2.plot(dos_values_pred, dos_freqs_pred, lw=1.2, color="red", linestyle='--')
+        ax2.plot(dos_values_ref, dos_freqs_ref, lw=1.2, color="blue")
+
+        # Ticks
+        xticks, xticklabels = PhononDispersion._build_xticks(distances_ref, labels, connections)
+        for x in xticks:
+            ax1.axvline(x=x, color='k', linewidth=1)
+        ax1.axhline(0, color='k', linewidth=1)
+        ax2.axhline(0, color='k', linewidth=1)
+        ax1.set_xticks(xticks, xticklabels)
+
+        # Axis settings
+        ax1.set_xlim(xticks[0], xticks[-1])
+        ax1.set_ylabel("Frequency (THz)")
+        ax1.set_xlabel("Wave Vector")
+
+        freqs_all = np.concatenate(frequencies_pred + frequencies_ref)
+        ax1.set_ylim(freqs_all.min() - 0.4, freqs_all.max() + 0.4)
+        ax2.set_ylim(ax1.get_ylim())
+        ax2.set_xlabel("DOS")
+        plt.setp(ax2.get_yticklabels(), visible=False)
+
+        # Legend
+        handles, labels = ax1.get_legend_handles_labels()
+        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.8, 1.02), frameon=False, ncol=2)
+
+        ax1.grid(True, linestyle=':', linewidth=0.5)
+        ax2.grid(True, linestyle=':', linewidth=0.5)
+
+        # Save or show
+        mp_id = node_ref.name.split("_")[-1]
+        plt.suptitle(f"{mp_id} — {model_name}", x=0.4)
+
+        if correlation_plot_mode:
+            out_dir = f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots"
+            os.makedirs(out_dir, exist_ok=True)
+            plot_path = f"{out_dir}/dispersion_{model_name}_{mp_id}.png"
+            plt.savefig(plot_path, bbox_inches='tight')
+            plt.close(fig)
+            return plot_path
+        else:
+            plt.show()
+            
+            
+            
+            
+
 
 
 
     @staticmethod
     def benchmark_interactive(
         pred_node_dict: dict[str, "PhononAllBatch"],
+        ref_phonon_node,
         ui=None,
         run_interactive=True,
         report=True,
@@ -316,46 +369,168 @@ class PhononAllBatch(zntrack.Node):
         """
         Benchmarking with multiple models (each one is a PhononAllBatch node).
         """
-        class VirtualPhononNode:
-            def __init__(self, mp_id, phonon_obj_path, thermal_props_dict):
-                self.name = f"{mp_id}"
-                self._thermal_props = thermal_props_dict
-                self._band_structure = None
-                self._dos = None
-                phonons = load_phonopy(str(phonon_obj_path))
-                phonons.auto_band_structure()
-                phonons.auto_total_dos()
-                self._band_structure = phonons.get_band_structure_dict()
-                dos_dict = phonons.get_total_dos_dict()
-                self._dos = (dos_dict["frequency_points"], dos_dict["total_dos"])
+        class PhononDataWrapper:
+            def __init__(self, mp_id: str, data: dict[str, t.Any]):
+                self.name = f"phonon_{mp_id}"
+                self._data = data
 
             @property
             def band_structure(self):
-                return self._band_structure
+                return self._data["band_structure"]
 
             @property
             def dos(self):
-                return self._dos
+                dos_dict = self._data["dos"]
+                return dos_dict["frequency_points"], dos_dict["total_dos"]
 
             @property
             def get_thermal_properties(self):
-                return self._thermal_props
+                return self._data["thermal_properties"]
 
-        # Build mp_id -> model_name -> virtual_node
-        unified_pred_node_dict = {}
-        for model_name, batch_node in pred_node_dict.items():
-            for mp_id in batch_node.phonon_obj_path_dict:
-                if mp_id not in unified_pred_node_dict:
-                    unified_pred_node_dict[mp_id] = {}
-                thermal_props = batch_node.thermal_properties_path_dict[mp_id]
-                phonon_obj_path = batch_node.phonon_obj_path_dict[mp_id]
-                unified_pred_node_dict[mp_id][model_name] = VirtualPhononNode(mp_id, phonon_obj_path, thermal_props)
+            @property
+            def labels(self):
+                return self._data["labels"]
 
-        # Now call original PhononDispersion benchmark function
-        return PhononDispersion.benchmark_interactive(
-            pred_node_dict=unified_pred_node_dict,
-            ui=ui,
-            run_interactive=run_interactive,
-            report=report,
-            normalise_to_model=normalise_to_model,
+            @property
+            def connections(self):
+                return self._data["connections"]
+            
+        
+        def convert_batch_to_node_dict(batch_node: PhononAllBatch) -> dict[str, PhononDataWrapper]:
+            raw_data = batch_node.get_phonon_ref_data
+            return {mp_id: PhononDataWrapper(mp_id, data) for mp_id, data in raw_data.items()}
+        
+        
+        ref_node_dict = convert_batch_to_node_dict(ref_phonon_node)
+
+        pred_node_dict = {
+            model_name: convert_batch_to_node_dict(batch_node)
+            for model_name, batch_node in pred_node_dict.items()
+        }
+        
+        #return ref_node_dict, converted_pred_dict
+        
+        
+
+
+
+        ref_band_data_dict = {}
+        ref_benchmarks_dict = {}
+        pred_benchmarks_dict = {}
+        scatter_to_dispersion_map = {}     # model_name -> {property -> {ref, pred}, hover, point_map, img_paths}
+        phonon_plot_paths = {}
+        point_index_to_id = []
+        
+        benchmarks = [
+            'max_freq',
+            'min_freq',
+            'S',
+            'F',
+            'C_V',
+        ]
+        benchmark_units = {
+            'max_freq': 'THz', 
+            'min_freq': 'THz',
+            'S': '[J/K/mol]',
+            'F': '[kJ/mol]',
+            'C_V': '[J/K/mol]',
+        }
+        
+        pretty_benchmark_labels = {
+            'max_freq': 'ω_max [THz]',
+            'min_freq': 'ω_min [THz]',
+            'S': 'S [J/mol·K]',
+            'F': 'F [kJ/mol]',
+            'C_V': 'C_V [J/mol·K]'
+        }
+        label_to_key = {v: k for k, v in pretty_benchmark_labels.items()}
+
+        model_benchmarks_dict = {} # max_freq, min_freq ...
+        plot_stats_dict = {}
+        
+        
+        #-------------
+            
+            
+        for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
+            if not PhononDispersion.process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, 
+                                        ref_benchmarks_dict, pred_benchmarks_dict):
+                continue
+            
+            phonon_plot_paths[mp_id] = {}
+            
+            # process
+            PhononDispersion.process_prediction_data(
+                pred_node_dict[mp_id], 
+                ref_node_dict[mp_id], 
+                mp_id,
+                ref_benchmarks_dict,
+                pred_benchmarks_dict,
+                model_benchmarks_dict,
+                plot_stats_dict,
+                scatter_to_dispersion_map,
+                phonon_plot_paths,
+                point_index_to_id,
+                benchmarks
+            )
+        
+        # summary statistics and generate plots
+        mae_summary_df = PhononDispersion.calculate_summary_statistics(
+            plot_stats_dict, 
+            pretty_benchmark_labels, 
+            benchmarks,
         )
+        # Add stability classification column using static method
+        mae_summary_df = PhononDispersion.add_stability_classification_column(mae_summary_df, model_benchmarks_dict)
+        mae_summary_df = PhononDispersion.add_band_mae_column(mae_summary_df, scatter_to_dispersion_map)
+        
+        # recalculate phonon score (avg) to include band MAE
+        mae_cols = [col for col in mae_summary_df.columns if col not in ['Model', 'Phonon Score \u2193', 'Rank']]
+
+        model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
+        
+        if normalise_to_model is not None:
+            # normalise MAE values to the specified model
+            for model in model_list:
+                score = 0
+                effective_cols = mae_cols.copy()
+                for col in mae_cols:
+                    score += mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0] / mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0]
+                
+                # 1-F1 score
+                f1_model = mae_summary_df.loc[mae_summary_df['Model'] == model, "Stability Classification (F1)"].values[0]
+                f1_base = mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, "Stability Classification (F1)"].values[0]
+                score += (1 - f1_model) / (1 - f1_base) if (1 - f1_base) != 0 else 0
+                effective_cols.append("1 - F1")
+                
+                
+                mae_summary_df.loc[mae_summary_df['Model'] == model, 'Phonon Score \u2193'] = score / len(effective_cols)
+            
+        else:
+            # recalc score with band mae included
+            mae_summary_df['Phonon Score \u2193'] = mae_summary_df[mae_cols].mean(axis=1).round(3)
+        
+        mae_summary_df = mae_summary_df.round(3)
+        mae_summary_df['Rank'] = mae_summary_df['Phonon Score \u2193'].rank(method='min').astype(int)
+        
+        PhononDispersion.generate_and_save_plots(
+            scatter_to_dispersion_map,
+            model_benchmarks_dict,
+            plot_stats_dict,
+            pretty_benchmark_labels,
+            benchmarks,
+            mae_summary_df
+        )
+        
+        model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
+        
+        if report:
+            md_path = PhononDispersion.generate_phonon_report(
+                mae_summary_df=mae_summary_df,
+                models_list=model_list,
+            )
+        else:
+            md_path = None
+        
+        if ui is None and run_interactive:
+            return
