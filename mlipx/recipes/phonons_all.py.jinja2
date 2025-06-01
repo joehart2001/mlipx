@@ -44,6 +44,12 @@ print(f"Using {len(mp_ids)} mp-ids")
 {% endif %}
 
 
+with project.group("phonons-dispersion-ref"):
+    phonon_ref_node = mlipx.PhononAllRef(
+            mp_ids=alex_subset_mpids,
+            phonopy_yaml_dir=str(local_path),
+    )
+    
 
 phonon_dict = {}
 phonon_list = []

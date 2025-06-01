@@ -45,6 +45,7 @@ from .nodes.molecular_crystal_benchmark import MolecularCrystalBenchmark
 from .nodes.molecular_benchmark import MolecularBenchmark
 from .nodes.full_benchmark import FullBenchmark
 from .nodes.phonon_all import PhononAllBatch
+from .nodes.phonon_all_ref import PhononAllRef
 from .project import Project
 from .version import __version__
 
@@ -99,5 +100,6 @@ __all__ = [
     "MolecularBenchmark",
     "FullBenchmark",
     "PhononAllBatch",
+    "PhononAllRef"
     "__version__",
 ]

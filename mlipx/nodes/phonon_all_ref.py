@@ -53,19 +53,11 @@ import base64
 
 
 
-class PhononAllBatch(zntrack.Node):
+class PhononAllRef(zntrack.Node):
     """Batch phonon calculations (FC2 + thermal props) for multiple mp-ids."""
 
     mp_ids: list[str] = zntrack.params()
-    model: NodeWithCalculator = zntrack.deps()
     phonopy_yaml_dir: str = zntrack.params()
-
-    N_q_mesh: int = zntrack.params(2)
-    supercell: int = zntrack.params(3)
-    fmax: float = zntrack.params(0.0001)
-    thermal_properties_temperatures: list[float] = zntrack.params(
-        default_factory=lambda: [0, 75, 150, 300, 600]
-    )
 
     phonon_band_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_band_paths.json")
     phonon_dos_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_dos_paths.json")
@@ -79,110 +71,92 @@ class PhononAllBatch(zntrack.Node):
         
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
-        fmax = self.fmax
-        
-        q_mesh = self.N_q_mesh
-        q_mesh_thermal = 6
-        temperatures = self.thermal_properties_temperatures
         
 
-        def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
+        def process_mp_id(mp_id, nwd, yaml_dir):
             try:
-                print(f"\nProcessing {mp_id}...")
-                calc = model.get_calculator()
+                print(f"\nProcessing ref {mp_id}...")
                 yaml_path = yaml_dir/ f"{mp_id}.yaml"
-                                
-                      
-                phonons_pred = load_phonopy(str(yaml_path))
                 
-                displacement_dataset = phonons_pred.dataset
-                atoms = phonopy2aseatoms(phonons_pred)
                 
-                atoms_sym = atoms.copy()
-                atoms_sym.calc = calc
-                atoms_sym.set_constraint(FixSymmetry(atoms_sym))
-                opt = LBFGS(atoms_sym)
-                opt.run(fmax=fmax, steps=1000)
-
-                # primitive matrix not always available in reference data e.g. mp-30056
-                if "primitive_matrix" in atoms.info.keys():
-                    primitive_matrix = atoms.info["primitive_matrix"]
-                else:
-                    primitive_matrix = "auto"
-                    print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
+                # REF
+                phonons_ref = load_phonopy(str(yaml_path))
+                
+                qpoints, labels, connections = get_band_qpoints_by_seekpath(
+                    phonons_ref.primitive, npoints=101, is_const_interval=True
+                )
+                phonons_ref.auto_band_structure()
+                band_structure_ref = phonons_ref.get_band_structure_dict()
+                phonons_ref.auto_total_dos()
+                dos_ref = phonons_ref.get_total_dos_dict()
+                
+                
+                with open(yaml_path) as f:
+                    thermal_properties = yaml.safe_load(f)
             
-                phonons_pred = init_phonopy_from_ref(
-                    atoms=atoms_sym,
-                    fc2_supercell=atoms.info["fc2_supercell"],
-                    primitive_matrix=primitive_matrix,
-                    displacement_dataset=displacement_dataset,
-                    symprec=1e-5,
-                )
-
-                phonons_pred, _, _ = get_fc2_and_freqs(
-                    phonons=phonons_pred,
-                    calculator=calc,
-                    q_mesh=np.array([q_mesh] * 3),
-                    symmetrize_fc2=True
-                )
-
-                #phonon_obj_path = nwd / f"phonon_obj/{mp_id}_phonon_obj.yaml"
-                #Path(phonon_obj_path).parent.mkdir(parents=True, exist_ok=True)
-                #phonons_pred.save(filename=str(phonon_obj_path)) #, settings={"force_constants": True})
-                
-                phonons_pred.auto_band_structure()
-                band_structure_pred = phonons_pred.get_band_structure_dict()
-                phonons_pred.auto_total_dos()
-                dos_pred = phonons_pred.get_total_dos_dict()
-                
-                phonon_pred_path = nwd / f"phonon_pred_data/"
-                phonon_pred_path.mkdir(parents=True, exist_ok=True)
-                
-                phonon_pred_band_structure_path = phonon_pred_path / f"{mp_id}_band_structure.npz"
-                phonon_pred_dos_path = phonon_pred_path / f"{mp_id}_dos.npz"
-                thermal_path = phonon_pred_path / f"{mp_id}_thermal_properties.json"
-                
-                with open(phonon_pred_band_structure_path, "wb") as f:
-                    pickle.dump(band_structure_pred, f)
-                with open(phonon_pred_dos_path, "wb") as f:
-                    pickle.dump(dos_pred, f)
-                
-                phonons_pred.run_mesh([q_mesh_thermal] * 3) #TODO 20x20x20
-                phonons_pred.run_thermal_properties(
-                    temperatures=temperatures,
-                    cutoff_frequency=0.05
-                )
-
-                thermal_dict = phonons_pred.get_thermal_properties_dict()
-                thermal_dict_safe = {
-                    key: value.tolist() if isinstance(value, np.ndarray) else value
-                    for key, value in thermal_dict.items()
+                thermal_properties_dict = {
+                    "temperatures": [],
+                    "free_energy": [],
+                    "entropy": [],
+                    "heat_capacity": []
                 }
+                
+                for temp, free_energy, entropy, heat_capacity in zip(
+                    thermal_properties["temperatures"],
+                    thermal_properties["free_e"],
+                    thermal_properties["entropy"],
+                    thermal_properties["heat_capacity"]
+                ):
+                    thermal_properties_dict["temperatures"].append(temp)
+                    thermal_properties_dict["free_energy"].append(free_energy)
+                    thermal_properties_dict["entropy"].append(entropy)
+                    thermal_properties_dict["heat_capacity"].append(heat_capacity)
+                    
+                    
+            
+            
+                
+                phonon_ref_path = nwd / f"phonon_ref_data/"
+                phonon_ref_path.mkdir(parents=True, exist_ok=True)
+                
+                phonon_ref_band_structure_path = phonon_ref_path / f"{mp_id}_band_structure.npz"
+                phonon_ref_dos_path = phonon_ref_path / f"{mp_id}_dos.npz"
+                thermal_path = phonon_ref_path / f"{mp_id}_thermal_properties.json"
+                
+                with open(phonon_ref_band_structure_path, "wb") as f:
+                    pickle.dump(band_structure_ref, f)
+                with open(phonon_ref_dos_path, "wb") as f:
+                    pickle.dump(dos_ref, f)
                 with open(thermal_path, "w") as f:
-                    json.dump(thermal_dict_safe, f, indent=4)
-
+                    json.dump(thermal_properties_dict, f)
+                    
+                with open(phonon_ref_path / f"{mp_id}_qpoints.npz", "wb") as f:
+                    pickle.dump(qpoints, f)
+                with open(phonon_ref_path / f"{mp_id}_labels.json", "w") as f:
+                    json.dump(labels, f)
+                with open(phonon_ref_path / f"{mp_id}_connections.json", "w") as f:
+                    json.dump(connections, f)
+                    
                 return {
                     "mp_id": mp_id,
-                    "phonon_band_path_dict": str(phonon_pred_band_structure_path),
-                    "phonon_dos_dict": phonon_pred_dos_path,
+                    "phonon_band_path_dict": str(phonon_ref_band_structure_path),
+                    "phonon_dos_dict": phonon_ref_dos_path,
                     "thermal_properties_dict": str(thermal_path),
-                    "phonon_qpoints_dict": str(phonon_pred_path / f"{mp_id}_qpoints.npz"),
-                    "phonon_labels_dict": str(phonon_pred_path / f"{mp_id}_labels.json"),
-                    "phonon_connections_dict": str(phonon_pred_path / f"{mp_id}_connections.json"),
+                    "phonon_qpoints_dict": str(phonon_ref_path / f"{mp_id}_qpoints.npz"),
+                    "phonon_labels_dict": str(phonon_ref_path / f"{mp_id}_labels.json"),
+                    "phonon_connections_dict": str(phonon_ref_path / f"{mp_id}_connections.json"),
                 }
+
             except Exception as e:
                 print(f"Skipping {mp_id} due to error: {e}")
                 return None
 
         # Run jobs in parallel
         results = Parallel(n_jobs=-1)(
-            delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+            delayed(process_mp_id)(mp_id, nwd, yaml_dir)
             for mp_id in self.mp_ids
         )
 
-        # Optional: collect paths if needed later
-
-        
         phonon_band_path_dict = {
             res["mp_id"]: str(res["phonon_band_path_dict"])
             for res in results if res is not None
@@ -207,6 +181,7 @@ class PhononAllBatch(zntrack.Node):
             res["mp_id"]: str(res["phonon_connections_dict"])
             for res in results if res is not None
         }
+
         
         # Save paths to JSON files
         with open(self.phonon_band_paths, "w") as f:
@@ -256,6 +231,7 @@ class PhononAllBatch(zntrack.Node):
             return json.load(f)
         
 
+
     @property
     def get_phonon_ref_data(self) -> dict[str, dict[str, t.Any]]:
         """Returns a dictionary mapping mp_id to loaded phonon reference data."""
@@ -293,69 +269,3 @@ class PhononAllBatch(zntrack.Node):
                 continue
 
         return result
-        
-        
-        
-        
-        
-
-
-
-
-
-
-
-    @staticmethod
-    def benchmark_interactive(
-        pred_node_dict: dict[str, "PhononAllBatch"],
-        ui=None,
-        run_interactive=True,
-        report=True,
-        normalise_to_model: t.Optional[str] = None,
-    ):
-        """
-        Benchmarking with multiple models (each one is a PhononAllBatch node).
-        """
-        class VirtualPhononNode:
-            def __init__(self, mp_id, phonon_obj_path, thermal_props_dict):
-                self.name = f"{mp_id}"
-                self._thermal_props = thermal_props_dict
-                self._band_structure = None
-                self._dos = None
-                phonons = load_phonopy(str(phonon_obj_path))
-                phonons.auto_band_structure()
-                phonons.auto_total_dos()
-                self._band_structure = phonons.get_band_structure_dict()
-                dos_dict = phonons.get_total_dos_dict()
-                self._dos = (dos_dict["frequency_points"], dos_dict["total_dos"])
-
-            @property
-            def band_structure(self):
-                return self._band_structure
-
-            @property
-            def dos(self):
-                return self._dos
-
-            @property
-            def get_thermal_properties(self):
-                return self._thermal_props
-
-        # Build mp_id -> model_name -> virtual_node
-        unified_pred_node_dict = {}
-        for model_name, batch_node in pred_node_dict.items():
-            for mp_id in batch_node.phonon_obj_path_dict:
-                if mp_id not in unified_pred_node_dict:
-                    unified_pred_node_dict[mp_id] = {}
-                thermal_props = batch_node.thermal_properties_path_dict[mp_id]
-                phonon_obj_path = batch_node.phonon_obj_path_dict[mp_id]
-                unified_pred_node_dict[mp_id][model_name] = VirtualPhononNode(mp_id, phonon_obj_path, thermal_props)
-
-        # Now call original PhononDispersion benchmark function
-        return PhononDispersion.benchmark_interactive(
-            pred_node_dict=unified_pred_node_dict,
-            ui=ui,
-            run_interactive=run_interactive,
-            report=report,
-            normalise_to_model=normalise_to_model,
-        )
