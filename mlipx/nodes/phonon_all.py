@@ -480,6 +480,10 @@ class PhononAllBatch(zntrack.Node):
             pretty_benchmark_labels, 
             benchmarks,
         )
+        
+        print(mae_summary_df)
+        
+        
         # Add stability classification column using static method
         mae_summary_df = PhononDispersion.add_stability_classification_column(mae_summary_df, model_benchmarks_dict)
         mae_summary_df = PhononDispersion.add_band_mae_column(mae_summary_df, scatter_to_dispersion_map)

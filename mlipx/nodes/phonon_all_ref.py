@@ -123,6 +123,11 @@ class PhononAllRef(zntrack.Node):
                 phonon_ref_dos_path = phonon_ref_path / f"{mp_id}_dos.npz"
                 thermal_path = phonon_ref_path / f"{mp_id}_thermal_properties.json"
                 
+                # chemical formula from yaml for plotting later
+                chemical_formula = get_chemical_formula(phonons_ref, emprical=True)
+                with open(phonon_ref_path / f"{mp_id}_chemical_formula.txt", "w") as f:
+                    f.write(chemical_formula)
+                
                 with open(phonon_ref_band_structure_path, "wb") as f:
                     pickle.dump(band_structure_ref, f)
                 with open(phonon_ref_dos_path, "wb") as f:

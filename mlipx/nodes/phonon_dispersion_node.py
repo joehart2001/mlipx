@@ -217,6 +217,11 @@ class PhononDispersion(zntrack.Node):
         freqs = np.concatenate(band_structure["frequencies"])
         return np.max(freqs)
     
+    @property
+    def chemical_formula(self):
+        phonons = load_phonopy(self.phonon_obj_path)
+        return get_chemical_formula(phonons)
+    
 
         
     @property
@@ -431,7 +436,7 @@ class PhononDispersion(zntrack.Node):
         ax1.grid(True, linestyle=':', linewidth=0.5)
         ax2.grid(True, linestyle=':', linewidth=0.5)
         
-        chemical_formula = get_chemical_formula(phonons_ref)
+        chemical_formula = get_chemical_formula(phonons_ref, empirical=True)
         chemical_formula = PhononDispersion.prettify_chemical_formula(chemical_formula)
         mp_id = node_ref.name.split("_")[-1]
         plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
