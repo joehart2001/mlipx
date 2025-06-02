@@ -1101,11 +1101,11 @@ class PhononDispersion(zntrack.Node):
                 scatter_to_dispersion_map[model_name]["band_errors"] = {}
 
 
-            band_errors = np.mean(np.abs(np.concatenate([
-                np.array(p) - np.array(r)
-                for p, r in zip(pred_freqs, ref_freqs)
-            ])))
-            scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
+            # band_errors = np.mean(np.abs(np.concatenate([
+            #     np.array(p) - np.array(r)
+            #     for p, r in zip(pred_freqs, ref_freqs)
+            # ])))
+            # scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
 
             
             

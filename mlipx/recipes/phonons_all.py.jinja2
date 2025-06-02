@@ -17,19 +17,7 @@ project = zntrack.Project()
 {% endif %}
 
 
-{% if datapath %}
-mp_ids = []
-for filename in os.listdir({{ datapath[0] }}):
-    match = re.match(r"(mp-\d+)\.yaml$", filename)
-    if match:
-        mp_ids.append(match.group(1))
 
-{% if n_materials %}
-mp_ids = mp_ids[:{{ n_materials }}]
-{% endif %}
-print(f"Using {len(mp_ids)} mp-ids")
-
-{% else %}
 download_alex_parallel(sample_every=1, max_threads=16)
 local_path = Path(BENCHMARK_DATA_DIR) / "alex_phonons/alex_phonon_data"
 
@@ -41,7 +29,6 @@ mp_ids = mp_ids[:{{ n_materials }}]
 {% endif %}
 print(f"Using {len(mp_ids)} mp-ids")
 
-{% endif %}
 
 
 with project.group("phonons-dispersion-ref"):

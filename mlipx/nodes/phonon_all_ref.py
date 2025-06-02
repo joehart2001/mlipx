@@ -86,7 +86,12 @@ class PhononAllRef(zntrack.Node):
                 qpoints, labels, connections = get_band_qpoints_by_seekpath(
                     phonons_ref.primitive, npoints=101, is_const_interval=True
                 )
-                phonons_ref.auto_band_structure()
+                phonons_ref.run_band_structure(
+                    paths=qpoints,
+                    labels=labels,
+                    path_connections=connections,
+                )
+                #phonons_ref.auto_band_structure()
                 band_structure_ref = phonons_ref.get_band_structure_dict()
                 phonons_ref.auto_total_dos()
                 dos_ref = phonons_ref.get_total_dos_dict()

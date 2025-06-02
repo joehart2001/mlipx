@@ -169,6 +169,12 @@ for _name, _cfg in _registry.items():
             device=_cfg.get("device", "cpu"),
             overrides=kwargs.get("overrides", {})
         )
+    elif _cfg["class_name"] == "OrbCalc":
+        kwargs = _cfg.get("kwargs", {})
+        MODELS[_name] = OrbCalc(
+            name=kwargs["name"],
+            device=_cfg.get("device", "cpu"),
+        )
     else:
         MODELS[_name] = mlipx.GenericASECalculator(
             module=_cfg["module"],

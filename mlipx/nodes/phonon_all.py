@@ -88,11 +88,12 @@ class PhononAllBatch(zntrack.Node):
         q_mesh_thermal = 6
         temperatures = self.thermal_properties_temperatures
         
-
-        def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
+        calc = self.model.get_calculator()
+        
+        def process_mp_id(mp_id: str, calc, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
             try:
                 print(f"\nProcessing {mp_id}...")
-                calc = model.get_calculator()
+                #calc = model.get_calculator()
                 yaml_path = yaml_dir/ f"{mp_id}.yaml"
                                 
                       
@@ -191,7 +192,7 @@ class PhononAllBatch(zntrack.Node):
 
         # Run jobs in parallel
         results = Parallel(n_jobs=1)(
-            delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+            delayed(process_mp_id)(mp_id, calc, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
             for mp_id in self.mp_ids
         )
 
