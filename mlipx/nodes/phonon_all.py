@@ -192,10 +192,30 @@ class PhononAllBatch(zntrack.Node):
                 return None
 
         # Run jobs in parallel
-        results = Parallel(n_jobs=-1)(
-            delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-            for mp_id in self.mp_ids
-        )
+        # results = Parallel(n_jobs=-1)(
+        #     delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+        #     for mp_id in self.mp_ids
+        # )
+        
+        from math import ceil
+
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+
+        batch_size = 1000  # or adjust based on your available memory
+        all_results = []
+
+        for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
+            print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
+            results = Parallel(n_jobs=-1)(  
+                delayed(process_mp_id)(
+                    mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures
+                )
+                for mp_id in mp_batch
+            )
+            all_results.extend(results)
 
 
 
