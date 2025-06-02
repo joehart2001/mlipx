@@ -30,7 +30,7 @@ mp_ids = mp_ids[:{{ n_materials }}]
 print(f"Using {len(mp_ids)} mp-ids")
 
 {% else %}
-download_alex_parallel(sample_every=10, max_threads=16)
+download_alex_parallel(sample_every=1, max_threads=16)
 local_path = Path(BENCHMARK_DATA_DIR) / "alex_phonons/alex_phonon_data"
 
 with open(f"{local_path}/../mp_ids_subsampled.txt", "r") as f:
