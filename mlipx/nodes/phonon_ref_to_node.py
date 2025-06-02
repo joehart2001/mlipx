@@ -65,6 +65,9 @@ class PhononRefToNode(zntrack.Node):
     def run(self):        
         
         phonons = load_phonopy(str(self.phonopy_yaml_path))
+        
+        
+        
         phonons.save(
             filename=self.force_constants_path,
             settings={
@@ -112,3 +115,4 @@ class PhononRefToNode(zntrack.Node):
     @property
     def get_thermal_properties_path(self) -> str:
         return self.thermal_properties_path
+

@@ -65,6 +65,7 @@ class PhononAllRef(zntrack.Node):
     phonon_labels_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_labels_paths.json")
     phonon_connections_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_connections_paths.json")
     thermal_properties_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "thermal_properties_paths.json")
+    get_chemical_formula_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mp_ids_and_formulas.json")
     
     def run(self):
         #calc = self.model.get_calculator()
@@ -124,9 +125,9 @@ class PhononAllRef(zntrack.Node):
                 thermal_path = phonon_ref_path / f"{mp_id}_thermal_properties.json"
                 
                 # chemical formula from yaml for plotting later
-                chemical_formula = get_chemical_formula(phonons_ref, emprical=True)
-                with open(phonon_ref_path / f"{mp_id}_chemical_formula.txt", "w") as f:
-                    f.write(chemical_formula)
+                chemical_formula = get_chemical_formula(phonons_ref, empirical=True)
+                # with open(phonon_ref_path / f"{mp_id}_chemical_formula.txt", "w") as f:
+                #     f.write(chemical_formula)
                 
                 with open(phonon_ref_band_structure_path, "wb") as f:
                     pickle.dump(band_structure_ref, f)
@@ -150,6 +151,7 @@ class PhononAllRef(zntrack.Node):
                     "phonon_qpoints_dict": str(phonon_ref_path / f"{mp_id}_qpoints.npz"),
                     "phonon_labels_dict": str(phonon_ref_path / f"{mp_id}_labels.json"),
                     "phonon_connections_dict": str(phonon_ref_path / f"{mp_id}_connections.json"),
+                    "formula": chemical_formula,
                 }
 
             except Exception as e:
@@ -186,6 +188,10 @@ class PhononAllRef(zntrack.Node):
             res["mp_id"]: str(res["phonon_connections_dict"])
             for res in results if res is not None
         }
+        chemical_formula_dict = {
+            res["mp_id"]: str(res["formula"])
+            for res in results if res is not None
+        }
 
         
         # Save paths to JSON files
@@ -201,6 +207,10 @@ class PhononAllRef(zntrack.Node):
             json.dump(phonon_labels_path_dict, f, indent=4)
         with open(self.phonon_connections_paths, "w") as f:
             json.dump(phonon_connections_path_dict, f, indent=4)
+
+        # Write all mp_ids and their chemical formulas
+        with open(self.get_chemical_formula_path, "w") as f:
+            json.dump(chemical_formula_dict, f, indent=4)
 
             
     
@@ -234,7 +244,11 @@ class PhononAllRef(zntrack.Node):
         """Returns a dictionary of mp_id to phonon connections paths."""
         with open(self.phonon_connections_paths, "r") as f:
             return json.load(f)
-        
+
+    @property
+    def get_chemical_formulas_dict(self) -> dict[str, str]:
+        with open(self.get_chemical_formula_path, "r") as f:
+            return json.load(f)
 
 
     @property
@@ -246,6 +260,7 @@ class PhononAllRef(zntrack.Node):
         qpoints_paths = self.get_phonon_qpoints_paths
         labels_paths = self.get_phonon_labels_paths
         connections_paths = self.get_phonon_connections_paths
+        chemical_formulas = self.get_chemical_formulas_dict
 
         def load_pickle(path: str):
             with open(path, "rb") as f:
@@ -268,9 +283,11 @@ class PhononAllRef(zntrack.Node):
                     "qpoints": load_pickle(qpoints_paths[mp_id]),
                     "labels": load_json(labels_paths[mp_id]),
                     "connections": load_json(connections_paths[mp_id]),
+                    "formula": chemical_formulas[mp_id],
                 }
             except Exception as e:
                 print(f"Skipping {mp_id} due to loading error: {e}")
                 continue
 
         return result
+

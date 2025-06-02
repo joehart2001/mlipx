@@ -50,6 +50,8 @@ import plotly.express as px
 import dash
 from dash import dcc, html, Input, Output, State, MATCH
 import base64
+import warnings
+warnings.filterwarnings("ignore", category=DeprecationWarning, module="spglib")
 
 
 
@@ -69,10 +71,11 @@ class PhononAllBatch(zntrack.Node):
 
     phonon_band_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_band_paths.json")
     phonon_dos_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_dos_paths.json")
-    phonon_qpoints_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_qpaths_paths.json")
-    phonon_labels_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_labels_paths.json")
-    phonon_connections_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_connections_paths.json")
+    #phonon_qpoints_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_qpaths_paths.json")
+    #phonon_labels_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_labels_paths.json")
+    #phonon_connections_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_connections_paths.json")
     thermal_properties_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "thermal_properties_paths.json")
+    get_chemical_formula_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mp_ids_and_formulas.json")
     
     def run(self):
         #calc = self.model.get_calculator()
@@ -147,6 +150,9 @@ class PhononAllBatch(zntrack.Node):
                 with open(phonon_pred_dos_path, "wb") as f:
                     pickle.dump(dos_pred, f)
 
+                
+                chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
+
                     
                 # with open(phonon_pred_path / f"{mp_id}_qpoints.npz", "wb") as f:
                 #     pickle.dump(qpoints, f)
@@ -174,6 +180,7 @@ class PhononAllBatch(zntrack.Node):
                     "phonon_band_path_dict": str(phonon_pred_band_structure_path),
                     "phonon_dos_dict": phonon_pred_dos_path,
                     "thermal_properties_dict": str(thermal_path),
+                    "formula": chemical_formula,
                     # "phonon_qpoints_dict": str(phonon_pred_path / f"{mp_id}_qpoints.npz"),
                     # "phonon_labels_dict": str(phonon_pred_path / f"{mp_id}_labels.json"),
                     # "phonon_connections_dict": str(phonon_pred_path / f"{mp_id}_connections.json"),
@@ -203,6 +210,11 @@ class PhononAllBatch(zntrack.Node):
             res["mp_id"]: str(res["thermal_properties_dict"])
             for res in results if res is not None
         }
+        chemical_formula_dict = {
+            res["mp_id"]: res["formula"]
+            for res in results if res is not None
+        }
+        print(chemical_formula_dict)
 
         
         # Save paths to JSON files
@@ -212,6 +224,8 @@ class PhononAllBatch(zntrack.Node):
             json.dump(phonon_dos_path_dict, f, indent=4)
         with open(self.thermal_properties_paths, "w") as f:
             json.dump(thermal_properties_path_dict, f, indent=4)
+        with open(self.get_chemical_formula_path, "w") as f:
+            json.dump(chemical_formula_dict, f, indent=4)
 
     
     @property
@@ -229,6 +243,11 @@ class PhononAllBatch(zntrack.Node):
         """Returns a dictionary of mp_id to thermal properties paths."""
         with open(self.thermal_properties_paths, "r") as f:
             return json.load(f)
+    
+    @property
+    def get_chemical_formulas_dict(self) -> dict[str, str]:
+        with open(self.get_chemical_formula_path, "r") as f:
+            return json.load(f)
 
         
 
@@ -238,6 +257,7 @@ class PhononAllBatch(zntrack.Node):
         band_paths = self.get_phonon_band_paths
         dos_paths = self.get_phonon_dos_paths
         thermal_paths = self.get_thermal_properties_paths
+        chemical_formulas = self.get_chemical_formulas_dict
 
         def load_pickle(path: str):
             with open(path, "rb") as f:
@@ -257,6 +277,7 @@ class PhononAllBatch(zntrack.Node):
                     "band_structure": load_pickle(band_paths[mp_id]),
                     "dos": load_pickle(dos_paths[mp_id]),
                     "thermal_properties": load_json(thermal_paths[mp_id]),
+                    "formula": chemical_formulas[mp_id],
                 }
             except Exception as e:
                 print(f"Skipping {mp_id} due to loading error: {e}")
@@ -395,146 +416,41 @@ class PhononAllBatch(zntrack.Node):
             def connections(self):
                 return self._data["connections"]
             
+            @property
+            def formula(self):
+                return self._data["formula"] if "formula" in self._data else None
+            
         
-        def convert_batch_to_node_dict(batch_node: PhononAllBatch) -> dict[str, PhononDataWrapper]:
+        def convert_batch_to_node_dict(
+            batch_node: PhononAllBatch, model_name: t.Optional[str] = None
+        ) -> dict[str, t.Any]:
             raw_data = batch_node.get_phonon_ref_data
-            return {mp_id: PhononDataWrapper(mp_id, data) for mp_id, data in raw_data.items()}
-        
+            if model_name is None:
+                return {mp_id: PhononDataWrapper(mp_id, data) for mp_id, data in raw_data.items()}
+            else:
+                return {mp_id: {model_name: PhononDataWrapper(mp_id, data)} for mp_id, data in raw_data.items()}
         
         ref_node_dict = convert_batch_to_node_dict(ref_phonon_node)
 
-        pred_node_dict = {
-            model_name: convert_batch_to_node_dict(batch_node)
-            for model_name, batch_node in pred_node_dict.items()
-        }
-        
-        #return ref_node_dict, converted_pred_dict
-        
-        
-
-
-
-        ref_band_data_dict = {}
-        ref_benchmarks_dict = {}
-        pred_benchmarks_dict = {}
-        scatter_to_dispersion_map = {}     # model_name -> {property -> {ref, pred}, hover, point_map, img_paths}
-        phonon_plot_paths = {}
-        point_index_to_id = []
-        
-        benchmarks = [
-            'max_freq',
-            'min_freq',
-            'S',
-            'F',
-            'C_V',
-        ]
-        benchmark_units = {
-            'max_freq': 'THz', 
-            'min_freq': 'THz',
-            'S': '[J/K/mol]',
-            'F': '[kJ/mol]',
-            'C_V': '[J/K/mol]',
-        }
-        
-        pretty_benchmark_labels = {
-            'max_freq': 'ω_max [THz]',
-            'min_freq': 'ω_min [THz]',
-            'S': 'S [J/mol·K]',
-            'F': 'F [kJ/mol]',
-            'C_V': 'C_V [J/mol·K]'
-        }
-        label_to_key = {v: k for k, v in pretty_benchmark_labels.items()}
-
-        model_benchmarks_dict = {} # max_freq, min_freq ...
-        plot_stats_dict = {}
+        pred_node_dict_new = {}
+        for model_name, batch_node in pred_node_dict.items():
+            model_data = convert_batch_to_node_dict(batch_node, model_name)
+            for mp_id, model_wrapper_dict in model_data.items():
+                if mp_id not in pred_node_dict_new:
+                    pred_node_dict_new[mp_id] = {}
+                pred_node_dict_new[mp_id].update(model_wrapper_dict)
+                
         
         
-        #-------------
-            
-            
-        for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
-            if not PhononDispersion.process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, 
-                                        ref_benchmarks_dict, pred_benchmarks_dict):
-                continue
-            
-            phonon_plot_paths[mp_id] = {}
-            
-            # process
-            PhononDispersion.process_prediction_data(
-                pred_node_dict[mp_id], 
-                ref_node_dict[mp_id], 
-                mp_id,
-                ref_benchmarks_dict,
-                pred_benchmarks_dict,
-                model_benchmarks_dict,
-                plot_stats_dict,
-                scatter_to_dispersion_map,
-                phonon_plot_paths,
-                point_index_to_id,
-                benchmarks
-            )
-        
-        # summary statistics and generate plots
-        mae_summary_df = PhononDispersion.calculate_summary_statistics(
-            plot_stats_dict, 
-            pretty_benchmark_labels, 
-            benchmarks,
+    
+        PhononDispersion.benchmark_interactive(
+            pred_node_dict=pred_node_dict_new,
+            ref_node_dict=ref_node_dict,
+            ui=ui,
+            run_interactive=run_interactive,
+            report=report,
+            normalise_to_model=normalise_to_model,
         )
         
-        print(mae_summary_df)
         
-        
-        # Add stability classification column using static method
-        mae_summary_df = PhononDispersion.add_stability_classification_column(mae_summary_df, model_benchmarks_dict)
-        mae_summary_df = PhononDispersion.add_band_mae_column(mae_summary_df, scatter_to_dispersion_map)
-        
-        # recalculate phonon score (avg) to include band MAE
-        mae_cols = [col for col in mae_summary_df.columns if col not in ['Model', 'Phonon Score \u2193', 'Rank']]
 
-        model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
-        
-        if normalise_to_model is not None:
-            # normalise MAE values to the specified model
-            for model in model_list:
-                score = 0
-                effective_cols = mae_cols.copy()
-                for col in mae_cols:
-                    score += mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0] / mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0]
-                
-                # 1-F1 score
-                f1_model = mae_summary_df.loc[mae_summary_df['Model'] == model, "Stability Classification (F1)"].values[0]
-                f1_base = mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, "Stability Classification (F1)"].values[0]
-                score += (1 - f1_model) / (1 - f1_base) if (1 - f1_base) != 0 else 0
-                effective_cols.append("1 - F1")
-                
-                
-                mae_summary_df.loc[mae_summary_df['Model'] == model, 'Phonon Score \u2193'] = score / len(effective_cols)
-            
-        else:
-            # recalc score with band mae included
-            mae_summary_df['Phonon Score \u2193'] = mae_summary_df[mae_cols].mean(axis=1).round(3)
-        
-        mae_summary_df = mae_summary_df.round(3)
-        mae_summary_df['Rank'] = mae_summary_df['Phonon Score \u2193'].rank(method='min').astype(int)
-        
-        PhononDispersion.generate_and_save_plots(
-            scatter_to_dispersion_map,
-            model_benchmarks_dict,
-            plot_stats_dict,
-            pretty_benchmark_labels,
-            benchmarks,
-            mae_summary_df
-        )
-        
-        model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
-        
-        if report:
-            md_path = PhononDispersion.generate_phonon_report(
-                mae_summary_df=mae_summary_df,
-                models_list=model_list,
-            )
-        else:
-            md_path = None
-        
-        if ui is None and run_interactive:
-            return

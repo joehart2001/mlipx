@@ -86,7 +86,8 @@ class PhononDispersion(zntrack.Node):
     labels_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "labels.json")
     connections_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "connections.json")
     thermal_properties_path_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "thermal_properties.json")
-    
+    chemical_formula_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "chemical_formula.json")
+
     
 
 
@@ -136,6 +137,8 @@ class PhononDispersion(zntrack.Node):
                 path_connections=connections,
             )
             
+
+            
             with open(self.qpoints_path, "wb") as f:
                 pickle.dump(qpoints, f)
             with open(self.labels_path, "w") as f:
@@ -143,7 +146,10 @@ class PhononDispersion(zntrack.Node):
             with open(self.connections_path, "w") as f:
                 json.dump(connections, f)
 
-                
+
+        chemical_formula = get_chemical_formula(phonons, empirical=True)
+        with open(self.chemical_formula_path, "w") as f:
+            json.dump({"formula": chemical_formula}, f)
             
 
                 
@@ -218,10 +224,10 @@ class PhononDispersion(zntrack.Node):
         return np.max(freqs)
     
     @property
-    def chemical_formula(self):
-        phonons = load_phonopy(self.phonon_obj_path)
-        return get_chemical_formula(phonons)
-    
+    def formula(self) -> str:
+        with open(self.chemical_formula_path, "r") as f:
+            return json.load(f)["formula"]
+
 
         
     @property
@@ -352,8 +358,8 @@ class PhononDispersion(zntrack.Node):
         ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])  # band structure
         ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])  # DOS
 
-        phonons_pred = load_phonopy(node_pred.phonon_obj_path)
-        phonons_ref = load_phonopy(node_ref.phonon_obj_path)
+        # phonons_pred = load_phonopy(node_pred.phonon_obj_path)
+        # phonons_ref = load_phonopy(node_ref.phonon_obj_path)
 
         band_structure_pred = node_pred.band_structure
         distances_pred = band_structure_pred["distances"]
@@ -436,7 +442,8 @@ class PhononDispersion(zntrack.Node):
         ax1.grid(True, linestyle=':', linewidth=0.5)
         ax2.grid(True, linestyle=':', linewidth=0.5)
         
-        chemical_formula = get_chemical_formula(phonons_ref, empirical=True)
+        chemical_formula = node_ref.formula
+        print(f"Chemical formula: {chemical_formula}")
         chemical_formula = PhononDispersion.prettify_chemical_formula(chemical_formula)
         mp_id = node_ref.name.split("_")[-1]
         plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
