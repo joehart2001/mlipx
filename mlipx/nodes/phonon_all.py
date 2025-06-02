@@ -210,7 +210,7 @@ class PhononAllBatch(zntrack.Node):
 
         for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
             print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
-            results = Parallel(n_jobs=-1)(  
+            results = Parallel(n_jobs=4)(  
                 delayed(process_mp_id)(
                     mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures
                 )
