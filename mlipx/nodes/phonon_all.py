@@ -191,7 +191,7 @@ class PhononAllBatch(zntrack.Node):
                 return None
 
         # Run jobs in parallel
-        results = Parallel(n_jobs=1)(
+        results = Parallel(n_jobs=-1)(
             delayed(process_mp_id)(mp_id, calc, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
             for mp_id in self.mp_ids
         )
