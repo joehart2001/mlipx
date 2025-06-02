@@ -20,6 +20,17 @@ n_materials = None # none means all
 print(f"Elasticity benchmark on whole dataset (12,122 materials)")
 {% endif %}
 
+{% if n_jobs %}
+n_jobs = {{ n_jobs }}
+if n_jobs > 1:
+    print(f"Parallelisation over {n_jobs} jobs")
+else:
+    print("No parallelisation, running in serial")
+{% else %}
+n_jobs = -1
+print(f"Parallelisation over {n_jobs} jobs")
+{% endif %}
+
 
 print(f"Elasticity benchmark on {n_materials} mp-ids")
 
@@ -32,6 +43,7 @@ for model_name, model in MODELS.items():
             model =model,
             model_name=model_name,
             n_materials=n_materials,
+            n_jobs=n_jobs,
         )
         elasticity_dict[model_name] = benchmark
         elasticity_list.append(benchmark)

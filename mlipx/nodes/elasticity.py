@@ -72,6 +72,7 @@ class Elasticity(zntrack.Node):
     #dataset_path: pathlib.Path = zntrack.params()
     model: NodeWithCalculator = zntrack.deps()
     model_name: str = zntrack.params()
+    n_jobs: int = zntrack.params(-1)  # -1 for all available cores
     
     norm_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.1, -0.05, 0.05, 0.1))
     shear_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.02, -0.01, 0.01, 0.02))
@@ -108,7 +109,7 @@ class Elasticity(zntrack.Node):
         
         
         print(self.model_name)
-        results = benchmark.run(calc, self.model_name, n_jobs=-1) # njobs
+        results = benchmark.run(calc, self.model_name, n_jobs=self.n_jobs) # njobs
         results.to_csv(self.results_path, index=False)
         
         mae_df = pd.DataFrame()

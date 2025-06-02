@@ -482,6 +482,7 @@ def elasticity(
     n_materials: int | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
+    n_jobs: int | None = -1,
 ):
     """Run elasticity benchmark."""
     if models is not None:
@@ -494,6 +495,7 @@ def elasticity(
         material_ids=material_ids,
         n_materials=n_materials,
         smiles=smiles,
+        n_jobs=n_jobs,
     )
 
 
