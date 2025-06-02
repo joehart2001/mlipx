@@ -587,6 +587,10 @@ class PhononDispersion(zntrack.Node):
                 score = 0
                 effective_cols = mae_cols.copy()
                 for col in mae_cols:
+                    print(col)
+                    print(mae_summary_df)
+                    print(mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0])
+                    print(mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0])
                     score += mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0] / mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0]
                 
                 # 1-F1 score

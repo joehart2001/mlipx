@@ -199,6 +199,8 @@ def phonon_compare(
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    batched: Annotated[bool, Option("--batched", help="does one node contain many materials")]=True,
 
     ):
     """Launch interactive benchmark for phonon dispersion."""
@@ -213,8 +215,12 @@ def phonon_compare(
 
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_phonons-dispersion")
 
+    if batched:
+        pred_node_dict, ref_node = load_nodes_phonon_batch(node_objects, models, split_str="_phonons-dispersion")
+        
     
-    pred_node_dict, ref_node_dict = load_nodes_mpid_model(node_objects, models, split_str="_phonons-dispersion")
+    else: 
+        pred_node_dict, ref_node_dict = load_nodes_mpid_model(node_objects, models, split_str="_phonons-dispersion")
     
 
 
@@ -223,13 +229,23 @@ def phonon_compare(
         raise typer.Exit(1)
 
     print('\n UI = ', ui)
-
-    from mlipx import PhononDispersion
-    PhononDispersion.benchmark_interactive(
-        pred_node_dict=pred_node_dict,
-        ref_node_dict=ref_node_dict,
-        ui = ui,
-    )
+    
+    if batched:
+        from mlipx import PhononAllBatch
+        PhononAllBatch.benchmark_interactive(
+            pred_node_dict=pred_node_dict,
+            ref_phonon_node=ref_node,
+            ui=ui,
+        )
+            
+    else:
+        from mlipx import PhononDispersion
+        PhononDispersion.benchmark_interactive(
+            pred_node_dict=pred_node_dict,
+            ref_node_dict=ref_node_dict,
+            ui = ui,
+            normalise_to_model=normalise_to_model,
+        )
     
 # ------ helper funcitons -------
 
@@ -278,6 +294,25 @@ def load_node_objects(
         node_objects[name] = zntrack.from_rev(name)
 
     return node_objects
+    
+    
+def load_nodes_phonon_batch(node_objects, models, split_str):
+    
+    pred_node_dict = {}
+    
+    for name, node in node_objects.items():
+        if "reference" in name or "ref" in name:
+            ref_phonon_node = node
+            continue
+        
+        model = name.split(split_str)[0]
+        
+        if models and model not in models:
+            continue
+        
+        pred_node_dict[model] = node
+        
+    return pred_node_dict, ref_phonon_node
     
     
 def load_nodes_mpid_model(node_objects, models, split_str):
