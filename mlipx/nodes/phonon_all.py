@@ -61,6 +61,7 @@ class PhononAllBatch(zntrack.Node):
     mp_ids: list[str] = zntrack.params()
     model: NodeWithCalculator = zntrack.deps()
     phonopy_yaml_dir: str = zntrack.params()
+    n_jobs: int = zntrack.params(-1)
 
     N_q_mesh: int = zntrack.params(2)
     supercell: int = zntrack.params(3)
@@ -209,7 +210,7 @@ class PhononAllBatch(zntrack.Node):
 
         for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
             print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
-            results = Parallel(n_jobs=-1)(  
+            results = Parallel(n_jobs=self.n_jobs)(  
                 delayed(process_mp_id)(
                     mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures
                 )

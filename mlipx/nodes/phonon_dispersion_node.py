@@ -1103,13 +1103,23 @@ class PhononDispersion(zntrack.Node):
                 scatter_to_dispersion_map[model_name] = {'hover': [], 'point_map': [], 'img_paths': {}}
             if "band_errors" not in scatter_to_dispersion_map[model_name]:
                 scatter_to_dispersion_map[model_name]["band_errors"] = {}
+                
+            band_diffs = []
+            for p, r in zip(pred_freqs, ref_freqs):
+                len_p = len(p)
+                len_r = len(r)
+                if len_p != len_r:
+                    print(f"Warning: Mismatched band lengths for {model_name} at {mp_id}: {len_p} vs {len_r}. Skipping band error calculation for extra points.")
+                min_len = min(len_p, len_r)
+                band_diffs.append(np.abs(np.array(p[:min_len]) - np.array(r[:min_len])))
 
+            band_errors = np.mean(np.concatenate(band_diffs))
 
             # band_errors = np.mean(np.abs(np.concatenate([
             #     np.array(p) - np.array(r)
             #     for p, r in zip(pred_freqs, ref_freqs)
             # ])))
-            # scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
+            scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
 
             
             

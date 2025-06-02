@@ -58,6 +58,8 @@ class PhononAllRef(zntrack.Node):
 
     mp_ids: list[str] = zntrack.params()
     phonopy_yaml_dir: str = zntrack.params()
+    n_jobs: int = zntrack.params(-1)
+
 
     phonon_band_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_band_paths.json")
     phonon_dos_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_dos_paths.json")
@@ -164,11 +166,30 @@ class PhononAllRef(zntrack.Node):
                 return None
 
         # Run jobs in parallel
-        results = Parallel(n_jobs=-1)(
-            delayed(process_mp_id)(mp_id, nwd, yaml_dir)
-            for mp_id in self.mp_ids
-        )
+        # results = Parallel(n_jobs=n_jobs)(
+        #     delayed(process_mp_id)(mp_id, nwd, yaml_dir)
+        #     for mp_id in self.mp_ids
+        # )
 
+        from math import ceil
+
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+
+        batch_size = 1000  # or adjust based on your available memory
+        all_results = []
+
+        for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
+            print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
+            results = Parallel(n_jobs=self.n_jobs)(  
+            delayed(process_mp_id)(mp_id, nwd, yaml_dir)
+            for mp_id in tqdm(mp_batch, desc="Processing mp-ids")
+                for mp_id in mp_batch
+            )
+            all_results.extend(results)
+            
         phonon_band_path_dict = {
             res["mp_id"]: str(res["phonon_band_path_dict"])
             for res in results if res is not None
