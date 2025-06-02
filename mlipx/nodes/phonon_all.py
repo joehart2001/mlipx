@@ -190,12 +190,12 @@ class PhononAllBatch(zntrack.Node):
                 return None
 
         # Run jobs in parallel
-        results = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=1)(
             delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
             for mp_id in self.mp_ids
         )
 
-        # Optional: collect paths if needed later
+
 
         
         phonon_band_path_dict = {
@@ -214,7 +214,6 @@ class PhononAllBatch(zntrack.Node):
             res["mp_id"]: res["formula"]
             for res in results if res is not None
         }
-        print(chemical_formula_dict)
 
         
         # Save paths to JSON files

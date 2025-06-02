@@ -443,7 +443,6 @@ class PhononDispersion(zntrack.Node):
         ax2.grid(True, linestyle=':', linewidth=0.5)
         
         chemical_formula = node_ref.formula
-        print(f"Chemical formula: {chemical_formula}")
         chemical_formula = PhononDispersion.prettify_chemical_formula(chemical_formula)
         mp_id = node_ref.name.split("_")[-1]
         plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
