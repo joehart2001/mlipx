@@ -22,10 +22,11 @@ print(f"Elasticity benchmark on whole dataset (12,122 materials)")
 
 {% if n_jobs %}
 n_jobs = {{ n_jobs }}
-if n_jobs > 1:
-    print(f"Parallelisation over {n_jobs} jobs")
-else:
+if n_jobs == 1:
     print("No parallelisation, running in serial")
+else:
+    print(f"Parallelisation over {n_jobs} jobs")
+
 {% else %}
 n_jobs = -1
 print(f"Parallelisation over {n_jobs} jobs")
