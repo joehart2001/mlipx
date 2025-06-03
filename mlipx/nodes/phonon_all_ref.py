@@ -180,15 +180,20 @@ class PhononAllRef(zntrack.Node):
 
         batch_size = 1000  # or adjust based on your available memory
         all_results = []
-
-        for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
-            print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
-            results = Parallel(n_jobs=4)(  
+        
+        results = Parallel(n_jobs=8)(
             delayed(process_mp_id)(mp_id, nwd, yaml_dir)
-            for mp_id in tqdm(mp_batch, desc="Processing mp-ids")
-                for mp_id in mp_batch
-            )
-            all_results.extend(results)
+            for mp_id in self.mp_ids
+                )
+
+        # for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
+        #     print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
+        #     results = Parallel(n_jobs=-1)(  
+        #     delayed(process_mp_id)(mp_id, nwd, yaml_dir)
+        #     for mp_id in tqdm(mp_batch, desc="Processing mp-ids")
+        #         for mp_id in mp_batch
+        #     )
+        #     all_results.extend(results)
             
         phonon_band_path_dict = {
             res["mp_id"]: str(res["phonon_band_path_dict"])

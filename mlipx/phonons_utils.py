@@ -132,8 +132,8 @@ def init_phonopy_from_ref(
         **kwargs,
     )
     
-    # set the displacement dataset
-    phonons.dataset = displacement_dataset
+    if displacement_dataset is not None:
+        phonons.dataset = displacement_dataset
 
 
     return phonons

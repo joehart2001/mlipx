@@ -164,7 +164,7 @@ class PhononAllBatch(zntrack.Node):
                 # with open(phonon_pred_path / f"{mp_id}_connections.json", "w") as f:
                 #     json.dump(connections, f)
                                   
-                phonons_pred.run_mesh([q_mesh_thermal] * 3) #TODO 20x20x20
+                phonons_pred.run_mesh([q_mesh_thermal] * 3)
                 phonons_pred.run_thermal_properties(
                     temperatures=temperatures,
                     cutoff_frequency=0.05
@@ -223,19 +223,19 @@ class PhononAllBatch(zntrack.Node):
         
         phonon_band_path_dict = {
             res["mp_id"]: str(res["phonon_band_path_dict"])
-            for res in results if res is not None
+            for res in all_results if res is not None
         }
         phonon_dos_path_dict = {
             res["mp_id"]: str(res["phonon_dos_dict"])
-            for res in results if res is not None
+            for res in all_results if res is not None
         }
         thermal_properties_path_dict = {
             res["mp_id"]: str(res["thermal_properties_dict"])
-            for res in results if res is not None
+            for res in all_results if res is not None
         }
         chemical_formula_dict = {
             res["mp_id"]: res["formula"]
-            for res in results if res is not None
+            for res in all_results if res is not None
         }
 
         
