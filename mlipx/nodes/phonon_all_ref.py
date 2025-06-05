@@ -36,6 +36,7 @@ from mlipx.phonons_utils import *
 from phonopy import load as load_phonopy
 
 from joblib import Parallel, delayed
+import traceback
 
 from mlipx import PhononDispersion
 
@@ -171,29 +172,57 @@ class PhononAllRef(zntrack.Node):
         #     for mp_id in self.mp_ids
         # )
 
-        from math import ceil
 
-        def chunks(lst, n):
-            """Yield successive n-sized chunks from lst."""
-            for i in range(0, len(lst), n):
-                yield lst[i:i + n]
-
-        batch_size = 1000  # or adjust based on your available memory
-        all_results = []
         
-        results = Parallel(n_jobs=8)(
-            delayed(process_mp_id)(mp_id, nwd, yaml_dir)
-            for mp_id in self.mp_ids
-                )
 
-        # for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
-        #     print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
-        #     results = Parallel(n_jobs=-1)(  
-        #     delayed(process_mp_id)(mp_id, nwd, yaml_dir)
-        #     for mp_id in tqdm(mp_batch, desc="Processing mp-ids")
-        #         for mp_id in mp_batch
-        #     )
-        #     all_results.extend(results)
+        # Run jobs in parallel
+        successful_results = []
+        failed_hard = []
+
+        try:
+            # Wrap result with (mp_id, result) so we know which ones succeeded
+            raw_results = Parallel(n_jobs=-1)(
+                delayed(process_mp_id)(mp_id, nwd, yaml_dir)
+                for mp_id in self.mp_ids
+            )
+            # Filter out failed (None) results
+            successful_results = [(res["mp_id"], res) for res in raw_results if res is not None]
+
+        except Exception as e:
+            if "terminated" in str(e).lower():
+                print("Detected possible worker termination (e.g. OOM). Retrying serially to identify faulty materials.")
+            else:
+                raise  # unknown error, re-raise
+
+            # Get mp-ids that already succeeded
+            processed_mp_ids = {mp_id for mp_id, _ in successful_results}
+
+            # Retry only unprocessed ones
+            for mp_id in self.mp_ids:
+                if mp_id in processed_mp_ids:
+                    continue
+                try:
+                    res = process_mp_id(mp_id, nwd, yaml_dir)
+                    if res is not None:
+                        successful_results.append((res["mp_id"], res))
+                except Exception as err:
+                    print(f"Serial run failed for {mp_id}: {err}")
+                    traceback.print_exc()
+                    failed_hard.append(mp_id)
+
+        # Unpack the final result
+        results = [res for _, res in successful_results]
+
+        print(f"\nFinished with {len(results)} successful results.")
+        if failed_hard:
+            print(f"{len(failed_hard)} materials failed due to memory or hard crashes.")
+            print("Failed mp-ids:", failed_hard)
+        
+        
+        
+        
+        
+        
             
         phonon_band_path_dict = {
             res["mp_id"]: str(res["phonon_band_path_dict"])

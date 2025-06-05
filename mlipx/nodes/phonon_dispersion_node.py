@@ -373,7 +373,7 @@ class PhononDispersion(zntrack.Node):
         frequencies_ref = band_structure_ref["frequencies"]
         dos_freqs_ref, dos_values_ref = node_ref.dos
         # remove points of zero density to avoid artifacts in the plot
-        dos_freqs_pred, dos_values_pred = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
+        #dos_freqs_pred, dos_values_pred = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
 
 
         
@@ -1032,7 +1032,7 @@ class PhononDispersion(zntrack.Node):
         try:
             dos_freqs_ref, dos_values_ref = node_ref.dos
             # remove values with zero density to avoid artifacts in the plot + min/max freq calulations
-            dos_freqs_ref, dos_values_ref = dos_freqs_ref[dos_values_ref > 0], dos_values_ref[dos_values_ref > 0]
+            
         except FileNotFoundError:
             print(f"Skipping {node_ref.name} — dos file not found at {node_ref.dos_path}")
             return False
@@ -1044,10 +1044,10 @@ class PhononDispersion(zntrack.Node):
         
         ref_band_data_dict[mp_id] = band_structure_ref
         
-
+        dos_freqs_ref_calc, dos_values_ref_calc = dos_freqs_ref[dos_values_ref > 0], dos_values_ref[dos_values_ref > 0]
         T_300K_index = node_ref.get_thermal_properties['temperatures'].index(300)
-        ref_benchmarks_dict[mp_id]['max_freq'] = np.max(dos_freqs_ref)
-        ref_benchmarks_dict[mp_id]['min_freq'] = np.min(dos_freqs_ref)
+        ref_benchmarks_dict[mp_id]['max_freq'] = np.max(dos_freqs_ref_calc)
+        ref_benchmarks_dict[mp_id]['min_freq'] = np.min(dos_freqs_ref_calc)
         ref_benchmarks_dict[mp_id]['S'] = node_ref.get_thermal_properties['entropy'][T_300K_index]
         ref_benchmarks_dict[mp_id]['F'] = node_ref.get_thermal_properties['free_energy'][T_300K_index]
         ref_benchmarks_dict[mp_id]['C_V'] = node_ref.get_thermal_properties['heat_capacity'][T_300K_index]
@@ -1065,7 +1065,7 @@ class PhononDispersion(zntrack.Node):
             try:
                 dos_freqs_pred, dos_values_pred = pred_nodes[model_name].dos
                 # remove values with zero density to avoid artifacts in the plot + min/max freq calulations
-                dos_freqs_pred, dos_values_pred = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
+                #dos_freqs_pred, dos_values_pred = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
             except FileNotFoundError:
                 print(f"Skipping {model_name} — dos file not found at {pred_nodes[model_name].dos_path}")
                 continue
