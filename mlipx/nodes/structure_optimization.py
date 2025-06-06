@@ -3,12 +3,13 @@ import pathlib
 import ase.io
 import ase.optimize as opt
 import ase.filters as filters
+import ase.constraints as constraints
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import zntrack
 
-from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer, Filter
+from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer, Filter, Constraint
 
 
 class StructureOptimization(zntrack.Node):
@@ -43,6 +44,7 @@ class StructureOptimization(zntrack.Node):
     data_id: int = zntrack.params(-1)
     optimizer: Optimizer = zntrack.params(Optimizer.LBFGS.value)
     filter: Filter = zntrack.params(None)
+    constraint: Constraint = zntrack.params(None)
     model: NodeWithCalculator = zntrack.deps()
     fmax: float = zntrack.params(0.05)
     steps: int = zntrack.params(100_000_000)
@@ -54,6 +56,9 @@ class StructureOptimization(zntrack.Node):
         optimizer = getattr(opt, self.optimizer)
         if self.filter:
             filter_cls = getattr(filters, self.filter)
+        
+        if self.constraint:
+            constraint_cls = getattr(constraints, self.constraint)
         
         calc = self.model.get_calculator()
 
@@ -72,9 +77,16 @@ class StructureOptimization(zntrack.Node):
             energies.append(atoms.get_potential_energy(force_consistent=False))
             fmax.append(np.linalg.norm(atoms.get_forces(), axis=-1).max())
 
+        if self.constraint:
+            atoms.set_constraint(constraint_cls(atoms))
+        
         atoms.calc = calc
+        
         if filter_cls:
             atoms = filter_cls(atoms)
+
+        
+        
         dyn = optimizer(
             atoms,
             trajectory=self.frames_path.as_posix(),

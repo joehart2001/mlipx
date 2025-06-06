@@ -126,7 +126,7 @@ class PhononAllBatch(zntrack.Node):
                     symprec=1e-5,
                 )
 
-                phonons_pred, _, _ = get_fc2_and_freqs(
+                phonons_pred, fc2, freqs = get_fc2_and_freqs(
                     phonons=phonons_pred,
                     calculator=calc,
                     q_mesh=np.array([q_mesh] * 3),

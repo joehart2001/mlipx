@@ -29,6 +29,16 @@ class Filter(str, Enum):
     FrechetCellFilter = "FrechetCellFilter"
 
 
+class Constraint(str, Enum):
+    FixAtoms = "FixAtoms"
+    FixBondLength = "FixBondLength"
+    FixBondAngle = "FixBondAngle"
+    FixDihedralAngle = "FixDihedralAngle"
+    FixImproperDihedralAngle = "FixImproperDihedralAngle"
+    FixMolecularDipole = "FixMolecularDipole"
+    FixMolecularQuadrupole = "FixMolecularQuadrupole"
+    FixSymmetry = "FixSymmetry"
+
 class ASEKeys(str, Enum):
     formation_energy = "formation_energy"
     isolated_energies = "isolated_energies"
