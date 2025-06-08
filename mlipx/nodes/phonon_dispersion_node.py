@@ -1074,8 +1074,10 @@ class PhononDispersion(zntrack.Node):
             pred_benchmarks_dict[mp_id][model_name] = {}
             T_300K_index = pred_nodes[model_name].get_thermal_properties['temperatures'].index(300)
             
-            pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(dos_freqs_pred)
-            pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(dos_freqs_pred)
+            dos_freqs_pred_calc, dos_values_pred_calc = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
+            
+            pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(dos_freqs_pred_calc)
+            pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(dos_freqs_pred_calc)
             pred_benchmarks_dict[mp_id][model_name]['S'] = pred_nodes[model_name].get_thermal_properties['entropy'][T_300K_index]
             pred_benchmarks_dict[mp_id][model_name]['F'] = pred_nodes[model_name].get_thermal_properties['free_energy'][T_300K_index]
             pred_benchmarks_dict[mp_id][model_name]['C_V'] = pred_nodes[model_name].get_thermal_properties['heat_capacity'][T_300K_index]
@@ -1104,6 +1106,17 @@ class PhononDispersion(zntrack.Node):
             if "band_errors" not in scatter_to_dispersion_map[model_name]:
                 scatter_to_dispersion_map[model_name]["band_errors"] = {}
                 
+            # band_diffs = []
+            # for p, r in zip(pred_freqs, ref_freqs):
+            #     len_p = len(p)
+            #     len_r = len(r)
+            #     if len_p != len_r:
+            #         print(f"Warning: Mismatched band lengths for {model_name} at {mp_id}: {len_p} vs {len_r}. Skipping band error calculation for extra points.")
+            #     min_len = min(len_p, len_r)
+            #     #band_diffs.append(np.abs(np.array(p[:min_len]) - np.array(r[:min_len])))
+            #     band_diffs.append((np.array(p[:min_len]) - np.array(r[:min_len]))**2)
+
+
             band_diffs = []
             for p, r in zip(pred_freqs, ref_freqs):
                 len_p = len(p)
@@ -1111,18 +1124,31 @@ class PhononDispersion(zntrack.Node):
                 if len_p != len_r:
                     print(f"Warning: Mismatched band lengths for {model_name} at {mp_id}: {len_p} vs {len_r}. Skipping band error calculation for extra points.")
                 min_len = min(len_p, len_r)
-                #band_diffs.append(np.abs(np.array(p[:min_len]) - np.array(r[:min_len])))
-                band_diffs.append((np.array(p[:min_len]) - np.array(r[:min_len]))**2)
 
+                p_arr = np.array(p[:min_len])
+                r_arr = np.array(r[:min_len])
+
+                try:
+                    diff_squared = (p_arr - r_arr) ** 2
+                    band_diffs.append(diff_squared)
+                except ValueError as e:
+                    print(f"Skipping band due to ValueError at {model_name}, {mp_id}: {e}")
+                    continue
 
             #band_errors = np.mean(np.concatenate(band_diffs))
-            band_errors = np.sqrt(np.mean(np.concatenate(band_diffs)))
+            
+            if band_diffs:
+                band_errors = np.sqrt(np.mean(np.concatenate(band_diffs)))
+                scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
+            else:
+                print(f"No valid band differences found for {model_name} at {mp_id}. Skipping band error calculation.")
+                scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = np.array([])
 
             # band_errors = np.mean(np.abs(np.concatenate([
             #     np.array(p) - np.array(r)
             #     for p, r in zip(pred_freqs, ref_freqs)
             # ])))
-            scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
+            #scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
 
             
             
@@ -1483,7 +1509,9 @@ class PhononDispersion(zntrack.Node):
         band_maes = []
         for model in mae_summary_df["Model"]:
             band_error_dict = scatter_to_dispersion_map.get(model, {}).get("band_errors", {})
-            all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
+            #all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
+            non_empty_errors = [e for e in band_error_dict.values() if e.size > 0]
+            all_errors = np.concatenate(non_empty_errors) if non_empty_errors else np.array([])
             avg_band_mae = np.mean(np.abs(all_errors)) if all_errors.size > 0 else np.nan
             band_maes.append(round(avg_band_mae, 3))
             
@@ -1510,9 +1538,10 @@ class PhononDispersion(zntrack.Node):
         data_dir = Path(output_dir) / model_name / "band_errors"
         data_dir.mkdir(parents=True, exist_ok=True)
         
-        per_mp_mae = [(mp_id, np.mean(np.abs(errors))) for mp_id, errors in band_error_dict.items()]
-        per_mp_df = pd.DataFrame(per_mp_mae, columns=["mp_id", "BZ_MAE [THz]"])
-        per_mp_df.to_csv(data_dir / "bz_mae_distribution.csv", index=False)
+        #per_mp_mae = [(mp_id, np.mean(np.abs(errors))) for mp_id, errors in band_error_dict.items()]
+        per_mp_rmse = [(mp_id, np.sqrt(np.mean(np.square(errors)))) for mp_id, errors in band_error_dict.items()]
+        per_mp_df = pd.DataFrame(per_mp_rmse, columns=["mp_id", "BZ_RMSE [THz]"])
+        per_mp_df.to_csv(data_dir / "bz_rmse_distribution.csv", index=False)
 
         fig = px.violin(
             y=all_errors,
@@ -1526,5 +1555,5 @@ class PhononDispersion(zntrack.Node):
             paper_bgcolor="white",
             font_color="black"
         )
-        plot_path = data_dir / "bz_mae_distribution.png"
+        plot_path = data_dir / "bz_rmse_distribution.png"
         fig.write_image(plot_path, width=800, height=600)

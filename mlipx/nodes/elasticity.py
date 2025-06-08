@@ -310,11 +310,10 @@ class Elasticity(zntrack.Node):
             
 
     @staticmethod
-    def generate_density_scatter_figure(x, y, label, model, mae=None, max_points=500):
+    def generate_density_scatter_figure(x, y, label, model, mae=None, max_points=500, num_cells=200):
         x, y = np.array(x), np.array(y)
         x_min, x_max = x.min() - 0.05, x.max() + 0.05 # add a small margin otherwise the egde points are cut off
         y_min, y_max = y.min() - 0.05, y.max() + 0.05
-        num_cells = 50
         cell_w = (x_max - x_min) / num_cells
         cell_h = (y_max - y_min) / num_cells
 
@@ -337,7 +336,7 @@ class Elasticity(zntrack.Node):
         # helps for large datasets but keeps outliers visiable
         for (cx, cy), indices in cell_points.items():
             if len(indices) > 5:
-                indices = [np.random.choice(indices)]
+                idx = np.random.choice(indices)
                 if len(plot_x) < max_points:
                     plot_x.append(x[idx])
                     plot_y.append(y[idx])
