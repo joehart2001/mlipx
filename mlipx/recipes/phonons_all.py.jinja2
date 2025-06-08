@@ -30,6 +30,9 @@ mp_ids = mp_ids[{{ n_materials_start }}:{{ n_materials }}]
 {% elif n_materials %}
 mp_ids = mp_ids[:{{ n_materials }}]
 
+{% elif n_materials_start %}
+mp_ids = mp_ids[{{ n_materials_start }}:]
+
 {% endif %}
 print(f"Using {len(mp_ids)} mp-ids")
 
