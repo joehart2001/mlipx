@@ -1,3 +1,5 @@
+import matplotlib
+matplotlib.use("Agg")
 import pathlib
 import typing as t
 import json
@@ -15,12 +17,13 @@ from ase.dft.kpoints import bandpath
 from ase.optimize import LBFGS
 from dataclasses import field
 import subprocess
-
+from joblib import Parallel, delayed
 
 import warnings
 from pathlib import Path
 from typing import Any, Callable
 from ase.calculators.calculator import Calculator
+
 from tqdm import tqdm
 from phonopy.api_phonopy import Phonopy
 import yaml
@@ -471,15 +474,68 @@ class PhononDispersion(zntrack.Node):
 
 
 
+    @staticmethod
+    def process_mpid(
+        mp_id: str,
+        pred_node_dict: t.Dict[str, zntrack.Node],
+        ref_node_dict: t.Dict[str, zntrack.Node],
+        benchmarks: t.List[str]
+    ):
+        """
+        Refactored: Returns a dict of results, does not mutate shared structures.
+        """
+        
+        try: 
+            if mp_id not in pred_node_dict or mp_id not in ref_node_dict:
+                return None
 
+            ref_band_data_dict = {}
+            ref_benchmarks_dict = {}
+            pred_benchmarks_dict = {}
+            model_benchmarks_dict = {}
+            plot_stats_dict = {}
+            scatter_to_dispersion_map = {}
+            phonon_plot_paths = {}
+            point_index_to_id = []
 
+            PhononDispersion.process_reference_data(
+                ref_node_dict,
+                mp_id,
+                ref_band_data_dict,
+                ref_benchmarks_dict,
+                pred_benchmarks_dict
+            )
+            
+            phonon_plot_paths[mp_id] = {}
 
+            PhononDispersion.process_prediction_data(
+                pred_node_dict[mp_id],
+                ref_node_dict[mp_id],
+                mp_id,
+                ref_benchmarks_dict,
+                pred_benchmarks_dict,
+                model_benchmarks_dict,
+                plot_stats_dict,
+                scatter_to_dispersion_map,
+                phonon_plot_paths,
+                point_index_to_id,
+                benchmarks
+            )
 
-
-
-
-
-
+            return {
+                "ref_band_data_dict": ref_band_data_dict,
+                "ref_benchmarks_dict": ref_benchmarks_dict,
+                "pred_benchmarks_dict": pred_benchmarks_dict,
+                "model_benchmarks_dict": model_benchmarks_dict,
+                "plot_stats_dict": plot_stats_dict,
+                "scatter_to_dispersion_map": scatter_to_dispersion_map,
+                "phonon_plot_paths": phonon_plot_paths,
+                "point_index_to_id": point_index_to_id
+            }
+        except Exception as e:
+            import traceback
+            print(f"\n Exception for mp_id={mp_id}:\n{traceback.format_exc()}")
+            return None
 
 
 
@@ -542,29 +598,84 @@ class PhononDispersion(zntrack.Node):
         
         
         #-------------
+        
             
+        # for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
+        #     if not PhononDispersion.process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, 
+        #                                 ref_benchmarks_dict, pred_benchmarks_dict):
+        #         continue
             
-        for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
-            if not PhononDispersion.process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, 
-                                        ref_benchmarks_dict, pred_benchmarks_dict):
-                continue
+        #     phonon_plot_paths[mp_id] = {}
             
-            phonon_plot_paths[mp_id] = {}
-            
-            # process
-            PhononDispersion.process_prediction_data(
-                pred_node_dict[mp_id], 
-                ref_node_dict[mp_id], 
-                mp_id,
-                ref_benchmarks_dict,
-                pred_benchmarks_dict,
-                model_benchmarks_dict,
-                plot_stats_dict,
-                scatter_to_dispersion_map,
-                phonon_plot_paths,
-                point_index_to_id,
-                benchmarks
+        #     # process
+        #     PhononDispersion.process_prediction_data(
+        #         pred_node_dict[mp_id], 
+        #         ref_node_dict[mp_id], 
+        #         mp_id,
+        #         ref_benchmarks_dict,
+        #         pred_benchmarks_dict,
+        #         model_benchmarks_dict,
+        #         plot_stats_dict,
+        #         scatter_to_dispersion_map,
+        #         phonon_plot_paths,
+        #         point_index_to_id,
+        #         benchmarks
+        #     )
+        
+        # 
+        
+        from joblib import Parallel, delayed, parallel_backend
+
+        with parallel_backend('threading'):
+            results = Parallel(n_jobs=-1)(
+                delayed(PhononDispersion.process_mpid)(
+                    mp_id,
+                    pred_node_dict,
+                    ref_node_dict,
+                    benchmarks
+                ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures")
             )
+            
+        # results = Parallel(n_jobs=-1)(
+        #     delayed(PhononDispersion.process_mpid)(
+        #         mp_id,
+        #         pred_node_dict,
+        #         ref_node_dict,
+        #         benchmarks
+        #     ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures")
+        # )
+
+        for result in results:
+            if result is None:
+                continue
+            ref_band_data_dict.update(result["ref_band_data_dict"])
+            ref_benchmarks_dict.update(result["ref_benchmarks_dict"])
+            pred_benchmarks_dict.update(result["pred_benchmarks_dict"])
+            point_index_to_id.extend(result["point_index_to_id"])
+            for model_name in result["model_benchmarks_dict"]:
+                if model_name not in model_benchmarks_dict:
+                    model_benchmarks_dict[model_name] = {b: {'ref': [], 'pred': []} for b in benchmarks}
+                for b in benchmarks:
+                    model_benchmarks_dict[model_name][b]['ref'].extend(result["model_benchmarks_dict"][model_name][b]['ref'])
+                    model_benchmarks_dict[model_name][b]['pred'].extend(result["model_benchmarks_dict"][model_name][b]['pred'])
+            for model_name in result["plot_stats_dict"]:
+                if model_name not in plot_stats_dict:
+                    plot_stats_dict[model_name] = {b: {'RMSE': [], 'MAE': []} for b in benchmarks}
+                for b in benchmarks:
+                    plot_stats_dict[model_name][b]['RMSE'].extend(result["plot_stats_dict"][model_name][b]['RMSE'])
+                    plot_stats_dict[model_name][b]['MAE'].extend(result["plot_stats_dict"][model_name][b]['MAE'])
+            for model_name in result["scatter_to_dispersion_map"]:
+                if model_name not in scatter_to_dispersion_map:
+                    scatter_to_dispersion_map[model_name] = {'hover': [], 'point_map': [], 'img_paths': {}, 'band_errors': {}}
+                scatter_to_dispersion_map[model_name]['hover'].extend(result["scatter_to_dispersion_map"][model_name]['hover'])
+                scatter_to_dispersion_map[model_name]['point_map'].extend(result["scatter_to_dispersion_map"][model_name]['point_map'])
+                scatter_to_dispersion_map[model_name]['img_paths'].update(result["scatter_to_dispersion_map"][model_name]['img_paths'])
+                scatter_to_dispersion_map[model_name]['band_errors'].update(result["scatter_to_dispersion_map"][model_name].get('band_errors', {}))
+            for mp_id in result["phonon_plot_paths"]:
+                if mp_id not in phonon_plot_paths:
+                    phonon_plot_paths[mp_id] = {}
+                phonon_plot_paths[mp_id].update(result["phonon_plot_paths"][mp_id])
+
         
         # summary statistics and generate plots
         mae_summary_df = PhononDispersion.calculate_summary_statistics(
@@ -1044,10 +1155,13 @@ class PhononDispersion(zntrack.Node):
         
         ref_band_data_dict[mp_id] = band_structure_ref
         
+        ref_freqs = band_structure_ref["frequencies"]
+        
         dos_freqs_ref_calc, dos_values_ref_calc = dos_freqs_ref[dos_values_ref > 0], dos_values_ref[dos_values_ref > 0]
+        
         T_300K_index = node_ref.get_thermal_properties['temperatures'].index(300)
-        ref_benchmarks_dict[mp_id]['max_freq'] = np.max(dos_freqs_ref_calc)
-        ref_benchmarks_dict[mp_id]['min_freq'] = np.min(dos_freqs_ref_calc)
+        ref_benchmarks_dict[mp_id]['max_freq'] = np.max(np.concatenate(ref_freqs))
+        ref_benchmarks_dict[mp_id]['min_freq'] = np.min(np.concatenate(ref_freqs))
         ref_benchmarks_dict[mp_id]['S'] = node_ref.get_thermal_properties['entropy'][T_300K_index]
         ref_benchmarks_dict[mp_id]['F'] = node_ref.get_thermal_properties['free_energy'][T_300K_index]
         ref_benchmarks_dict[mp_id]['C_V'] = node_ref.get_thermal_properties['heat_capacity'][T_300K_index]
@@ -1076,14 +1190,17 @@ class PhononDispersion(zntrack.Node):
             
             dos_freqs_pred_calc, dos_values_pred_calc = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
             
-            pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(dos_freqs_pred_calc)
-            pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(dos_freqs_pred_calc)
+            
+            ref_freqs = node_ref.band_structure["frequencies"]
+            pred_freqs = pred_nodes[model_name].band_structure["frequencies"]
+            
+            pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(np.concatenate(pred_freqs))
+            pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(np.concatenate(pred_freqs))
             pred_benchmarks_dict[mp_id][model_name]['S'] = pred_nodes[model_name].get_thermal_properties['entropy'][T_300K_index]
             pred_benchmarks_dict[mp_id][model_name]['F'] = pred_nodes[model_name].get_thermal_properties['free_energy'][T_300K_index]
             pred_benchmarks_dict[mp_id][model_name]['C_V'] = pred_nodes[model_name].get_thermal_properties['heat_capacity'][T_300K_index]
             
-            ref_freqs = node_ref.band_structure["frequencies"]
-            pred_freqs = pred_nodes[model_name].band_structure["frequencies"]
+
 
             
             # phonon dispersion plot
@@ -1512,7 +1629,7 @@ class PhononDispersion(zntrack.Node):
             #all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
             non_empty_errors = [e for e in band_error_dict.values() if e.size > 0]
             all_errors = np.concatenate(non_empty_errors) if non_empty_errors else np.array([])
-            avg_band_mae = np.mean(np.abs(all_errors)) if all_errors.size > 0 else np.nan
+            avg_band_mae = np.nanmean(np.abs(all_errors)) if all_errors.size > 0 else np.nan
             band_maes.append(round(avg_band_mae, 3))
             
         # Insert the new column after "C_V"
@@ -1539,7 +1656,7 @@ class PhononDispersion(zntrack.Node):
         data_dir.mkdir(parents=True, exist_ok=True)
         
         #per_mp_mae = [(mp_id, np.mean(np.abs(errors))) for mp_id, errors in band_error_dict.items()]
-        per_mp_rmse = [(mp_id, np.sqrt(np.mean(np.square(errors)))) for mp_id, errors in band_error_dict.items()]
+        per_mp_rmse = [(mp_id, np.sqrt(np.nanmean(np.square(errors)))) for mp_id, errors in band_error_dict.items()]
         per_mp_df = pd.DataFrame(per_mp_rmse, columns=["mp_id", "BZ_RMSE [THz]"])
         per_mp_df.to_csv(data_dir / "bz_rmse_distribution.csv", index=False)
 

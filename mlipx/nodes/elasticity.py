@@ -166,10 +166,29 @@ class Elasticity(zntrack.Node):
 
         for model in node_dict.keys():
             results_df = node_dict[model].results
+
+            full_count = len(results_df)
+            
+            mask_K = (results_df[f'K_vrh_{model}'] > -50) & (results_df[f'K_vrh_{model}'] < 600)
+            mask_G = (results_df[f'G_vrh_{model}'] > -50) & (results_df[f'G_vrh_{model}'] < 600)
+
+            valid_mask = mask_K & mask_G
+            
+            results_df = results_df[valid_mask].copy()
+            print(f"Model: {model}, Valid entries: {len(results_df)}")
+                        
+            
+            # results_df[f'K_vrh_{model}'] = results_df[mask_K][f'K_vrh_{model}']
+            # results_df['K_vrh_DFT'] = results_df[mask_K]['K_vrh_DFT']
+            # results_df[f'G_vrh_{model}'] = results_df[mask_G][f'G_vrh_{model}']
+            # results_df['G_vrh_DFT'] = results_df[mask_G]['G_vrh_DFT']
+            
+
             mae_K = np.abs(results_df[f'K_vrh_{model}'].values - results_df['K_vrh_DFT'].values).mean()
             mae_G = np.abs(results_df[f'G_vrh_{model}'].values - results_df['G_vrh_DFT'].values).mean()
             mae_df.loc[model, 'K_bulk [GPa]'] = mae_K
             mae_df.loc[model, 'K_shear [GPa]'] = mae_G
+            mae_df.loc[model, "excluded count"] = full_count - len(results_df) 
 
         mae_df = mae_df.reset_index().rename(columns={'index': 'Model'})
         mae_df = mae_df.round(3)
@@ -180,7 +199,10 @@ class Elasticity(zntrack.Node):
             for model in node_dict.keys():
                 score = 0
                 for col in mae_cols:
-                    score += mae_df.loc[mae_df['Model'] == model, col].values[0] / mae_df.loc[mae_df['Model'] == normalise_to_model, col].values[0]
+                    if col == 'excluded count':
+                        continue
+                    else:
+                        score += mae_df.loc[mae_df['Model'] == model, col].values[0] / mae_df.loc[mae_df['Model'] == normalise_to_model, col].values[0]
                 mae_df.loc[mae_df['Model'] == model, 'Elasticity Score \u2193'] = score / len(mae_cols)
         else:
             mae_df['Elasticity Score \u2193'] = mae_df[mae_cols].mean(axis=1).round(3)
@@ -481,6 +503,13 @@ class Elasticity(zntrack.Node):
                 return None, None, None, active_cell, None, None
 
             df = node_dict[model].results
+            
+            # rm outliers
+            mask_K = (df[f'K_vrh_{model}'] > -50) & (df[f'K_vrh_{model}'] < 600)
+            mask_G = (df[f'G_vrh_{model}'] > -50) & (df[f'G_vrh_{model}'] < 600)
+            valid_mask = mask_K & mask_G
+            df = df[valid_mask].copy()
+            
             x = df[f'{prop}_DFT']
             y = df[f'{prop}_{model}']
             mae = mae_df.loc[row, col]
