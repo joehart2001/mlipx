@@ -546,7 +546,7 @@ class PhononDispersion(zntrack.Node):
         ref_node_dict: t.Dict[str, zntrack.Node],
         ui = None, 
         run_interactive = True,
-        report = True,
+        report = False,
         normalise_to_model: t.Optional[str] = None,
     ):
         """

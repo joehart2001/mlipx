@@ -38,6 +38,20 @@ print(f"Using {len(mp_ids)} mp-ids")
 
 
 
+{% if n_jobs %}
+n_jobs = {{ n_jobs }}
+if n_jobs == 1:
+    print("No parallelisation, running in serial")
+else:
+    print(f"Parallelisation over {n_jobs} jobs")
+
+{% else %}
+n_jobs = -1
+print(f"Parallelisation over {n_jobs} jobs")
+{% endif %}
+
+
+
 # with project.group("phonons-dispersion-ref"):
 #     phonon_ref_node = mlipx.PhononAllRef(
 #             mp_ids=mp_ids,
@@ -53,6 +67,7 @@ for model_name, model in MODELS.items():
                 mp_ids=mp_ids,
                 model=model,
                 phonopy_yaml_dir=str(local_path),
+                n_jobs=n_jobs,
         )
         phonon_dict[model_name] = phonon
         phonon_list.append(phonon)

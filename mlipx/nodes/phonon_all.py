@@ -62,7 +62,7 @@ class PhononAllBatch(zntrack.Node):
     mp_ids: list[str] = zntrack.params()
     model: NodeWithCalculator = zntrack.deps()
     phonopy_yaml_dir: str = zntrack.params()
-    #n_jobs: int = zntrack.params(-1)
+    n_jobs: int = zntrack.params(-1)
 
     N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
@@ -203,7 +203,7 @@ class PhononAllBatch(zntrack.Node):
             #     delayed(lambda mid: (mid, process_mp_id(mid, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)))(mp_id)
             #     for mp_id in self.mp_ids
             # )
-            raw_results = Parallel(n_jobs=-1)(
+            raw_results = Parallel(n_jobs=self.n_jobs)(
                 delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
                 for mp_id in self.mp_ids
             )
