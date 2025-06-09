@@ -302,7 +302,7 @@ def load_nodes_phonon_batch(node_objects, models, split_str):
     ref_phonon_node = None
     
     for name, node in node_objects.items():
-        if "reference" in name or "ref" in name:
+        if "reference" in name or "ref" in name or "Ref" in name:
             ref_phonon_node = node
             continue
         
