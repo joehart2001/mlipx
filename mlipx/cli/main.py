@@ -299,6 +299,7 @@ def load_node_objects(
 def load_nodes_phonon_batch(node_objects, models, split_str):
     
     pred_node_dict = {}
+    ref_phonon_node = None
     
     for name, node in node_objects.items():
         if "reference" in name or "ref" in name:
