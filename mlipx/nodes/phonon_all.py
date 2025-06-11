@@ -98,6 +98,15 @@ class PhononAllBatch(zntrack.Node):
             try:
                 print(f"\nProcessing {mp_id}...")
                 
+                #calc = model.get_calculator()
+                yaml_path = yaml_dir/ f"{mp_id}.yaml"
+                
+                calc = self.model.get_calculator()
+                      
+                phonons_pred = load_phonopy(str(yaml_path))
+                chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
+                
+                
                 # save paths for later
                 phonon_pred_path = nwd / f"phonon_pred_data/"
                 phonon_pred_path.mkdir(parents=True, exist_ok=True)
@@ -108,15 +117,15 @@ class PhononAllBatch(zntrack.Node):
                 
                 if self.check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
                     print(f"Skipping {mp_id} as results already exist.")
-                    pass
+                    return {
+                        "mp_id": mp_id,
+                        "phonon_band_path_dict": str(phonon_pred_band_structure_path),
+                        "phonon_dos_dict": str(phonon_pred_dos_path),
+                        "thermal_properties_dict": str(thermal_path),
+                        "formula": chemical_formula,
+                    }
                 
-                #calc = model.get_calculator()
-                yaml_path = yaml_dir/ f"{mp_id}.yaml"
-                
-                calc = self.model.get_calculator()
-                      
-                phonons_pred = load_phonopy(str(yaml_path))
-                
+
                 displacement_dataset = phonons_pred.dataset
                 atoms = phonopy2aseatoms(phonons_pred)
                 
@@ -165,7 +174,7 @@ class PhononAllBatch(zntrack.Node):
                     pickle.dump(dos_pred, f)
 
                 
-                chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
+                
 
                     
                 # with open(phonon_pred_path / f"{mp_id}_qpoints.npz", "wb") as f:
@@ -209,10 +218,6 @@ class PhononAllBatch(zntrack.Node):
 
         try:
             # Wrap result with (mp_id, result) so we know which ones succeeded
-            # raw_results = Parallel(n_jobs=-1)(
-            #     delayed(lambda mid: (mid, process_mp_id(mid, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)))(mp_id)
-            #     for mp_id in self.mp_ids
-            # )
             raw_results = Parallel(n_jobs=self.n_jobs)(
                 delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
                 for mp_id in self.mp_ids
