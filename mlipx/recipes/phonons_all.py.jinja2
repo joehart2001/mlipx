@@ -51,6 +51,11 @@ print(f"Parallelisation over {n_jobs} jobs")
 {% endif %}
 
 
+{% if check_completed %}
+check_completed = {{ check_completed }}
+{% else %}
+check_completed = False
+{% endif %}
 
 # with project.group("phonons-dispersion-ref"):
 #     phonon_ref_node = mlipx.PhononAllRef(
@@ -68,6 +73,7 @@ for model_name, model in MODELS.items():
                 model=model,
                 phonopy_yaml_dir=str(local_path),
                 n_jobs=n_jobs,
+                check_completed=check_completed,
         )
         phonon_dict[model_name] = phonon
         phonon_list.append(phonon)

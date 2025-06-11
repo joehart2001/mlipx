@@ -411,6 +411,7 @@ def phonons_all(
     datapath: str | None = None,
     n_materials: int | None = None,
     n_materials_start: int | None = None,
+    check_completed: bool = False,
     material_ids: str | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
@@ -427,6 +428,7 @@ def phonons_all(
         smiles=smiles,
         n_materials=n_materials,
         n_materials_start=n_materials_start,
+        check_completed=check_completed,
     )
     
     

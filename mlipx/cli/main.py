@@ -201,6 +201,7 @@ def phonon_compare(
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
     batched: Annotated[bool, Option("--batched", help="does one node contain many materials")]=True,
+    no_plots: Annotated[bool, Option("--no_plots", help="Disable plots")] = False,
 
     ):
     """Launch interactive benchmark for phonon dispersion."""
@@ -236,6 +237,7 @@ def phonon_compare(
             pred_node_dict=pred_node_dict,
             ref_phonon_node=ref_node,
             ui=ui,
+            no_plots=no_plots,
         )
             
     else:
@@ -245,6 +247,7 @@ def phonon_compare(
             ref_node_dict=ref_node_dict,
             ui = ui,
             normalise_to_model=normalise_to_model,
+            no_plots=no_plots,
         )
     
 # ------ helper funcitons -------

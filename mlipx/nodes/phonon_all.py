@@ -63,6 +63,7 @@ class PhononAllBatch(zntrack.Node):
     model: NodeWithCalculator = zntrack.deps()
     phonopy_yaml_dir: str = zntrack.params()
     n_jobs: int = zntrack.params(-1)
+    check_completed: bool = zntrack.params(False)
 
     N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
@@ -70,6 +71,7 @@ class PhononAllBatch(zntrack.Node):
     thermal_properties_temperatures: list[float] = zntrack.params(
         default_factory=lambda: [0, 75, 150, 300, 600]
     )
+    
 
     phonon_band_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_band_paths.json")
     phonon_dos_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_dos_paths.json")
@@ -95,6 +97,26 @@ class PhononAllBatch(zntrack.Node):
         def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
             try:
                 print(f"\nProcessing {mp_id}...")
+                
+                # save paths for later
+                phonon_pred_path = nwd / f"phonon_pred_data/"
+                phonon_pred_path.mkdir(parents=True, exist_ok=True)
+                
+                phonon_pred_band_structure_path = phonon_pred_path / f"{mp_id}_band_structure.npz"
+                phonon_pred_dos_path = phonon_pred_path / f"{mp_id}_dos.npz"
+                thermal_path = phonon_pred_path / f"{mp_id}_thermal_properties.json"
+                
+                if self.check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
+                    print(f"Skipping {mp_id} as results already exist.")
+                    return {
+                        "mp_id": mp_id,
+                        "phonon_band_path_dict": str(phonon_pred_band_structure_path),
+                        "phonon_dos_dict": str(phonon_pred_dos_path),
+                        "thermal_properties_dict": str(thermal_path),
+                        "formula": get_chemical_formula(model.get_calculator(), empirical=True),
+                    }
+                
+                
                 #calc = model.get_calculator()
                 yaml_path = yaml_dir/ f"{mp_id}.yaml"
                 
@@ -142,12 +164,7 @@ class PhononAllBatch(zntrack.Node):
                 phonons_pred.auto_total_dos()
                 dos_pred = phonons_pred.get_total_dos_dict()
                 
-                phonon_pred_path = nwd / f"phonon_pred_data/"
-                phonon_pred_path.mkdir(parents=True, exist_ok=True)
-                
-                phonon_pred_band_structure_path = phonon_pred_path / f"{mp_id}_band_structure.npz"
-                phonon_pred_dos_path = phonon_pred_path / f"{mp_id}_dos.npz"
-                thermal_path = phonon_pred_path / f"{mp_id}_thermal_properties.json"
+
                 
                 with open(phonon_pred_band_structure_path, "wb") as f:
                     pickle.dump(band_structure_pred, f)
@@ -168,7 +185,7 @@ class PhononAllBatch(zntrack.Node):
                 phonons_pred.run_mesh([q_mesh_thermal] * 3)
                 phonons_pred.run_thermal_properties(
                     temperatures=temperatures,
-                    cutoff_frequency=0.05
+                    #cutoff_frequency=0.05
                 )
 
                 thermal_dict = phonons_pred.get_thermal_properties_dict()
@@ -355,85 +372,6 @@ class PhononAllBatch(zntrack.Node):
         
 
 
-
-
-    @staticmethod
-    def compare_reference(node_pred, node_ref, correlation_plot_mode=False, model_name=None):
-        import matplotlib.pyplot as plt
-        from matplotlib import gridspec
-
-        band_structure_pred = node_pred.band_structure
-        distances_pred = band_structure_pred["distances"]
-        frequencies_pred = band_structure_pred["frequencies"]
-        dos_freqs_pred, dos_values_pred = node_pred.dos
-        dos_freqs_pred, dos_values_pred = dos_freqs_pred[dos_values_pred > 0], dos_values_pred[dos_values_pred > 0]
-
-        band_structure_ref = node_ref.band_structure
-        distances_ref = band_structure_ref["distances"]
-        frequencies_ref = band_structure_ref["frequencies"]
-        dos_freqs_ref, dos_values_ref = node_ref.dos
-        dos_freqs_ref, dos_values_ref = dos_freqs_ref[dos_values_ref > 0], dos_values_ref[dos_values_ref > 0]
-
-        labels = node_ref.labels
-        connections = node_ref.connections
-        connections = [True] + connections
-
-        # Start plotting
-        fig = plt.figure(figsize=(9, 5))
-        gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1], wspace=0.05)
-        ax1 = fig.add_axes([0.12, 0.07, 0.67, 0.85])
-        ax2 = fig.add_axes([0.82, 0.07, 0.17, 0.85])
-
-        for dist_segment, freq_segment in zip(distances_pred, frequencies_pred):
-            for band in freq_segment.T:
-                ax1.plot(dist_segment, band, lw=1, linestyle='--', label=model_name, color='red')
-
-        for dist_segment, freq_segment in zip(distances_ref, frequencies_ref):
-            for band in freq_segment.T:
-                ax1.plot(dist_segment, band, lw=1, linestyle='-', label="Reference", color='blue')
-
-        ax2.plot(dos_values_pred, dos_freqs_pred, lw=1.2, color="red", linestyle='--')
-        ax2.plot(dos_values_ref, dos_freqs_ref, lw=1.2, color="blue")
-
-        # Ticks
-        xticks, xticklabels = PhononDispersion._build_xticks(distances_ref, labels, connections)
-        for x in xticks:
-            ax1.axvline(x=x, color='k', linewidth=1)
-        ax1.axhline(0, color='k', linewidth=1)
-        ax2.axhline(0, color='k', linewidth=1)
-        ax1.set_xticks(xticks, xticklabels)
-
-        # Axis settings
-        ax1.set_xlim(xticks[0], xticks[-1])
-        ax1.set_ylabel("Frequency (THz)")
-        ax1.set_xlabel("Wave Vector")
-
-        freqs_all = np.concatenate(frequencies_pred + frequencies_ref)
-        ax1.set_ylim(freqs_all.min() - 0.4, freqs_all.max() + 0.4)
-        ax2.set_ylim(ax1.get_ylim())
-        ax2.set_xlabel("DOS")
-        plt.setp(ax2.get_yticklabels(), visible=False)
-
-        # Legend
-        handles, labels = ax1.get_legend_handles_labels()
-        fig.legend(handles, labels, loc='upper center', bbox_to_anchor=(0.8, 1.02), frameon=False, ncol=2)
-
-        ax1.grid(True, linestyle=':', linewidth=0.5)
-        ax2.grid(True, linestyle=':', linewidth=0.5)
-
-        # Save or show
-        mp_id = node_ref.name.split("_")[-1]
-        plt.suptitle(f"{mp_id} — {model_name}", x=0.4)
-
-        if correlation_plot_mode:
-            out_dir = f"benchmark_stats/bulk_crystal_benchmark/phonons/{model_name}/phonon_plots"
-            os.makedirs(out_dir, exist_ok=True)
-            plot_path = f"{out_dir}/dispersion_{model_name}_{mp_id}.png"
-            plt.savefig(plot_path, bbox_inches='tight')
-            plt.close(fig)
-            return plot_path
-        else:
-            plt.show()
             
             
             
@@ -448,8 +386,10 @@ class PhononAllBatch(zntrack.Node):
         ref_phonon_node,
         ui=None,
         run_interactive=True,
-        report=True,
+        report=False,
         normalise_to_model: t.Optional[str] = None,
+        no_plots: bool = False,
+
     ):
         """
         Benchmarking with multiple models (each one is a PhononAllBatch node).
@@ -514,6 +454,7 @@ class PhononAllBatch(zntrack.Node):
             run_interactive=run_interactive,
             report=report,
             normalise_to_model=normalise_to_model,
+            no_plots=no_plots,
         )
         
         
