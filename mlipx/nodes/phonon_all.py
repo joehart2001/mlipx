@@ -96,7 +96,7 @@ class PhononAllBatch(zntrack.Node):
         
         def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
             try:
-                print(f"\nProcessing {mp_id}...")
+                
                 
                 #calc = model.get_calculator()
                 yaml_path = yaml_dir/ f"{mp_id}.yaml"
@@ -125,6 +125,7 @@ class PhononAllBatch(zntrack.Node):
                         "formula": chemical_formula,
                     }
                 
+                print(f"\nProcessing {mp_id}...")
 
                 displacement_dataset = phonons_pred.dataset
                 atoms = phonopy2aseatoms(phonons_pred)
