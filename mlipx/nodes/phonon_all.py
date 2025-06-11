@@ -129,7 +129,7 @@ class PhononAllBatch(zntrack.Node):
 
                 displacement_dataset = phonons_pred.dataset
                 atoms = phonopy2aseatoms(phonons_pred)
-                
+            
                 atoms_sym = atoms.copy()
                 atoms_sym.calc = calc
                 atoms_sym.set_constraint(FixSymmetry(atoms_sym))
