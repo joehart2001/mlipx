@@ -108,14 +108,7 @@ class PhononAllBatch(zntrack.Node):
                 
                 if self.check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
                     print(f"Skipping {mp_id} as results already exist.")
-                    return {
-                        "mp_id": mp_id,
-                        "phonon_band_path_dict": str(phonon_pred_band_structure_path),
-                        "phonon_dos_dict": str(phonon_pred_dos_path),
-                        "thermal_properties_dict": str(thermal_path),
-                        "formula": get_chemical_formula(model.get_calculator(), empirical=True),
-                    }
-                
+                    pass
                 
                 #calc = model.get_calculator()
                 yaml_path = yaml_dir/ f"{mp_id}.yaml"
