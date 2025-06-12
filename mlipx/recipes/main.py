@@ -411,6 +411,7 @@ def phonons_all(
     datapath: str | None = None,
     n_materials: int | None = None,
     n_materials_start: int | None = None,
+    n_jobs: int | None = -1,
     check_completed: bool | None = None,
     material_ids: str | None = None,
     smiles: str | None = None,
