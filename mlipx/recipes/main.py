@@ -430,6 +430,7 @@ def phonons_all(
         n_materials=n_materials,
         n_materials_start=n_materials_start,
         check_completed=check_completed,
+        n_jobs=n_jobs,
     )
     
     
