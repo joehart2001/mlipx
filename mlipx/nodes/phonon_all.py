@@ -222,7 +222,7 @@ class PhononAllBatch(zntrack.Node):
         try:
             with parallel_backend("threading"):
                 raw_results = Parallel(n_jobs=self.n_jobs)(
-                    delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, ...)
+                    delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
                     for mp_id in self.mp_ids
                 )
     
