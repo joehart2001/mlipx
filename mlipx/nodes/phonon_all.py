@@ -69,7 +69,7 @@ class PhononAllBatch(zntrack.Node):
     N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
     #fmax: float = zntrack.params(0.0001)
-    fmax: float = zntrack.params(0.001)
+    fmax: float = zntrack.params(0.005)
     thermal_properties_temperatures: list[float] = zntrack.params(
         default_factory=lambda: [0, 75, 150, 300, 600]
     )
