@@ -96,7 +96,7 @@ class PhononAllBatch(zntrack.Node):
         
         
         
-        def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
+        def process_mp_id(mp_id: str, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
             try:
                 
                 
@@ -222,7 +222,7 @@ class PhononAllBatch(zntrack.Node):
         try:
             # Wrap result with (mp_id, result) so we know which ones succeeded
             raw_results = Parallel(n_jobs=self.n_jobs)(
-                delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+                delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
                 for mp_id in self.mp_ids
             )
             # Filter out failed (None) results
