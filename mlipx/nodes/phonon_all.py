@@ -135,7 +135,7 @@ class PhononAllBatch(zntrack.Node):
                 atoms_sym = atoms.copy()
                 atoms_sym.calc = calc
                 atoms_sym.set_constraint(FixSymmetry(atoms_sym))
-                opt = LBFGS(atoms_sym)
+                opt = FIRE(atoms_sym)
                 opt.run(fmax=fmax, steps=1000)
 
                 # primitive matrix not always available in reference data e.g. mp-30056
