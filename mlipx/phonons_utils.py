@@ -103,6 +103,7 @@ def init_phonopy_from_ref(
     log: str | Path | bool = True,
     symprec: float = 1e-5,
     displacement_dataset: dict | None = None,
+    displacement_distance: float | None = 0.01,
     **kwargs: Any,
 ) -> tuple[Phonopy, list[Any]]:
     """Calculate fc2 and fc3 force lists from phonopy.
@@ -134,6 +135,13 @@ def init_phonopy_from_ref(
     
     if displacement_dataset is not None:
         phonons.dataset = displacement_dataset
+    elif displacement_distance is not None:
+        phonons.generate_displacements(distance=displacement_distance)
+    else:
+        raise ValueError(
+            f'{atoms.get_chemical_formula(mode="metal")=} "displacement_dataset" or "displacement_distance" was not provided when calculating force sets.'
+        )
+        
 
 
     return phonons
@@ -213,8 +221,12 @@ def aseatoms2phonopy(
         **kwargs,
     )
 
-def phonopy2aseatoms(phonons: Phonopy) -> Atoms:
-    phonopy_atoms = phonons.unitcell
+def phonopy2aseatoms(phonons: Phonopy, primitive: bool | None = None) -> Atoms:
+    if primitive:
+        phonopy_atoms = phonons.primitive
+    else:
+        phonopy_atoms = phonons.unitcell
+
     atoms = Atoms(
         phonopy_atoms.symbols,
         cell=phonopy_atoms.cell,

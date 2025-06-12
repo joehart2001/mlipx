@@ -25,11 +25,13 @@ from phonopy.api_phonopy import Phonopy
 import yaml
 from typing import Union
 from ase.filters import FrechetCellFilter
+from ase.build.supercells import make_supercell
 
 from scipy.stats import gaussian_kde
 
 from mlipx.abc import ComparisonResults, NodeWithCalculator
 from ase.constraints import FixSymmetry
+from phonopy.harmonic.dynmat_to_fc import get_commensurate_points
 
 
 from mlipx.phonons_utils import *
@@ -57,7 +59,7 @@ import torch
 torch._dynamo.config.suppress_errors = True
 
 
-class PhononAllBatch(zntrack.Node):
+class PhononAllBatchMeta(zntrack.Node):
     """Batch phonon calculations (FC2 + thermal props) for multiple mp-ids."""
 
     mp_ids: list[str] = zntrack.params()
@@ -128,14 +130,14 @@ class PhononAllBatch(zntrack.Node):
                     }
                 
                 print(f"\nProcessing {mp_id}...")
-
-                displacement_dataset = phonons_pred.dataset
-                atoms = phonopy2aseatoms(phonons_pred)
+                
+                
+                
+                atoms = phonopy2aseatoms(phonons_pred, primitive=True)
             
-                atoms_sym = atoms.copy()
-                atoms_sym.calc = calc
-                atoms_sym.set_constraint(FixSymmetry(atoms_sym))
-                opt = FIRE(atoms_sym)
+                atoms.calc = calc
+                atoms.set_constraint(FixSymmetry(atoms))
+                opt = FIRE(FrechetCellFilter(atoms))
                 opt.run(fmax=fmax, steps=1000)
 
                 # primitive matrix not always available in reference data e.g. mp-30056
@@ -144,12 +146,22 @@ class PhononAllBatch(zntrack.Node):
                 else:
                     primitive_matrix = "auto"
                     print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
-            
+
+
+                if phonons_pred.primitive_matrix is not None:
+                    P = np.asarray(np.linalg.inv(phonons_pred.primitive_matrix.T), dtype=np.intc)
+                    unitcell = make_supercell(atoms, P)
+                else:  # assume prim is the same as unit
+                    unitcell = atoms
+                    
+                    
+                
                 phonons_pred = init_phonopy_from_ref(
-                    atoms=atoms_sym,
+                    atoms=unitcell,
                     fc2_supercell=atoms.info["fc2_supercell"],
                     primitive_matrix=primitive_matrix,
-                    displacement_dataset=displacement_dataset,
+                    displacement_dataset=None,
+                    displacement_distance=0.01,
                     symprec=1e-5,
                 )
 
@@ -157,8 +169,11 @@ class PhononAllBatch(zntrack.Node):
                     phonons=phonons_pred,
                     calculator=calc,
                     q_mesh=np.array([q_mesh] * 3),
-                    symmetrize_fc2=True
+                    symmetrize_fc2=False
                 )
+                
+                # qpoints = get_commensurate_points(phonons_pred.supercell_matrix)
+                # frequencies = np.stack([phonons_pred.get_frequencies(q) for q in qpoints])
 
                 #phonon_obj_path = nwd / f"phonon_obj/{mp_id}_phonon_obj.yaml"
                 #Path(phonon_obj_path).parent.mkdir(parents=True, exist_ok=True)
@@ -216,7 +231,7 @@ class PhononAllBatch(zntrack.Node):
                 with open("error_log.txt", "a") as f:
                     f.write(f"\nError while processing {mp_id}:\n")
                     traceback.print_exc(file=f)
-                    
+
         # Run jobs in parallel
         successful_results = []
         failed_hard = []
@@ -285,6 +300,8 @@ class PhononAllBatch(zntrack.Node):
         #         for mp_id in mp_batch
         #     )
         #     all_results.extend(results)
+
+
 
 
 
@@ -375,9 +392,7 @@ class PhononAllBatch(zntrack.Node):
 
         return result
         
-        
-        
-        
+    
         
 
 

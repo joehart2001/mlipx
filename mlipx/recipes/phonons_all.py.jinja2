@@ -62,7 +62,24 @@ check_completed = False
 #             mp_ids=mp_ids,
 #             phonopy_yaml_dir=str(local_path),
 #     )
-    
+
+{% if generate_displacements == True %}
+
+phonon_dict = {}
+phonon_list = []
+for model_name, model in MODELS.items():
+    with project.group(model_name, "phonons-dispersion-pred"):
+        phonon = mlipx.PhononAllBatchMeta(
+                mp_ids=mp_ids,
+                model=model,
+                phonopy_yaml_dir=str(local_path),
+                n_jobs=n_jobs,
+                check_completed=check_completed,
+        )
+        phonon_dict[model_name] = phonon
+        phonon_list.append(phonon)
+
+{% else %}
 
 phonon_dict = {}
 phonon_list = []
@@ -77,7 +94,8 @@ for model_name, model in MODELS.items():
         )
         phonon_dict[model_name] = phonon
         phonon_list.append(phonon)
-
+        
+{% endif %}
 
 {% if standalone %}
 project.build()
