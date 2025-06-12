@@ -37,7 +37,7 @@ from phonopy import load as load_phonopy
 
 from joblib import Parallel, delayed
 import traceback
-
+from joblib import parallel_backend
 from mlipx import PhononDispersion
 
 from mlipx.phonons_utils import get_fc2_and_freqs, init_phonopy, load_phonopy, get_chemical_formula
@@ -220,11 +220,17 @@ class PhononAllBatch(zntrack.Node):
         failed_hard = []
 
         try:
+            with parallel_backend("threading"):
+                raw_results = Parallel(n_jobs=self.n_jobs)(
+                    delayed(process_mp_id)(mp_id, self.model, nwd, yaml_dir, ...)
+                    for mp_id in self.mp_ids
+                )
+    
             # Wrap result with (mp_id, result) so we know which ones succeeded
-            raw_results = Parallel(n_jobs=self.n_jobs)(
-                delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-                for mp_id in self.mp_ids
-            )
+            # raw_results = Parallel(n_jobs=self.n_jobs)(
+            #     delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+            #     for mp_id in self.mp_ids
+            # )
             # Filter out failed (None) results
             successful_results = [(res["mp_id"], res) for res in raw_results if res is not None]
 
