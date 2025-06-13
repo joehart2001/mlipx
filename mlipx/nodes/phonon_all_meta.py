@@ -59,7 +59,8 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 import torch
 torch._dynamo.config.suppress_errors = True
-import warnings
+torch.fx._symbolic_trace.TRACED_MODULES.clear()  # optional
+torch.fx.wrap('atomic_energies_fn')
 
 
 class PhononAllBatchMeta(zntrack.Node):
