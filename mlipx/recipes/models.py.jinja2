@@ -42,6 +42,10 @@ class OrbCalc:
         from orb_models.forcefield import pretrained
         from orb_models.forcefield.calculator import ORBCalculator
 
+        import torch._dynamo
+        torch._dynamo.config.suppress_errors = True
+        torch._dynamo.disable()
+
         method = getattr(pretrained, self.name)
         if self.device is None:
             orbff = method(**self.kwargs)
