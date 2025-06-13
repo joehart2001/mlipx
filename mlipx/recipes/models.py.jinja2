@@ -45,6 +45,8 @@ class OrbCalc:
         import torch._dynamo
         torch._dynamo.config.suppress_errors = True
         torch._dynamo.disable()
+        import os
+        os.environ["TORCH_DISABLE_MODULE_HIERARCHY_TRACKING"] = "1"
 
         method = getattr(pretrained, self.name)
         if self.device is None:
