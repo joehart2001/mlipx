@@ -24,6 +24,8 @@ from mlipx import benchmark, recipes
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
 
+
+
 app = typer.Typer()
 app.add_typer(recipes.app, name="recipes")
 app.add_typer(benchmark.app, name="benchmark")
@@ -208,6 +210,10 @@ def phonon_compare(
     import fnmatch
     import dvc.api
     import json
+    # import torch
+
+    # if hasattr(torch.fx._symbolic_trace, "TRACED_MODULES"):
+    #     torch.fx._symbolic_trace.TRACED_MODULES.clear()
 
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()

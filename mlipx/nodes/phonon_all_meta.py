@@ -59,7 +59,7 @@ warnings.filterwarnings("ignore", category=FutureWarning)
 
 import torch
 torch._dynamo.config.suppress_errors = True
-torch.fx._symbolic_trace.TRACED_MODULES.clear()  # optional
+#torch.fx._symbolic_trace.TRACED_MODULES.clear()  # optional
 torch.fx.wrap('atomic_energies_fn')
 
 
@@ -140,7 +140,7 @@ class PhononAllBatchMeta(zntrack.Node):
                 atoms = phonopy2aseatoms(phonons_pred, primitive=True)
             
                 atoms.calc = calc
-                atoms.set_constraint(FixSymmetry(atoms))
+                #atoms.set_constraint(FixSymmetry(atoms))
                 opt = FIRE(FrechetCellFilter(atoms))
                 opt.run(fmax=fmax, steps=1000)
 
