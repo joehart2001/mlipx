@@ -55,8 +55,11 @@ from dash import dcc, html, Input, Output, State, MATCH
 import base64
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="spglib")
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import torch
 torch._dynamo.config.suppress_errors = True
+import warnings
 
 
 class PhononAllBatchMeta(zntrack.Node):
