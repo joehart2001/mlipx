@@ -57,9 +57,10 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning, module="spglib")
 warnings.filterwarnings("ignore", category=FutureWarning)
 
-import torch
-torch._dynamo.config.suppress_errors = True
-
+# import torch
+# torch._dynamo.config.suppress_errors = True
+import warnings
+warnings.filterwarnings("ignore", module="torch.fx.experimental.symbolic_shapes")
 #torch.fx._symbolic_trace.TRACED_MODULES.clear()  # optional
 #from mace.calculators import atomic_energies_fn
 #torch.fx.wrap('atomic_energies_fn')
