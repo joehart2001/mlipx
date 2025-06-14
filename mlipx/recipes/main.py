@@ -414,6 +414,7 @@ def phonons_all(
     n_jobs: int | None = -1,
     check_completed: bool | None = None,
     generate_displacements: bool = False,
+    parallel_backend_mode: str | None = None,
     material_ids: str | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
