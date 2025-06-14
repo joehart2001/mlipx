@@ -414,7 +414,7 @@ def phonons_all(
     n_jobs: int | None = -1,
     check_completed: bool | None = None,
     generate_displacements: bool = False,
-    parallel_backend_mode: str | None = None,
+    multiprocessing: bool = False,
     material_ids: str | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
@@ -433,7 +433,7 @@ def phonons_all(
         n_materials_start=n_materials_start,
         check_completed=check_completed,
         generate_displacements=generate_displacements,
-        parallel_backend_mode=parallel_backend_mode,
+        multiprocessing=multiprocessing,
         n_jobs=n_jobs,
     )
     

@@ -82,7 +82,7 @@ class PhononAllBatchMeta(zntrack.Node):
     thermal_properties_temperatures: list[float] = zntrack.params(
         default_factory=lambda: [0, 75, 150, 300, 600]
     )
-    parallel_backend_mode: str = zntrack.params("threading")
+    multiprocessing: bool = zntrack.params(False)
 
     phonon_band_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_band_paths.json")
     phonon_dos_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_dos_paths.json")
@@ -244,10 +244,12 @@ class PhononAllBatchMeta(zntrack.Node):
         failed_hard = []
 
         try:
-            if self.parallel_backend_mode not in {"threading", "multiprocessing"}:
-                raise ValueError(f"Invalid parallel_backend_mode: {self.parallel_backend_mode}")
+            if self.multiprocessing:
+                parallel_backend_mode = "multiprocessing"
+            else:
+                parallel_backend_mode = "threading"
 
-            with parallel_backend(self.parallel_backend_mode):
+            with parallel_backend(parallel_backend_mode):
                 raw_results = Parallel(n_jobs=self.n_jobs)(
                     delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
                     for mp_id in self.mp_ids

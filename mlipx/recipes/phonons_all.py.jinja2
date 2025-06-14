@@ -65,10 +65,10 @@ check_completed = False
 
 {% if generate_displacements == True %}
 
-{% if parallel_backend_mode %}
-parallel_backend_mode = "{{ parallel_backend_mode }}"
+{% if multiprocessing %}
+multiprocessing = True
 {% else %}
-parallel_backend_mode = "threading"
+multiprocessing = False
 {% endif %}
 
 phonon_dict = {}
@@ -81,7 +81,7 @@ for model_name, model in MODELS.items():
                 phonopy_yaml_dir=str(local_path),
                 n_jobs=n_jobs,
                 check_completed=check_completed,
-                parallel_backend_mode = parallel_backend_mode
+                multiprocessing = multiprocessing
         )
         phonon_dict[model_name] = phonon
         phonon_list.append(phonon)
