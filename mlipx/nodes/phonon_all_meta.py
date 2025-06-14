@@ -82,7 +82,7 @@ class PhononAllBatchMeta(zntrack.Node):
     thermal_properties_temperatures: list[float] = zntrack.params(
         default_factory=lambda: [0, 75, 150, 300, 600]
     )
-    
+    parallel_backend_mode: str = zntrack.params("threading")
 
     phonon_band_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_band_paths.json")
     phonon_dos_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_dos_paths.json")
@@ -91,7 +91,7 @@ class PhononAllBatchMeta(zntrack.Node):
     #phonon_connections_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_connections_paths.json")
     thermal_properties_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "thermal_properties_paths.json")
     get_chemical_formula_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mp_ids_and_formulas.json")
-    
+
     def run(self):
         #calc = self.model.get_calculator()
         
@@ -244,18 +244,16 @@ class PhononAllBatchMeta(zntrack.Node):
         failed_hard = []
 
         try:
-            with parallel_backend("threading"):
+            if self.parallel_backend_mode not in {"threading", "multiprocessing"}:
+                raise ValueError(f"Invalid parallel_backend_mode: {self.parallel_backend_mode}")
+
+            with parallel_backend(self.parallel_backend_mode):
                 raw_results = Parallel(n_jobs=self.n_jobs)(
                     delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
                     for mp_id in self.mp_ids
                 )
-    
+
             # Wrap result with (mp_id, result) so we know which ones succeeded
-            # raw_results = Parallel(n_jobs=self.n_jobs)(
-            #     delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-            #     for mp_id in self.mp_ids
-            # )
-            # Filter out failed (None) results
             successful_results = [(res["mp_id"], res) for res in raw_results if res is not None]
 
         except Exception as e:
