@@ -63,13 +63,15 @@ check_completed = False
 #             phonopy_yaml_dir=str(local_path),
 #     )
 
-{% if generate_displacements == True %}
+threading
 
-{% if multiprocessing %}
-multiprocessing = True
+{% if threading == True %}
+threading = True
 {% else %}
-multiprocessing = False
+threading = False
 {% endif %}
+
+{% if generate_displacements == True %}
 
 phonon_dict = {}
 phonon_list = []

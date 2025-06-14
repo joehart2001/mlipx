@@ -65,6 +65,7 @@ class PhononAllBatch(zntrack.Node):
     phonopy_yaml_dir: str = zntrack.params()
     n_jobs: int = zntrack.params(-1)
     check_completed: bool = zntrack.params(False)
+    threading: bool = zntrack.params(False)
 
     N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
@@ -222,17 +223,26 @@ class PhononAllBatch(zntrack.Node):
         failed_hard = []
 
         try:
-            # with parallel_backend("threading"):
-            #     raw_results = Parallel(n_jobs=self.n_jobs)(
-            #         delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-            #         for mp_id in self.mp_ids
-            #     )
+            
+            if self.threading:
+                parallel_backend_mode = "threading"
+                print("Using threading for parallel processing.")
+            else:
+                parallel_backend_mode = "multiprocessing"
+                print("Using multiprocessing for parallel processing.")
+                
+            with parallel_backend(parallel_backend_mode):
+                raw_results = Parallel(n_jobs=self.n_jobs)(
+                    delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+                    for mp_id in self.mp_ids
+                )
+                
     
             # Wrap result with (mp_id, result) so we know which ones succeeded
-            raw_results = Parallel(n_jobs=self.n_jobs)(
-                delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-                for mp_id in self.mp_ids
-            )
+            # raw_results = Parallel(n_jobs=self.n_jobs)(
+            #     delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+            #     for mp_id in self.mp_ids
+            # )
             # Filter out failed (None) results
             successful_results = [(res["mp_id"], res) for res in raw_results if res is not None]
 
