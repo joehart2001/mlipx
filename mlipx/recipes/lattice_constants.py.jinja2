@@ -17,13 +17,20 @@ project = zntrack.Project()
 
 lat_const_dir = get_benchmark_data("lattice_constants.zip", force=True) / "lattice_constants"
 
-ref_path_const = lat_const_dir / 'lattice_constants_ref.json'
+
+
+ref_path_const_exp = lat_const_dir / 'lattice_constants_ref_exp.json'
+ref_path_const_dft = lat_const_dir / 'lattice_constants_ref.json'
 ref_path_type = lat_const_dir / 'lattice_constants_ref_types.json'
 
 with project.group("ref", "lattice-constant"):
     ref_lat_const_node = mlipx.RefToNode(
-        ref_path=str(ref_path_const),
-        name="LatticeConst-ref")
+        ref_path=str(ref_path_const_exp),
+        name="LatticeConst-ref-exp")
+with project.group("ref", "lattice-constant"):
+    ref_lat_const_node = mlipx.RefToNode(
+        ref_path=str(ref_path_const_dft),
+        name="LatticeConst-ref-dft")
     ref_lat_type_node = mlipx.RefToNode(
         ref_path=str(ref_path_type),
         name="Lattice-ref-types")
