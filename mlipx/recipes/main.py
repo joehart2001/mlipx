@@ -433,6 +433,7 @@ def phonons_all(
         n_materials_start=n_materials_start,
         check_completed=check_completed,
         generate_displacements=generate_displacements,
+        parallel_backend_mode=parallel_backend_mode,
         n_jobs=n_jobs,
     )
     
