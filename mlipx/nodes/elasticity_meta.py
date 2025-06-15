@@ -74,10 +74,8 @@ class Elasticity(zntrack.Node):
     model_name: str = zntrack.params()
     n_jobs: int = zntrack.params(-1)  # -1 for all available cores
     
-    # norm_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.1, -0.05, 0.05, 0.1))
-    # shear_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.02, -0.01, 0.01, 0.02))
-    norm_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.01, -0.005, 0.005, 0.01)) # mp0 and uma values
-    shear_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.06, -0.03, 0.03, 0.06))
+    norm_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.1, -0.05, 0.05, 0.1))
+    shear_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.02, -0.01, 0.01, 0.02))
     relax_structure: bool = zntrack.params(True)
     n_materials: int = zntrack.params(10)
     fmax: float = zntrack.params(0.05)

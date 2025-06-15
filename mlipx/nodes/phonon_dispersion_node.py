@@ -576,13 +576,15 @@ class PhononDispersion(zntrack.Node):
         
         benchmarks = [
             'max_freq',
+            'avg_freq',
             'min_freq',
             'S',
             'F',
             'C_V',
         ]
         benchmark_units = {
-            'max_freq': 'THz', 
+            'max_freq': 'THz',
+            'avg_freq': 'THz',
             'min_freq': 'THz',
             'S': '[J/K/mol]',
             'F': '[kJ/mol]',
@@ -592,6 +594,7 @@ class PhononDispersion(zntrack.Node):
         pretty_benchmark_labels = {
             'max_freq': 'ω_max [THz]',
             'min_freq': 'ω_min [THz]',
+            'avg_freq': 'ω_avg [THz]',
             'S': 'S [J/mol·K]',
             'F': 'F [kJ/mol]',
             'C_V': 'C_V [J/mol·K]'
@@ -849,6 +852,7 @@ class PhononDispersion(zntrack.Node):
             triggered_id = ctx.triggered_id
             pretty_benchmark_labels = {
                 'max_freq': 'ω_max [THz]',
+                'avg_freq': 'ω_avg [THz]',
                 'min_freq': 'ω_min [THz]',
                 'S': 'S [J/mol·K]',
                 'F': 'F [kJ/mol]',
@@ -1180,6 +1184,7 @@ class PhononDispersion(zntrack.Node):
         # ref_benchmarks_dict[mp_id]['min_freq'] = np.min(dos_freqs_ref_calc)
         ref_benchmarks_dict[mp_id]['max_freq'] = np.max(np.concatenate(ref_freqs))
         ref_benchmarks_dict[mp_id]['min_freq'] = np.min(np.concatenate(ref_freqs))
+        ref_benchmarks_dict[mp_id]['avg_freq'] = np.mean(np.concatenate(ref_freqs))
 
         ref_benchmarks_dict[mp_id]['S'] = node_ref.get_thermal_properties['entropy'][T_300K_index]
         ref_benchmarks_dict[mp_id]['F'] = node_ref.get_thermal_properties['free_energy'][T_300K_index]
@@ -1215,6 +1220,7 @@ class PhononDispersion(zntrack.Node):
             # pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(dos_freqs_pred_calc)
             pred_benchmarks_dict[mp_id][model_name]['max_freq'] = np.max(np.concatenate(pred_freqs))
             pred_benchmarks_dict[mp_id][model_name]['min_freq'] = np.min(np.concatenate(pred_freqs))
+            pred_benchmarks_dict[mp_id][model_name]['avg_freq'] = np.mean(np.concatenate(pred_freqs))
                         
             pred_benchmarks_dict[mp_id][model_name]['S'] = pred_nodes[model_name].get_thermal_properties['entropy'][T_300K_index]
             pred_benchmarks_dict[mp_id][model_name]['F'] = pred_nodes[model_name].get_thermal_properties['free_energy'][T_300K_index]
@@ -1417,7 +1423,9 @@ class PhononDispersion(zntrack.Node):
             },
             title=f"{model_name} - {pretty_label}",
         )
-        
+        fig.update_traces(
+            hovertemplate="Ref: %{x:.6f}&lt;br&gt;Pred: %{y:.6f}&lt;extra&gt;&lt;/extra&gt;"
+        )
         # y=x
         fig.add_shape(
             type="line", 

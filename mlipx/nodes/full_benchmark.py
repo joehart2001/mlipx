@@ -73,7 +73,7 @@ class FullBenchmark(zntrack.Node):
     def benchmark_interactive(
         elasticity_data: List[Elasticity] | Dict[str, Elasticity],
         lattice_const_data: List[LatticeConstant] | Dict[str, Dict[str, LatticeConstant]],
-        lattice_const_ref_node: LatticeConstant,
+        lattice_const_ref_node_dict: LatticeConstant,
         phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion],
         phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
         
@@ -94,7 +94,7 @@ class FullBenchmark(zntrack.Node):
         bulk_benchmark_app, bulk_benchmark_score_df, bulk_register_callbacks = BulkCrystalBenchmark.benchmark_interactive(
             elasticity_data=elasticity_data,
             lattice_const_data=lattice_const_data,
-            lattice_const_ref_node=lattice_const_ref_node,
+            lattice_const_ref_node_dict=lattice_const_ref_node_dict,
             phonon_ref_data=phonon_ref_data,
             phonon_pred_data=phonon_pred_data,
             full_benchmark=True,

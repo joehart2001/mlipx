@@ -266,6 +266,7 @@ def load_node_objects(
     models: list[str] | None,
     all_nodes: list[str],
     split_str: str,
+    #exp_data: bool = False,
 ) -> dict[str, zntrack.Node]:
     
     selected_nodes = []
@@ -509,7 +510,7 @@ def bulk_crystal_benchmark(
         all_nodes = list(json.load(f).keys())
     
     
-    phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node = get_bulk_crystal_benchmark_node_dicts(
+    phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node_dict = get_bulk_crystal_benchmark_node_dicts(
         nodes,
         glob,
         models,
@@ -526,7 +527,7 @@ def bulk_crystal_benchmark(
         phonon_pred_data=phonon_pred_node_dict,
         elasticity_data=elasticity_dict,
         lattice_const_data=lattice_const_dict,
-        lattice_const_ref_node=lattice_const_ref_node,
+        lattice_const_ref_node_dict=lattice_const_ref_node_dict,
         ui = ui,
         normalise_to_model=normalise_to_model,
     )
@@ -552,9 +553,9 @@ def get_bulk_crystal_benchmark_node_dicts(
     
     phonon_pred_node_dict, phonon_ref_node_dict = load_nodes_mpid_model(phonon_node_objects, models, split_str=split_str_phonons)
     elasticity_dict = load_nodes_model(elasticity_node_objects, models, split_str=split_str_elasticity)
-    lattice_const_dict, lattice_const_ref_node = load_nodes_and_ref_node_lat(lattice_const_node_objects, models, split_str=split_str_lattice_const)
+    lattice_const_dict, lattice_const_ref_node_dict = load_nodes_and_ref_node_lat(lattice_const_node_objects, models, split_str=split_str_lattice_const)
     
-    return phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node
+    return phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node_dict
     
     
 @app.command()
@@ -571,7 +572,7 @@ def lattice_constants_compare(
         all_nodes = list(json.load(f).keys())
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_lattice-constant")
     
-    benchmark_node_dict, lattice_const_ref_node = load_nodes_and_ref_node_lat(node_objects, models, split_str="_lattice-constant")
+    benchmark_node_dict, lattice_const_ref_node_dict = load_nodes_and_ref_node_lat(node_objects, models, split_str="_lattice-constant")
     
     
     if ui not in {None, "browser"}:
@@ -581,7 +582,7 @@ def lattice_constants_compare(
     from mlipx import LatticeConstant
     LatticeConstant.mae_plot_interactive(
         node_dict=benchmark_node_dict,
-        ref_node = lattice_const_ref_node,
+        ref_node_dict = lattice_const_ref_node_dict,
         ui=ui
     )
     
@@ -591,13 +592,18 @@ def load_nodes_and_ref_node_lat(node_objects, models, split_str):
     and a single reference node
     """
     benchmark_node_dict = {}
+    ref_node_dict = {}
     
     for name, node in node_objects.items():
         model = name.split(split_str)[0]
         
         if "ref" in model:
             print(f"Found reference node: {name}, {node}")
-            ref_node = node
+            if "exp" in name:
+                ref_node_dict["exp"] = node
+            elif "dft" in name:
+                ref_node_dict["dft"] = node
+
         else:
             formula = name.split("LatticeConst-")[-1]
             benchmark_node_dict.setdefault(formula, {})[model] = node
@@ -607,7 +613,7 @@ def load_nodes_and_ref_node_lat(node_objects, models, split_str):
             ele: {m: node for m, node in models_dict.items() if m in models}
             for ele, models_dict in benchmark_node_dict.items()
         }
-    return benchmark_node_dict, ref_node
+    return benchmark_node_dict, ref_node_dict
 
 
 
@@ -769,7 +775,7 @@ def full_benchmark_compare(
         all_nodes = list(json.load(f).keys())
         
     # bulk crystal benchmark
-    phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node = get_bulk_crystal_benchmark_node_dicts(
+    phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node_dict = get_bulk_crystal_benchmark_node_dicts(
         nodes,
         glob,
         models,
@@ -799,14 +805,6 @@ def full_benchmark_compare(
     
 
     
-    # print('phonon_pred_node_dict = ', phonon_pred_node_dict)
-    # print('phonon_ref_node_dict = ', phonon_ref_node_dict)
-    # print('elasticity_dict = ', elasticity_dict)
-    # print('lattice_const_dict = ', lattice_const_dict)
-    # print('lattice_const_ref_node = ', lattice_const_ref_node)
-    # print('X23_dict = ', X23_dict)
-    # print('ICE_DMC_dict = ', ICE_DMC_dict)
-    # print('GMTKN55_dict = ', GMTKN55_dict)
     
     
     if ui not in {None, "browser"}:
@@ -821,7 +819,7 @@ def full_benchmark_compare(
             phonon_pred_data=phonon_pred_node_dict,
             elasticity_data=elasticity_dict,
             lattice_const_data=lattice_const_dict,
-            lattice_const_ref_node=lattice_const_ref_node,
+            lattice_const_ref_node_dict=lattice_const_ref_node_dict,
             X23_data=X23_dict,
             DMC_ICE_data=ICE_DMC_dict,
             GMTKN55_data=GMTKN55_dict,
@@ -837,7 +835,7 @@ def full_benchmark_compare(
             phonon_pred_data=phonon_pred_node_dict,
             elasticity_data=elasticity_dict,
             lattice_const_data=lattice_const_dict,
-            lattice_const_ref_node=lattice_const_ref_node,
+            lattice_const_ref_node_dict=lattice_const_ref_node_dict,
             X23_data=X23_dict,
             DMC_ICE_data=ICE_DMC_dict,
             GMTKN55_data=GMTKN55_dict,

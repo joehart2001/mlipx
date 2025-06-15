@@ -99,25 +99,35 @@ class LatticeConstant(zntrack.Node):
     @staticmethod
     def mae_plot_interactive(
         node_dict,
-        ref_node,
+        ref_node_dict,
         ui: str | None = None,
         run_interactive: bool = True,
         report: bool = True,
         normalise_to_model: t.Optional[str] = None,
     ):
+        # Two reference dicts: PBE (was DFT) and EXP
+        ref_dict_pbe = ref_node_dict['dft'].get_ref
+        ref_dict_exp = ref_node_dict['exp'].get_ref
 
-        ref_dict = ref_node.get_ref
-        
-        
+        # Build full_data with both pbe_ref and exp_ref for all entries
         full_data = {}
         for formula, model_data in node_dict.items():
             if formula == "SiC":
                 formula_a = "SiC(a)"
                 formula_c = "SiC(c)"
-                full_data[formula_a] = {"ref": ref_dict[formula_a]}
-                full_data[formula_c] = {"ref": ref_dict[formula_c]}
+                full_data[formula_a] = {
+                    "pbe_ref": ref_dict_pbe[formula_a],
+                    "exp_ref": ref_dict_exp[formula_a],
+                }
+                full_data[formula_c] = {
+                    "pbe_ref": ref_dict_pbe[formula_c],
+                    "exp_ref": ref_dict_exp[formula_c],
+                }
             else:
-                full_data[formula] = {"ref": ref_dict[formula]}
+                full_data[formula] = {
+                    "pbe_ref": ref_dict_pbe[formula],
+                    "exp_ref": ref_dict_exp[formula],
+                }
 
             for model_name, node in model_data.items():
                 if isinstance(node.get_lattice_const, dict):
@@ -127,38 +137,47 @@ class LatticeConstant(zntrack.Node):
                 else:
                     full_data[formula][model_name] = node.get_lattice_const
 
+        # DataFrame with both pbe_ref and exp_ref columns
         lat_const_df = pd.DataFrame.from_dict(full_data, orient="index")
-        lat_const_df = lat_const_df[["ref"] + [col for col in lat_const_df.columns if col != "ref"]]
+        main_cols = ["pbe_ref", "exp_ref"]
+        other_cols = [col for col in lat_const_df.columns if col not in main_cols]
+        lat_const_df = lat_const_df[main_cols + other_cols]
         lat_const_df = lat_const_df.round(3)
 
-        # mae
+        # MAE for PBE and EXP refs
         mae_data = []
         for model_name in lat_const_df.columns:
-            if model_name == "ref":
+            if model_name in ["pbe_ref", "exp_ref"]:
                 continue
-            diff = lat_const_df[model_name] - lat_const_df["ref"]
-            mae = np.mean(np.abs(diff))
-            mae_data.append({"Model": model_name, "Lat Const MAE [Å]": round(mae, 3)})
+            diff_pbe = lat_const_df[model_name] - lat_const_df["pbe_ref"]
+            diff_exp = lat_const_df[model_name] - lat_const_df["exp_ref"]
+            mae_pbe = np.mean(np.abs(diff_pbe))
+            mae_exp = np.mean(np.abs(diff_exp))
+            mae_data.append({
+                "Model": model_name,
+                "Lat Const MAE [Å] (PBE)": round(mae_pbe, 3),
+                "Lat Const MAE [Å] (EXP)": round(mae_exp, 3),
+            })
 
         mae_df = pd.DataFrame(mae_data)
-        
-        if normalise_to_model is not None:
+        # Normalisation (to PBE MAE)
+        if normalise_to_model is not None and normalise_to_model in mae_df["Model"].values:
+            base_mae = mae_df.loc[mae_df["Model"] == normalise_to_model, "Lat Const MAE [Å] (PBE)"].values[0]
             for model in mae_df["Model"]:
-                mae_df.loc[mae_df["Model"] == model, "Lat Const Score \u2193"] = mae_df.loc[mae_df["Model"] == model, "Lat Const MAE [Å]"] / mae_df.loc[mae_df["Model"] == normalise_to_model, "Lat Const MAE [Å]"].values[0]
-        
+                mae_df.loc[mae_df["Model"] == model, "Lat Const Score \u2193 (PBE)"] = mae_df.loc[mae_df["Model"] == model, "Lat Const MAE [Å] (PBE)"] / base_mae
         else:
-            mae_df["Lat Const Score \u2193"] = mae_df["Lat Const MAE [Å]"]
-
+            mae_df["Lat Const Score \u2193 (PBE)"] = mae_df["Lat Const MAE [Å] (PBE)"]
+        # Rank by PBE MAE
         mae_df = mae_df.round(3)
-        mae_df['Rank'] = mae_df['Lat Const Score \u2193'].rank(method='min', ascending=True).astype(int)
+        mae_df['Rank (PBE)'] = mae_df['Lat Const Score \u2193 (PBE)'].rank(method='min', ascending=True).astype(int)
 
-
-        # save
+        # Save
+        # Optionally update save_lattice_const_plots_tables to handle both refs
+        # (left as is for now)
         LatticeConstant.save_lattice_const_plots_tables(lat_const_df, mae_df)
-        
+
         # report
-        models_list = [col for col in lat_const_df.columns if col != "ref"]
-        
+        models_list = [col for col in lat_const_df.columns if col not in ["pbe_ref", "exp_ref"]]
         if report:
             md_path = LatticeConstant.generate_lattice_const_report(
                 mae_df=mae_df,
@@ -169,16 +188,11 @@ class LatticeConstant(zntrack.Node):
         else:
             md_path = None
 
-        
-
         if ui is None and run_interactive:
             return lat_const_df, mae_df
 
-
         # ------------ Dash App ----------------
         app = dash.Dash(__name__)
-        
-
         from mlipx.dash_utils import dash_table_interactive
         app.layout = dash_table_interactive(
             df=mae_df,
@@ -189,17 +203,12 @@ class LatticeConstant(zntrack.Node):
                 dcc.Store(id="lattice-table-last-clicked", data=None),
             ],
         )
-        
 
         LatticeConstant.register_callbacks(app, mae_df, lat_const_df)
-        
-
 
         from mlipx.dash_utils import run_app
-
         if not run_interactive:
             return app, mae_df, lat_const_df, md_path
-
         return run_app(app, ui=ui)
     
     
@@ -237,13 +246,13 @@ class LatticeConstant(zntrack.Node):
         md.append("## Per-Model Tables and Scatter Plots\n")
 
         for model in models_list:
-            if model == "ref":
+            if model in ["pbe_ref", "exp_ref"]:
                 continue
 
             md.append(f"### {model}\n")
 
             # diff Table
-            ref_vals = lat_const_df["ref"]
+            ref_vals = lat_const_df["pbe_ref"]
             pred_vals = lat_const_df[model]
             abs_diff = pred_vals - ref_vals
             pct_diff = 100 * abs_diff / ref_vals
@@ -251,7 +260,7 @@ class LatticeConstant(zntrack.Node):
 
             table_df = pd.DataFrame({
                 "Element": formulas,
-                "DFT (Å)": ref_vals,
+                "PBE (Å)": ref_vals,
                 f"{model} (Å)": pred_vals,
                 "Δ": abs_diff.round(3),
                 "Δ/%": pct_diff.round(2)
@@ -295,13 +304,13 @@ class LatticeConstant(zntrack.Node):
         mae_summary = []
 
         for model_name in lat_const_df.columns:
-            if model_name == "ref":
+            if model_name in ["pbe_ref", "exp_ref"]:
                 continue
 
             model_dir = save_dir / model_name / "scatter_plots"
             model_dir.mkdir(parents=True, exist_ok=True)
 
-            ref_vals = lat_const_df["ref"]
+            ref_vals = lat_const_df["pbe_ref"]
             pred_vals = lat_const_df[model_name]
             formulas = lat_const_df.index.tolist()
 
@@ -316,7 +325,7 @@ class LatticeConstant(zntrack.Node):
 
             table_df = pd.DataFrame({
                 "Element": formulas,
-                "DFT": ref_vals,
+                "PBE": ref_vals,
                 model_name: pred_vals,
                 "Δ": abs_diff.round(3),
                 "Δ/%": pct_diff.round(2)
@@ -349,7 +358,6 @@ class LatticeConstant(zntrack.Node):
 
     @staticmethod
     def register_callbacks(app, mae_df, lat_const_df):
-        
         # decorator tells dash the function below is a callback
         @app.callback(
             Output("lattice-const-table", "children"),
@@ -375,47 +383,73 @@ class LatticeConstant(zntrack.Node):
             ):
                 return None, None
 
-            # Else, render the plot + table
-            mae_val = (lat_const_df[model_name] - lat_const_df["ref"]).abs().mean()
 
-            ref_vals = lat_const_df["ref"]
-            pred_vals = lat_const_df[model_name]
             formulas = lat_const_df.index.tolist()
+            pred_vals = lat_const_df[model_name]
+            ref_vals_pbe = lat_const_df["pbe_ref"]
+            ref_vals_exp = lat_const_df["exp_ref"]
+            mae_val_pbe = (pred_vals - ref_vals_pbe).abs().mean()
+            mae_val_exp = (pred_vals - ref_vals_exp).abs().mean()
 
             from mlipx.dash_utils import create_scatter_plot
-            fig = create_scatter_plot(
-                ref_vals = ref_vals, 
-                pred_vals = pred_vals, 
-                model_name = model_name, 
-                mae = mae_val, 
-                metric_label = ("Lattice Constant", "Å"),
-                hover_data = (formulas, "Formula"),
+            fig_pbe = create_scatter_plot(
+                ref_vals=ref_vals_pbe,
+                pred_vals=pred_vals,
+                model_name=model_name,
+                mae=mae_val_pbe,
+                metric_label=("Lattice Constant", "Å"),
+                hover_data=(formulas, "Formula"),
             )
-                
-                
-            abs_diff = pred_vals - ref_vals
-            pct_diff = 100 * abs_diff / ref_vals
-
-            table_df = pd.DataFrame({
+            fig_exp = create_scatter_plot(
+                ref_vals=ref_vals_exp,
+                pred_vals=pred_vals,
+                model_name=model_name,
+                mae=mae_val_exp,
+                metric_label=("Lattice Constant", "Å"),
+                hover_data=(formulas, "Formula"),
+            )
+            # delta tables for PBE and EXP
+            abs_diff_pbe = pred_vals - ref_vals_pbe
+            pct_diff_pbe = 100 * abs_diff_pbe / ref_vals_pbe
+            abs_diff_exp = pred_vals - ref_vals_exp
+            pct_diff_exp = 100 * abs_diff_exp / ref_vals_exp
+            table_df_pbe = pd.DataFrame({
                 "Element": formulas,
-                "DFT (Å)": ref_vals,
+                "PBE (Å)": ref_vals_pbe,
                 f"{model_name} (Å)": pred_vals,
-                "Δ": abs_diff.round(3),
-                "Δ/%": pct_diff.round(2)
+                "Δ": abs_diff_pbe.round(3),
+                "Δ/%": pct_diff_pbe.round(2)
+            }).round(3)
+            table_df_exp = pd.DataFrame({
+                "Element": formulas,
+                "EXP (Å)": ref_vals_exp,
+                f"{model_name} (Å)": pred_vals,
+                "Δ": abs_diff_exp.round(3),
+                "Δ/%": pct_diff_exp.round(2)
             }).round(3)
 
-
-            summary_table = dash_table.DataTable(
-                columns=[{"name": i, "id": i} for i in table_df.columns],
-                data=table_df.reset_index(drop=True).to_dict('records'),
+            table_df_combined = pd.DataFrame({
+                "Element": formulas,
+                "PBE (Å)": ref_vals_pbe,
+                "EXP (Å)": ref_vals_exp,
+                f"{model_name} (Å)": pred_vals,
+                "Δ (PBE)": abs_diff_pbe.round(3),
+                "Δ/% (PBE)": pct_diff_pbe.round(2),
+                "Δ (EXP)": abs_diff_exp.round(3),
+                "Δ/% (EXP)": pct_diff_exp.round(2),
+            }).round(3)
+            summary_table_combined = dash_table.DataTable(
+                columns=[{"name": i, "id": i} for i in table_df_combined.columns],
+                data=table_df_combined.reset_index(drop=True).to_dict('records'),
                 style_cell={'textAlign': 'center', 'fontSize': '14px'},
                 style_header={'fontWeight': 'bold'},
                 style_table={'overflowX': 'auto'},
             )
-
+            # Tabs: PBE scatter, EXP scatter, combined delta table
             return html.Div([
                 dcc.Tabs([
-                    dcc.Tab(label="Scatter Plot", children=[dcc.Graph(figure=fig)]),
-                    dcc.Tab(label="Δ Table", children=[html.Div(summary_table, style={"padding": "20px"})])
+                    dcc.Tab(label="PBE Scatter Plot", children=[dcc.Graph(figure=fig_pbe)]),
+                    dcc.Tab(label="EXP Scatter Plot", children=[dcc.Graph(figure=fig_exp)]),
+                    dcc.Tab(label="Δ Table", children=[html.Div(summary_table_combined, style={"padding": "20px"})])
                 ])
             ]), active_cell

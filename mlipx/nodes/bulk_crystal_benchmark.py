@@ -90,7 +90,7 @@ class BulkCrystalBenchmark(zntrack.Node):
     def benchmark_interactive(
         elasticity_data: List[Elasticity] | Dict[str, Elasticity],
         lattice_const_data: List[LatticeConstant] | Dict[str, Dict[str, LatticeConstant]],
-        lattice_const_ref_node: LatticeConstant,
+        lattice_const_ref_node_dict: LatticeConstant,
         phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion],
         phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
         ui: str = "browser",
@@ -152,7 +152,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         
         app_lattice_const, mae_df_lattice_const, lattice_const_dict_with_ref, lattice_const_md_path = LatticeConstant.mae_plot_interactive(
             node_dict=lattice_const_dict,
-            ref_node = lattice_const_ref_node,
+            ref_node_dict = lattice_const_ref_node_dict,
             run_interactive=False,
             report=report,
             normalise_to_model=normalise_to_model,
