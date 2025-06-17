@@ -12,6 +12,12 @@ from models import MODELS
 project = zntrack.Project()
 {% endif %}
 
+{% if het_diatomics == True%}
+het_diatomics = True
+{% else %}
+het_diatomics = False
+{% endif %}
+
 diatomic_dict = {}
 diatomic_list = []
 for model_name, model in MODELS.items():
@@ -23,7 +29,8 @@ for model_name, model in MODELS.items():
             n_points=100,
             min_distance=0.18,
             max_distance=6.0,
-            eq_distance=None
+            eq_distance=None,
+            het_diatomics=het_diatomics,
         )
         diatomic_dict[model_name] = diatomic
         diatomic_list.append(diatomic)

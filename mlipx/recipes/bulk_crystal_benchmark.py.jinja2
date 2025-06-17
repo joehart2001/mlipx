@@ -16,14 +16,14 @@ project = zntrack.Project()
 
 
 {% set standalone = false %}
-{% include "phonons.py.jinja2" %}
+{% include "phonons_all.py.jinja2" %}
 {% include "elasticity.py.jinja2" %}
 {% include "lattice_constants.py.jinja2" %}
 
 
 with project.group('bulk-crystal-benchmark'):
     bulk_crystal_benchmark = mlipx.BulkCrystalBenchmark(
-        phonon_ref_list=phonon_ref_list,
+        phonon_ref=phonon_ref_node,
         phonon_pred_list=phonon_pred_list,
         elasticity_list=elasticity_list,
         lattice_const_list=lattice_const_list,

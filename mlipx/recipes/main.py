@@ -460,6 +460,27 @@ def gmtkn55(
         smiles=smiles,
     )
     
+@app.command()
+def wiggle150(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run WIGGLE150 benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "wiggle150.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+    )
+    
 
 @app.command()
 def cohesive_energies(
@@ -681,6 +702,7 @@ def homonuclear_diatomics_benchmark(
     repro: bool = False,
     datapath: str | None = None,
     material_ids: str | None = None,
+    het_diatomics: bool = False,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
 ):
@@ -708,4 +730,5 @@ def homonuclear_diatomics_benchmark(
         datapath=datapath,
         material_ids=material_ids,
         smiles=smiles,
+        het_diatomics=het_diatomics,
     )

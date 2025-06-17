@@ -339,3 +339,47 @@ def download_alex_parallel(sample_every = 10, max_threads=16):
         print("Found cached files, no download needed")
     else:
         print(f"\nDownload complete: {success} success, {fail} failed")
+        
+
+
+#from mlipx.nodes.phonon_all import PhononAllBatch
+import typing as t
+class PhononDataWrapper:
+    def __init__(self, mp_id: str, data: dict[str, t.Any]):
+        self.name = f"phonon_{mp_id}"
+        self._data = data
+
+    @property
+    def band_structure(self):
+        return self._data["band_structure"]
+
+    @property
+    def dos(self):
+        dos_dict = self._data["dos"]
+        return dos_dict["frequency_points"], dos_dict["total_dos"]
+
+    @property
+    def get_thermal_properties(self):
+        return self._data["thermal_properties"]
+
+    @property
+    def labels(self):
+        return self._data["labels"]
+
+    @property
+    def connections(self):
+        return self._data["connections"]
+    
+    @property
+    def formula(self):
+        return self._data["formula"] if "formula" in self._data else None
+    
+
+def convert_batch_to_node_dict(
+    batch_node, model_name: t.Optional[str] = None
+) -> dict[str, t.Any]:
+    raw_data = batch_node.get_phonon_ref_data
+    if model_name is None:
+        return {mp_id: PhononDataWrapper(mp_id, data) for mp_id, data in raw_data.items()}
+    else:
+        return {mp_id: {model_name: PhononDataWrapper(mp_id, data)} for mp_id, data in raw_data.items()}

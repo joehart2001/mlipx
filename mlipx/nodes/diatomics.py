@@ -7,12 +7,11 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 from ase import Atoms
-import tqdm
 import zntrack
 from ase.data import atomic_numbers, covalent_radii, vdw_alvarez
 from dash import dcc, html, Input, Output, State, MATCH
 import re
-
+from tqdm import tqdm
 from mlipx.abc import ComparisonResults, NodeWithCalculator
 from mlipx.utils import freeze_copy_atoms
 from pathlib import Path
@@ -52,6 +51,7 @@ class HomonuclearDiatomics(zntrack.Node):
     model: NodeWithCalculator = zntrack.deps()
     elements: list[str] = zntrack.params(("H", "He", "Li"))
     data: list[ase.Atoms] | None = zntrack.deps(None)
+    het_diatomics: bool = zntrack.params(False)
 
     n_points: int = zntrack.params(100)
     min_distance: float = zntrack.params(0.5)
@@ -76,7 +76,8 @@ class HomonuclearDiatomics(zntrack.Node):
         self.trajectory_dir_path.mkdir(exist_ok=True, parents=True)
         
         (self.model_outs / "mlipx.txt").write_text("Thank you for using MLIPX!")
-        calc = self.model.get_calculator(directory=self.model_outs)
+        #calc = self.model.get_calculator(directory=self.model_outs)
+        calc = self.model.get_calculator()
         e_v = {}
 
         elements = set(self.elements)
@@ -84,8 +85,11 @@ class HomonuclearDiatomics(zntrack.Node):
             for atoms in self.data:
                 elements.update(set(atoms.symbols))
 
+        # Track skipped elements
+        skipped_elements = []
+
         results_list = []
-        for element in elements:
+        for element in tqdm(elements, desc="Homonuclear Elements"):
             
             traj_frames = []
             try:
@@ -110,11 +114,7 @@ class HomonuclearDiatomics(zntrack.Node):
                     distances = np.linspace(
                         self.min_distance, self.max_distance, self.n_points
                     )
-                tbar = tqdm.tqdm(
-                    distances, desc=f"{element}-{element} bond ({distances[0]:.2f} Å)"
-                )
-                for distance in tbar:
-                    tbar.set_description(f"{element}-{element} bond ({distance:.2f} Å)")
+                for distance in distances:
                     molecule = self.build_molecule(element, distance)
                     molecule.calc = calc
                     energies.append(molecule.get_potential_energy())
@@ -138,8 +138,50 @@ class HomonuclearDiatomics(zntrack.Node):
 
                 
             except Exception as e:
-                print(f"Skipping element {element}: {e}")
+                skipped_elements.append(element)
                 continue
+
+        # After all elements, print skipped elements if any
+        if skipped_elements:
+            print(f"Skipped {len(skipped_elements)} elements: {', '.join(skipped_elements)} — likely unsupported by the model.")
+        
+        # ---- heteronuclear diatomics ----
+        hetero_pairs = []
+        if self.het_diatomics:
+            for i, elem1 in enumerate(self.elements):
+                for elem2 in self.elements[i+1:]:
+                    hetero_pairs.append((elem1, elem2))
+
+        if hetero_pairs:
+            try:
+                from joblib import Parallel, delayed
+            except ImportError:
+                Parallel = None
+                delayed = None
+
+            def _hetero_worker(args):
+                return HomonuclearDiatomics._run_hetero_pair(
+                    elem1=args[0],
+                    elem2=args[1],
+                    eq_distance=self.eq_distance,
+                    min_distance=self.min_distance,
+                    max_distance=self.max_distance,
+                    n_points=self.n_points,
+                    calc=calc,
+                    trajectory_dir_path=self.trajectory_dir_path,
+                )
+
+            if Parallel is not None:
+                hetero_results = Parallel(n_jobs=-1)(
+                    delayed(_hetero_worker)(pair) for pair in hetero_pairs
+                )
+            else:
+                hetero_results = [_hetero_worker(pair) for pair in hetero_pairs]
+
+            # Collect results into e_v and self.frames
+            for colname, df, traj_frames in hetero_results:
+                e_v[colname] = df
+                self.frames.extend(traj_frames)
         
         #self.results = pd.DataFrame(results_list)
 
@@ -147,7 +189,6 @@ class HomonuclearDiatomics(zntrack.Node):
             lambda x, y: pd.merge(x, y, left_index=True, right_index=True, how="outer"),
             e_v.values(),
         )
-        
 
     def get_traj(self, element) -> list[ase.Atoms]:
 
@@ -333,6 +374,12 @@ class HomonuclearDiatomics(zntrack.Node):
         stats_df = HomonuclearDiatomics.score_diatomics(stats_df, normalise_to_model=normalise_to_model)
         stats_df["Rank"] = stats_df["Score"].rank(ascending=True, method="min").astype(int)
         
+        # stats_df["Rank"] = (
+        #     stats_df["Score"]
+        #     .rank(ascending=True, method="min")
+        #     .fillna(-1)
+        #     .astype(int)
+        # )
         path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/stats")
         path.mkdir(exist_ok=True, parents=True)
         stats_df.to_csv(path / "stats.csv", index=False)
@@ -479,32 +526,89 @@ class HomonuclearDiatomics(zntrack.Node):
                 )
                 return fig
             else:
-                col = element_value
-                if col not in df.columns:
-                    return go.Figure()
+                df, _ = HomonuclearDiatomics.process_model(model_name, results_dict)
+
+                import io, base64
+                buf = io.BytesIO()
+
+                HomonuclearDiatomics.p_table_diatomic_plot(
+                    diatomics_df=df,
+                    model_name=model_name,
+                    selected_element=element_value,
+                    out_path=buf
+                )
+                buf.seek(0)
+                encoded_image = base64.b64encode(buf.read()).decode("utf-8")
+
                 fig = go.Figure()
-                fig.add_trace(go.Scatter(x=df["distance"], y=df[col], mode="lines", name=element_value))
-                fig.add_hline(y=0, line=dict(dash="dash", width=1, color="gray"))
+                fig.add_layout_image(
+                    dict(
+                        source=f"data:image/png;base64,{encoded_image}",
+                        xref="x",
+                        yref="y",
+                        x=0,
+                        y=0,
+                        sizex=18,  # match columns of periodic table
+                        sizey=10,  # match rows
+                        xanchor="left",
+                        yanchor="bottom",
+                        layer="below"
+                    )
+                )
                 fig.update_layout(
-                    title=f"{element_value} Bond Curve",
-                    xaxis_title="Distance [Å]",
-                    yaxis_title="Energy [meV]",
-                    xaxis=dict(range=[0, 6]),
-                    yaxis=dict(range=[-20, 20])
+                    xaxis=dict(
+                        visible=False,
+                        range=[0, 18],
+                        constrain="domain"
+                    ),
+                    yaxis=dict(
+                        visible=False,
+                        range=[0, 10],
+                        scaleanchor="x",
+                        scaleratio=1
+                    ),
+                    margin=dict(l=0, r=0, t=0, b=0),
+                    height=None,
+                    autosize=True,
+                    dragmode="pan",
+                    plot_bgcolor="rgba(0,0,0,0)",
+                    paper_bgcolor="rgba(0,0,0,0)"
                 )
                 return fig
+
     
     
     
     # insprired by: https://github.com/stenczelt/MACE-MP-work/tree/ba9ac8c2a98d93077ea231c7c4f48f0ad00a8d62/B6_pair-repulsion
-    
+    import io
     @staticmethod
     def p_table_diatomic_plot(
         diatomics_df: pd.DataFrame,
         model_name: str,
+        selected_element: str | None = None,
+        out_path: t.Optional[io.BytesIO] = None
     ):
         
-        element_columns = {col: col for col in diatomics_df.columns if col != "distance"}
+        homonuclear_element_columns = {
+            col: col
+            for col in diatomics_df.columns
+            if col != "distance" and "-" not in col
+        }
+
+        if selected_element:
+            # take selected element's homonuclear + all its heteronuclear combinations (A-B or B-A)
+            element_cols_plot = {
+                col: col
+                for col in diatomics_df.columns
+                if col != "distance"
+                and (
+                    (col == selected_element)  # Homonuclear
+                    or ("-" in col and selected_element in col.split("-"))  # A-B or B-A
+                )
+            }
+        else:
+            element_cols_plot = homonuclear_element_columns
+
 
         
         ptable_positions = {
@@ -546,12 +650,24 @@ class HomonuclearDiatomics(zntrack.Node):
         fig, axes = plt.subplots(n_rows, n_cols, figsize=(30, 15), constrained_layout=True)
         axes = axes.reshape(n_rows, n_cols)
 
+        
         # Plot each element
-        for col, el in element_columns.items():
-            if el not in ptable_positions:
+        for col in element_cols_plot:
+            if "-" in col:
+                a, b = col.split("-")
+                if selected_element == a:
+                    other = b
+                elif selected_element == b:
+                    other = a
+                else:
+                    continue
+            else:
+                other = col
+
+            if other not in ptable_positions:
                 continue
 
-            row, col_idx = ptable_positions[el]
+            row, col_idx = ptable_positions[other]
             ax = axes[row, col_idx]
 
             x = diatomics_df["distance"]
@@ -562,7 +678,7 @@ class HomonuclearDiatomics(zntrack.Node):
             y = y - shift
 
             ax.plot(x, y, linewidth=1, zorder = 1)
-            ax.set_title(f"{el}, shift: {shift:.4f}", fontsize=10)
+            ax.set_title(f"{col}, shift: {shift:.4f}", fontsize=10)
             ax.set_xticks([0, 2, 4, 6])
             ax.set_yticks([-20, -10, 0, 10, 20])
             ax.set_xlim(0, 6)
@@ -576,12 +692,25 @@ class HomonuclearDiatomics(zntrack.Node):
                 if not axes[r, c].has_data():
                     axes[r, c].axis("off")
 
-        plt.suptitle(f"Homonuclear Diatomics: {model_name}", fontsize=18)
-        path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/plots/")
-        path.mkdir(parents=True, exist_ok=True)
-        plt.savefig(path / f"{model_name}_ptable_diatomics.svg")
-        plt.savefig(path / f"{model_name}_ptable_diatomics.pdf")
+        if selected_element:
+            plt.suptitle(f"Diatomics for {selected_element} with {model_name}", fontsize=18)
+        else:
+            plt.suptitle(f"Homonuclear Diatomics: {model_name}", fontsize=18)
+
+
+        
+        if out_path is not None:
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+            plt.savefig(out_path, format="png")
+        else:
+            plt.tight_layout(rect=[0, 0, 1, 0.95])
+            path = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/plots/")
+            path.mkdir(parents=True, exist_ok=True)
+            plt.savefig(path / f"{model_name}_ptable_diatomics.svg")
+            plt.savefig(path / f"{model_name}_ptable_diatomics.pdf")
         plt.close(fig)
+
+
         
     @staticmethod
     def score_diatomics(
@@ -616,3 +745,4 @@ class HomonuclearDiatomics(zntrack.Node):
         
         return stats_df.round(3)
     
+ 

@@ -34,6 +34,7 @@ from typing import List, Dict, Any, Optional
 
 import mlipx
 from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, MolecularBenchmark, HomonuclearDiatomics
+from mlipx import PhononAllRef, PhononAllBatch
 
 
 
@@ -74,8 +75,8 @@ class FullBenchmark(zntrack.Node):
         elasticity_data: List[Elasticity] | Dict[str, Elasticity],
         lattice_const_data: List[LatticeConstant] | Dict[str, Dict[str, LatticeConstant]],
         lattice_const_ref_node_dict: LatticeConstant,
-        phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion],
-        phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
+        phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion] | PhononAllRef,
+        phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]] | List[PhononAllBatch] | Dict[str, PhononAllBatch],
         
         X23_data: List[X23Benchmark] | Dict[str, X23Benchmark],
         DMC_ICE_data: List[DMCICE13Benchmark] | Dict[str, DMCICE13Benchmark],

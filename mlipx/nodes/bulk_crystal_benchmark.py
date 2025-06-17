@@ -34,6 +34,7 @@ from typing import List, Dict, Any, Optional
 
 import mlipx
 from mlipx import PhononDispersion, Elasticity, LatticeConstant
+from mlipx import PhononAllRef, PhononAllBatch
 
 
 
@@ -45,6 +46,7 @@ import base64
 import csv
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+from typing import Union
 
 
 
@@ -53,8 +55,8 @@ class BulkCrystalBenchmark(zntrack.Node):
     """ Node to combine all bulk crystal benchmarks
     """
     # inputs
-    phonon_ref_list: List[PhononDispersion] = zntrack.deps()
-    phonon_pred_list: List[PhononDispersion] = zntrack.deps()
+    phonon_ref: Union[List[PhononDispersion], PhononAllRef] = zntrack.deps()
+    phonon_pred_list: Union[List[PhononDispersion], List[PhononAllBatch]] = zntrack.deps()
     elasticity_list: List[Elasticity] = zntrack.deps()
     lattice_const_list: List[LatticeConstant] = zntrack.deps()
     
@@ -91,8 +93,8 @@ class BulkCrystalBenchmark(zntrack.Node):
         elasticity_data: List[Elasticity] | Dict[str, Elasticity],
         lattice_const_data: List[LatticeConstant] | Dict[str, Dict[str, LatticeConstant]],
         lattice_const_ref_node_dict: LatticeConstant,
-        phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion],
-        phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]],
+        phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion] | PhononAllRef,
+        phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]] | List[PhononAllBatch] | Dict[str, PhononAllBatch],
         ui: str = "browser",
         full_benchmark: bool = False,
         report: bool = True,
@@ -104,27 +106,40 @@ class BulkCrystalBenchmark(zntrack.Node):
         """
         
         from mlipx.dash_utils import process_data
+        from mlipx.phonons_utils import convert_batch_to_node_dict
 
-        # Lattice constant
+        # ---- Lattice constant ----
         lattice_const_dict = process_data(
             lattice_const_data,
             key_extractor=lambda node: node.name.split("LatticeConst-")[1],
             value_extractor=lambda node: {node.name.split("_lattice-constant-pred")[0]: node}
         )            
 
-        # elasticity
+        # ---- elasticity ----
         elasticity_dict = process_data(
             elasticity_data,
             key_extractor=lambda node: node.name.split("_Elasticity")[0],
             value_extractor=lambda node: node
         )
 
-        # phonons
+        # ---- phonons -----
+        # if PhononAllRef then use adapter to convert to dict
+        if isinstance(phonon_ref_data, PhononAllRef):
+            phonon_ref_data = convert_batch_to_node_dict(phonon_ref_data)
+
         phonon_dict_ref = process_data(
             phonon_ref_data,
             key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
             value_extractor=lambda node: node
         )
+        
+        # if PhononAllBatch then use adapter to convert to dict
+        if isinstance(phonon_pred_data, dict) and all(isinstance(v, PhononAllBatch) for v in phonon_pred_data.values()):
+            pred_dict = {}
+            for model_name, batch_node in phonon_pred_data.items():
+                model_wrapped = convert_batch_to_node_dict(batch_node, model_name)
+                pred_dict.update(model_wrapped)
+            phonon_pred_data = pred_dict
 
         phonon_dict_pred = process_data(
             phonon_pred_data,
@@ -133,7 +148,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         )                
         
         
-        # get apps
+        # ---- get apps -----
         app_phonon, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict, phonon_md_path = PhononDispersion.benchmark_interactive(
             pred_node_dict=phonon_dict_pred,
             ref_node_dict=phonon_dict_ref,
@@ -272,7 +287,7 @@ class BulkCrystalBenchmark(zntrack.Node):
         for model in model_list:
             scores[model] = 0
             
-            scores[model] += 0.2 * mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, "Lat Const Score \u2193"].values[0]
+            scores[model] += 0.2 * mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, "Lat Const Score \u2193 (PBE)"].values[0]
             scores[model] += 1 * phonon_mae_df.loc[phonon_mae_df['Model'] == model, "Phonon Score \u2193"].values[0]
             scores[model] += 1 * mae_df_elas.loc[mae_df_elas['Model'] == model, "Elasticity Score \u2193"].values[0]
             

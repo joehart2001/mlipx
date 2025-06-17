@@ -227,9 +227,15 @@ class PhononDispersion(zntrack.Node):
         return np.max(freqs)
     
     @property
-    def formula(self) -> str:
-        with open(self.chemical_formula_path, "r") as f:
-            return json.load(f)["formula"]
+    def formula(self):
+        try:
+            path = getattr(self, "chemical_formula_path", None)
+            if path and Path(path).exists():
+                with open(path, "r") as f:
+                    return json.load(f).get("formula")
+        except (FileNotFoundError, KeyError, AttributeError, StopIteration, json.JSONDecodeError):
+            pass
+        return None
 
 
         
@@ -446,7 +452,8 @@ class PhononDispersion(zntrack.Node):
         ax2.grid(True, linestyle=':', linewidth=0.5)
         
         chemical_formula = node_ref.formula
-        chemical_formula = PhononDispersion.prettify_chemical_formula(chemical_formula)
+        if chemical_formula is not None:
+            chemical_formula = PhononDispersion.prettify_chemical_formula(chemical_formula)
         mp_id = node_ref.name.split("_")[-1]
         plt.suptitle(f"{chemical_formula} ({mp_id})", x=0.4, fontsize = 14)
             

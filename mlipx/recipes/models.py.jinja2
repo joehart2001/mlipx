@@ -5,6 +5,9 @@ import yaml
 import mlipx
 from mlipx.nodes.generic_ase import Device
 
+
+
+
 ALL_MODELS = {}
 
 # https://github.com/ACEsuit/mace
@@ -141,6 +144,39 @@ ALL_MODELS["fairchem-uma-sm"] = FairChemCalc(
     device="cpu"
 )
 
+
+@dataclasses.dataclass
+class SumCalcWrapper:
+    model_names: list[str]
+    d3_kwargs: dict | None = None
+
+    def get_calculator(self):
+        from ase.calculators.mixing import SumCalculator
+        from torch_dftd.torch_dftd3_calculator import TorchDFTD3Calculator
+        import torch
+        from ase import units
+
+        calculators = []
+        for name in self.model_names:
+            calc = MODELS[name]
+            if hasattr(calc, "get_calculator"):
+                calc = calc.get_calculator()
+            calculators.append(calc)
+
+        if self.d3_kwargs:
+            d3_calc = TorchDFTD3Calculator(
+                device=self.d3_kwargs.get("device", "cpu"),
+                damping=self.d3_kwargs.get("damping", "bj"),
+                xc=self.d3_kwargs.get("xc", "pbe"),
+                dtype=getattr(torch, self.d3_kwargs.get("dtype", "float32")),
+                cutoff=self.d3_kwargs.get("cutoff", 40.0 * units.Bohr),
+            )
+            calculators.append(d3_calc)
+
+        return SumCalculator(calculators)
+
+
+
 # OPTIONAL
 # ========
 # If you have custom property names you can use the UpdatedFramesCalc
@@ -181,13 +217,12 @@ for _name, _cfg in _registry.items():
             name=kwargs["name"],
             device=_cfg.get("device", "cpu"),
         )
-    # elif _cfg["class_name"] == "OrbCalc":
-    #     kwargs = _cfg.get("kwargs", {})
-    #     MODELS[_name] = OrbCalc(
-    #         name=kwargs["name"],
-    #         device=_cfg.get("device", "cpu"),
-    #         kwargs=kwargs
-    #     )
+    elif _cfg["class_name"] == "SumCalculator":
+        kwargs = _cfg.get("kwargs", {})
+        MODELS[_name] = SumCalcWrapper(
+            model_names=_cfg["models"],
+            d3_kwargs=_cfg.get("d3_kwargs", None),
+        )
     else:
         MODELS[_name] = mlipx.GenericASECalculator(
             module=_cfg["module"],
