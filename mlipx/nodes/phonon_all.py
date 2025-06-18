@@ -58,8 +58,6 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="spglib")
 #torch._dynamo.config.suppress_errors = True
 
 import ray
-import os
-import torch
 
 
 
@@ -67,9 +65,6 @@ import torch
 # Batched Ray remote function for processing multiple mp_ids at once
 @ray.remote
 def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
-    import torch
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"[{mp_ids[0]} - {mp_ids[-1]}] Running on device: {device}")
     results = []
     for mp_id in mp_ids:
         try:
@@ -204,6 +199,8 @@ class PhononAllBatch(zntrack.Node):
                 yield lst[i:i + n]
 
         # Run jobs in parallel using Ray (batched)
+        import torch
+        import os
         num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
         num_cpus = os.cpu_count()
         batch_size = 20 if num_gpus > 0 else 50

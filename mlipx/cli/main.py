@@ -351,6 +351,7 @@ def load_nodes_mpid_model(node_objects, models, split_str):
     
     return pred_node_dict, ref_node_dict
 
+
 # ------- end of helper functions -------
 
 
@@ -550,12 +551,11 @@ def get_bulk_crystal_benchmark_node_dicts(
     phonon_node_objects = load_node_objects(nodes, glob, models, phonon_nodes, split_str=split_str_phonons)
     elasticity_node_objects = load_node_objects(nodes, glob, models, elasticity_nodes, split_str=split_str_elasticity)
     lattice_const_node_objects = load_node_objects(nodes, glob, models, lattice_const_nodes, split_str=split_str_lattice_const)
-    
-    phonon_pred_node_dict, phonon_ref_node_dict = load_nodes_mpid_model(phonon_node_objects, models, split_str=split_str_phonons)
+    phonon_pred_node_dict, phonon_ref_node = load_nodes_phonon_batch(phonon_node_objects, models, split_str="_phonons-dispersion")
     elasticity_dict = load_nodes_model(elasticity_node_objects, models, split_str=split_str_elasticity)
     lattice_const_dict, lattice_const_ref_node_dict = load_nodes_and_ref_node_lat(lattice_const_node_objects, models, split_str=split_str_lattice_const)
     
-    return phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node_dict
+    return phonon_pred_node_dict, phonon_ref_node, elasticity_dict, lattice_const_dict, lattice_const_ref_node_dict
     
     
 @app.command()
@@ -775,7 +775,7 @@ def full_benchmark_compare(
         all_nodes = list(json.load(f).keys())
         
     # bulk crystal benchmark
-    phonon_pred_node_dict, phonon_ref_node_dict, elasticity_dict, lattice_const_dict, lattice_const_ref_node_dict = get_bulk_crystal_benchmark_node_dicts(
+    phonon_pred_node_dict, phonon_ref_node, elasticity_dict, lattice_const_dict, lattice_const_ref_node_dict = get_bulk_crystal_benchmark_node_dicts(
         nodes,
         glob,
         models,
@@ -815,7 +815,7 @@ def full_benchmark_compare(
     from mlipx import FullBenchmark
     if return_app:
         return FullBenchmark.benchmark_interactive(
-            phonon_ref_data=phonon_ref_node_dict,
+            phonon_ref_data=phonon_ref_node,
             phonon_pred_data=phonon_pred_node_dict,
             elasticity_data=elasticity_dict,
             lattice_const_data=lattice_const_dict,
