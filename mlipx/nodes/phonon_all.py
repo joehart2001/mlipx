@@ -62,10 +62,14 @@ import ray
 
 
 
-@ray.remote
+@ray.remote(num_gpus=1)
 def process_mp_id_ray(mp_id, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
     import torch
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    if torch.cuda.is_available() and torch.cuda.device_count() > 0:
+        device_id = torch.cuda.current_device()
+        device = f"cuda:{device_id}"
+    else:
+        device = "cpu"
     print(f"[{mp_id}] Running on device: {device}")
     return PhononAllBatch._process_mp_id_static(
         mp_id, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed
