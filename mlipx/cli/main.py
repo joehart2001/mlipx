@@ -831,7 +831,7 @@ def full_benchmark_compare(
         )
     else:
         FullBenchmark.benchmark_interactive(
-            phonon_ref_data=phonon_ref_node_dict,
+            phonon_ref_data=phonon_ref_node,
             phonon_pred_data=phonon_pred_node_dict,
             elasticity_data=elasticity_dict,
             lattice_const_data=lattice_const_dict,

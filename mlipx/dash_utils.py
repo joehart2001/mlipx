@@ -24,8 +24,12 @@ def reserve_free_port():
     port = s.getsockname()[1]
     return s, port
 
-def run_app(app, ui):
-    sock, port = reserve_free_port()
+def run_app(app, ui, port: Optional[int] = None):
+    if port:
+        port = int(port)
+        sock, _ = reserve_free_port()
+    else:
+        sock, port = reserve_free_port()
     url = f"http://localhost:{port}"
     sock.close()
 
