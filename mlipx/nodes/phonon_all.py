@@ -62,18 +62,23 @@ import ray
 
 
 
-@ray.remote(num_gpus=1)
-def process_mp_id_ray(mp_id, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
+
+# Batched Ray remote function for processing multiple mp_ids at once
+@ray.remote(num_gpus=1, num_cpus=1)
+def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
     import torch
-    if torch.cuda.is_available() and torch.cuda.device_count() > 0:
-        device_id = torch.cuda.current_device()
-        device = f"cuda:{device_id}"
-    else:
-        device = "cpu"
-    print(f"[{mp_id}] Running on device: {device}")
-    return PhononAllBatch._process_mp_id_static(
-        mp_id, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed
-    )
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"[{mp_ids[0]} - {mp_ids[-1]}] Running on device: {device}")
+    results = []
+    for mp_id in mp_ids:
+        try:
+            res = PhononAllBatch._process_mp_id_static(
+                mp_id, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed
+            )
+            results.append(res)
+        except Exception as e:
+            print(f"Skipping {mp_id} due to error: {e}")
+    return results
 
 
 class PhononAllBatch(zntrack.Node):
@@ -185,68 +190,30 @@ class PhononAllBatch(zntrack.Node):
 
 
     def run(self):
-        #calc = self.model.get_calculator()
-        
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
         fmax = self.fmax
-        
         q_mesh = self.N_q_mesh
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
-        
-        
-        
-        # Run jobs in parallel using Ray
-        ray.init()
-        # Commented out joblib.Parallel block
-        # try:
-        #     if self.threading:
-        #         parallel_backend_mode = "threading"
-        #         print("Using threading for parallel processing.")
-        #     else:
-        #         parallel_backend_mode = "multiprocessing"
-        #         print("Using multiprocessing for parallel processing.")
-        #     with parallel_backend(parallel_backend_mode):
-        #         raw_results = Parallel(n_jobs=self.n_jobs)(
-        #             delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-        #             for mp_id in self.mp_ids
-        #         )
-        #     successful_results = [(res["mp_id"], res) for res in raw_results if res is not None]
-        # except Exception as e:
-        #     if "terminated" in str(e).lower():
-        #         print("Detected possible worker termination (e.g. OOM). Retrying serially to identify faulty materials.")
-        #     else:
-        #         raise  # unknown error, re-raise
-        #     processed_mp_ids = {mp_id for mp_id, _ in successful_results}
-        #     for mp_id in self.mp_ids:
-        #         if mp_id in processed_mp_ids:
-        #             continue
-        #         try:
-        #             res = process_mp_id(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-        #             if res is not None:
-        #                 successful_results.append((res["mp_id"], res))
-        #         except Exception as err:
-        #             print(f"Serial run failed for {mp_id}: {err}")
-        #             traceback.print_exc()
-        #             failed_hard.append(mp_id)
-        # results = [res for _, res in successful_results]
-        # print(f"\nFinished with {len(results)} successful results.")
-        # if failed_hard:
-        #     print(f"{len(failed_hard)} materials failed due to memory or hard crashes.")
-        #     print("Failed mp-ids:", failed_hard)
 
-        # Ray logic
+        # Helper function to chunk the list into batches of size n
+        def chunk(lst, n):
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+
+        # Run jobs in parallel using Ray (batched)
+        ray.init()
+        batched_ids = list(chunk(self.mp_ids, 10))
         futures = [
-            process_mp_id_ray.remote(
-                mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
+            process_mp_ids_batch_ray.remote(
+                batch, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
             )
-            for mp_id in self.mp_ids
+            for batch in batched_ids
         ]
         raw_results = ray.get(futures)
-        results = [res for res in raw_results if res is not None]
+        results = [res for batch in raw_results for res in batch if res is not None]
         print(f"\nFinished with {len(results)} successful results.")
-        # Optionally shutdown ray
         ray.shutdown()
         
         # from math import ceil
