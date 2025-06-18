@@ -124,38 +124,69 @@ class BulkCrystalBenchmark(zntrack.Node):
 
         # ---- phonons -----
         # if PhononAllRef then use adapter to convert to dict
-        if isinstance(phonon_ref_data, PhononAllRef):
-            phonon_ref_data = convert_batch_to_node_dict(phonon_ref_data)
+        # if isinstance(phonon_ref_data, PhononAllRef):
+        #     phonon_ref_data = convert_batch_to_node_dict(phonon_ref_data)
 
-        phonon_dict_ref = process_data(
-            phonon_ref_data,
-            key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
-            value_extractor=lambda node: node
-        )
+        # phonon_dict_ref = process_data(
+        #     phonon_ref_data,
+        #     key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
+        #     value_extractor=lambda node: node
+        # )
         
         # if PhononAllBatch then use adapter to convert to dict
-        if isinstance(phonon_pred_data, dict) and all(isinstance(v, PhononAllBatch) for v in phonon_pred_data.values()):
-            pred_dict = {}
-            for model_name, batch_node in phonon_pred_data.items():
-                model_wrapped = convert_batch_to_node_dict(batch_node, model_name)
-                pred_dict.update(model_wrapped)
-            phonon_pred_data = pred_dict
+        if isinstance(phonon_ref_data, PhononAllRef):
+            if isinstance(phonon_pred_data, list) and all(isinstance(node, PhononAllBatch) for node in phonon_pred_data):
+                use_phonon_all_batch = True
+                # convert from list to {model_name: node} dict
+                phonon_pred_data = {node.name.split("_phonons-dispersion")[0]: node for node in phonon_pred_data}
+            elif isinstance(phonon_pred_data, dict) and all(isinstance(node, PhononAllBatch) for node in phonon_pred_data.values()):
+                use_phonon_all_batch = True
+            else:
+                use_phonon_all_batch = False
 
-        phonon_dict_pred = process_data(
-            phonon_pred_data,
-            key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
-            value_extractor=lambda node: {node.name.split("_phonons-dispersion")[0]: node}
-        )                
+            if use_phonon_all_batch:
+                (app_phonon, phonon_mae_df, phonon_scatter_to_dispersion_map,
+                phonon_benchmarks_scatter_dict, phonon_md_path) = PhononAllBatch.benchmark_interactive(
+                    pred_node_dict=phonon_pred_data,
+                    ref_phonon_node=phonon_ref_data,
+                    ui=ui,
+                    run_interactive=False,
+                    report=report,
+                    normalise_to_model=normalise_to_model,
+                )
+            else:
+                raise ValueError("phonon_ref_data is PhononAllRef but phonon_pred_data is not a list or dict of PhononAllBatch.")
+            
         
+        elif all(isinstance(node, PhononDispersion) for node in phonon_ref_data):
+            
+            phonon_dict_ref = process_data(
+                phonon_ref_data,
+                key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
+                value_extractor=lambda node: node
+            )
+            phonon_dict_pred = process_data(
+                phonon_pred_data,
+                key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
+                value_extractor=lambda node: {node.name.split("_phonons-dispersion")[0]: node}
+            )  
         
-        # ---- get apps -----
-        app_phonon, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict, phonon_md_path = PhononDispersion.benchmark_interactive(
-            pred_node_dict=phonon_dict_pred,
-            ref_node_dict=phonon_dict_ref,
-            run_interactive=False,
-            report=report,
-            normalise_to_model=normalise_to_model,
-        )
+            (app_phonon, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict, phonon_md_path
+            ) = PhononDispersion.benchmark_interactive(
+                pred_node_dict=phonon_dict_pred,
+                ref_node_dict=phonon_dict_ref,
+                run_interactive=False,
+                report=report,
+                normalise_to_model=normalise_to_model,
+            )
+        
+        else:
+            raise ValueError("phonon_ref_data must be a PhononAllRef or a list of PhononDispersion nodes, and phonon_pred_data must be a PhononAllBatch or a list of PhononDispersion nodes.")
+            
+            
+            
+        
+        # ---- get apps ----- (phonon app already above)
         
         app_elasticity, mae_df_elas, elas_md_path = mlipx.Elasticity.mae_plot_interactive(
             node_dict=elasticity_dict,

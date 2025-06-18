@@ -376,8 +376,9 @@ class PhononDataWrapper:
     
 
 def convert_batch_to_node_dict(
-    batch_node, model_name: t.Optional[str] = None
-) -> dict[str, t.Any]:
+    batch_node, 
+    model_name = None,
+):
     raw_data = batch_node.get_phonon_ref_data
     if model_name is None:
         return {mp_id: PhononDataWrapper(mp_id, data) for mp_id, data in raw_data.items()}

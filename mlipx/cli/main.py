@@ -498,7 +498,7 @@ def bulk_crystal_benchmark(
     
     nodes = [
         "*Elasticity*",
-        "*PhononDispersion*",
+        "*Phonon*",
         "*LatticeConst*",
     ]
     glob = True
@@ -760,7 +760,7 @@ def full_benchmark_compare(
     
     nodes = [
         "*Elasticity*",
-        "*PhononDispersion*",
+        "*Phonon*",
         "*LatticeConst*",
         "*X23Benchmark*",
         "*DMCICE13Benchmark*",

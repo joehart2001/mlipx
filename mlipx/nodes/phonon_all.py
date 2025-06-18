@@ -466,7 +466,7 @@ class PhononAllBatch(zntrack.Node):
         
         
     
-        PhononDispersion.benchmark_interactive(
+        output = PhononDispersion.benchmark_interactive(
             pred_node_dict=pred_node_dict_new,
             ref_node_dict=ref_node_dict,
             ui=ui,
@@ -475,6 +475,8 @@ class PhononAllBatch(zntrack.Node):
             normalise_to_model=normalise_to_model,
             no_plots=no_plots,
         )
+        
+        return output
         
         
 

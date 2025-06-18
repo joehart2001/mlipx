@@ -145,43 +145,41 @@ class HomonuclearDiatomics(zntrack.Node):
         if skipped_elements:
             print(f"Skipped {len(skipped_elements)} elements: {', '.join(skipped_elements)} — likely unsupported by the model.")
         
-        # ---- heteronuclear diatomics ----
+        # ---- heteronuclear diatomics ----       
         hetero_pairs = []
         if self.het_diatomics:
             for i, elem1 in enumerate(self.elements):
                 for elem2 in self.elements[i+1:]:
                     hetero_pairs.append((elem1, elem2))
-
-        if hetero_pairs:
+                    
+                    
+        for elem1, elem2 in tqdm(hetero_pairs, desc="Heteronuclear Pairs"):
+            traj_frames = []
             try:
-                from joblib import Parallel, delayed
-            except ImportError:
-                Parallel = None
-                delayed = None
-
-            def _hetero_worker(args):
-                return HomonuclearDiatomics._run_hetero_pair(
-                    elem1=args[0],
-                    elem2=args[1],
-                    eq_distance=self.eq_distance,
-                    min_distance=self.min_distance,
-                    max_distance=self.max_distance,
-                    n_points=self.n_points,
-                    calc=calc,
-                    trajectory_dir_path=self.trajectory_dir_path,
-                )
-
-            if Parallel is not None:
-                hetero_results = Parallel(n_jobs=-1)(
-                    delayed(_hetero_worker)(pair) for pair in hetero_pairs
-                )
-            else:
-                hetero_results = [_hetero_worker(pair) for pair in hetero_pairs]
-
-            # Collect results into e_v and self.frames
-            for colname, df, traj_frames in hetero_results:
-                e_v[colname] = df
-                self.frames.extend(traj_frames)
+                energies = []
+                if self.eq_distance == "covalent-radiuis":
+                    rmin = 0.9 * (covalent_radii[atomic_numbers[elem1]] + covalent_radii[atomic_numbers[elem2]]) / 2
+                    rvdw1 = vdw_alvarez.vdw_radii[atomic_numbers[elem1]] if atomic_numbers[elem1] < len(vdw_alvarez.vdw_radii) else np.nan
+                    rvdw2 = vdw_alvarez.vdw_radii[atomic_numbers[elem2]] if atomic_numbers[elem2] < len(vdw_alvarez.vdw_radii) else np.nan
+                    rvdw = (rvdw1 + rvdw2) / 2 if not (np.isnan(rvdw1) or np.isnan(rvdw2)) else 6
+                    rmax = 3.1 * rvdw
+                    rstep = 0.01
+                    npts = int((rmax - rmin) / rstep)
+                    distances = np.linspace(rmin, rmax, npts)
+                else:
+                    distances = np.linspace(self.min_distance, self.max_distance, self.n_points)
+                for distance in distances:
+                    molecule = ase.Atoms([elem1, elem2], positions=[(0, 0, 0), (0, 0, distance)])
+                    molecule.calc = calc
+                    energies.append(molecule.get_potential_energy())
+                    self.frames.append(freeze_copy_atoms(molecule))
+                    traj_frames.append(freeze_copy_atoms(molecule))
+                df = pd.DataFrame(energies, index=distances, columns=[f"{elem1}-{elem2}"])
+                e_v[f"{elem1}-{elem2}"] = df
+                ase.io.write((self.trajectory_dir_path / f"{elem1}{elem2}.extxyz"), traj_frames, append=True)
+            except Exception as e:
+                #print(f"Skipping hetero pair {elem1}-{elem2}: {e}")
+                continue
         
         #self.results = pd.DataFrame(results_list)
 
@@ -359,9 +357,11 @@ class HomonuclearDiatomics(zntrack.Node):
 
         for model_name, node in node_dict.items():
             results = node.results
-            results.index.name = "distance"
+            results.index.name = None
             results.reset_index(inplace=True)
+            results.rename(columns={"index": "distance"}, inplace=True)
             results_dict[model_name] = results
+            
 
             from mlipx.mlip_arena_utils import get_homonuclear_diatomic_properties, get_homonuclear_diatomic_stats
             get_homonuclear_diatomic_properties(model_name, node_dict[model_name])
@@ -745,4 +745,3 @@ class HomonuclearDiatomics(zntrack.Node):
         
         return stats_df.round(3)
     
- 
