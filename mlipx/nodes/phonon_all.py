@@ -58,13 +58,14 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="spglib")
 #torch._dynamo.config.suppress_errors = True
 
 import ray
-
+import os
+import torch
 
 
 
 
 # Batched Ray remote function for processing multiple mp_ids at once
-@ray.remote(num_gpus=1, num_cpus=1)
+@ray.remote
 def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
     import torch
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -203,14 +204,34 @@ class PhononAllBatch(zntrack.Node):
                 yield lst[i:i + n]
 
         # Run jobs in parallel using Ray (batched)
-        ray.init()
-        batched_ids = list(chunk(self.mp_ids, 10))
-        futures = [
-            process_mp_ids_batch_ray.remote(
-                batch, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
-            )
-            for batch in batched_ids
-        ]
+        num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
+        num_cpus = os.cpu_count()
+        batch_size = 20 if num_gpus > 0 else 50
+        gpu_fraction = 0.25 if num_gpus > 0 else 0  # 4 tasks per GPU
+        
+        ray.init(
+            num_cpus=num_cpus,
+            num_gpus=num_gpus,
+        )
+    
+        print(f"Initialized Ray: {num_cpus} CPUs, {num_gpus} GPUs")
+        
+
+        batched_ids = list(chunk(self.mp_ids, batch_size))
+        print(f"Created {len(batched_ids)} batches of size {batch_size}")
+
+        futures = []
+        for batch in batched_ids:
+            if num_gpus > 0:
+                # Use gpu_fraction instead of 1 full GPU
+                futures.append(process_mp_ids_batch_ray.options(num_gpus=gpu_fraction, num_cpus=2).remote(
+                    batch, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
+                ))
+            else:
+                futures.append(process_mp_ids_batch_ray.options(num_cpus=4).remote(
+                    batch, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
+                ))
+
         raw_results = ray.get(futures)
         results = [res for batch in raw_results for res in batch if res is not None]
         print(f"\nFinished with {len(results)} successful results.")
