@@ -1288,12 +1288,14 @@ class PhononDispersion(zntrack.Node):
             if not no_plots:
                 PhononDispersion.update_plotting_data(mp_id, model_name, phonon_plot_path, scatter_to_dispersion_map)
 
+            # Always save the confusion matrix CSV even if no_plots=True
+            PhononDispersion.save_stability_outputs(
+                model_name,
+                model_benchmarks_dict[model_name]["min_freq"]["ref"],
+                model_benchmarks_dict[model_name]["min_freq"]["pred"],
+                save_plots=not no_plots  # new argument to control plot saving
+            )
             if not no_plots:
-                PhononDispersion.save_stability_outputs(
-                    model_name,
-                    model_benchmarks_dict[model_name]["min_freq"]["ref"],
-                    model_benchmarks_dict[model_name]["min_freq"]["pred"]
-                )
                 PhononDispersion.save_violin_plot_and_data(
                     model_name,
                     scatter_to_dispersion_map[model_name].get("band_errors", {})
@@ -1597,19 +1599,19 @@ class PhononDispersion(zntrack.Node):
         return mae_summary_df
     
     @staticmethod
-    def save_stability_outputs(model_name, ref_vals, pred_vals, output_dir="benchmark_stats/bulk_crystal_benchmark/phonons"):
+    def save_stability_outputs(model_name, ref_vals, pred_vals, output_dir="benchmark_stats/bulk_crystal_benchmark/phonons", save_plots=True):
         from sklearn.metrics import confusion_matrix
 
         threshold = -0.05
         y_true = np.array(ref_vals) > threshold
         y_pred = np.array(pred_vals) > threshold
         cm = confusion_matrix(y_true, y_pred, labels=[True, False])  # [[TN, FP], [FN, TP]]
-        
+
         cm_df = pd.DataFrame(cm, index=["Stable (True)", "Not Stable (True)"], columns=["Stable (Pred)", "Not Stable (Pred)"])
         cm_path = Path(output_dir) / model_name / "stability/stability_confusion_matrix.csv"
         cm_path.parent.mkdir(parents=True, exist_ok=True)
         cm_df.to_csv(cm_path)
-        
+
         labels = []
         for r, p in zip(ref_vals, pred_vals):
             ref_stable = r > threshold
@@ -1623,16 +1625,17 @@ class PhononDispersion(zntrack.Node):
             else:
                 labels.append("FP")
 
-        scatter_fig = PhononDispersion.create_stability_scatter_plot(ref_vals, pred_vals, labels)
-        scatter_path = Path(output_dir) / model_name / "stability/stability_scatter_plot.png"
-        scatter_fig.write_image(scatter_path, width=800, height=600)
-        scatter_data_path = Path(output_dir) / model_name / "stability/stability_scatter_plot.csv"
-        scatter_df = pd.DataFrame({
-            "Reference ω_min [THz]": ref_vals,
-            "Predicted ω_min [THz]": pred_vals,
-            "Classification": labels
-        })
-        scatter_df.to_csv(scatter_data_path, index=False)
+        if save_plots:
+            scatter_fig = PhononDispersion.create_stability_scatter_plot(ref_vals, pred_vals, labels)
+            scatter_path = Path(output_dir) / model_name / "stability/stability_scatter_plot.png"
+            scatter_fig.write_image(scatter_path, width=800, height=600)
+            scatter_data_path = Path(output_dir) / model_name / "stability/stability_scatter_plot.csv"
+            scatter_df = pd.DataFrame({
+                "Reference ω_min [THz]": ref_vals,
+                "Predicted ω_min [THz]": pred_vals,
+                "Classification": labels
+            })
+            scatter_df.to_csv(scatter_data_path, index=False)
     
     
         

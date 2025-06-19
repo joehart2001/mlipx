@@ -15,6 +15,8 @@ from tqdm import tqdm
 from mlipx.abc import ComparisonResults, NodeWithCalculator
 from mlipx.utils import freeze_copy_atoms
 from pathlib import Path
+import matplotlib
+matplotlib.use("Agg") 
 
 class HomonuclearDiatomics(zntrack.Node):
     """Compute energy-bondlength curves for homonuclear diatomic molecules.
@@ -685,6 +687,12 @@ class HomonuclearDiatomics(zntrack.Node):
             ax.set_ylim(-20, 20)
             
             ax.axhline(0, color='grey', linewidth=0.5, zorder = 0)
+
+            # Draw a red box around the homonuclear subplot if selected
+            if selected_element and col == selected_element:
+                for spine in ax.spines.values():
+                    spine.set_edgecolor('red')
+                    spine.set_linewidth(2)
 
         # Turn off unused axes
         for r in range(n_rows):

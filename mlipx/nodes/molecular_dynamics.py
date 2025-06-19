@@ -10,6 +10,9 @@ import plotly.graph_objects as go
 import tqdm
 import zntrack
 from ase.md import Langevin
+from ase.io import read, write
+import typing as t
+
 
 from mlipx.abc import (
     ComparisonResults,
@@ -66,7 +69,8 @@ class MolecularDynamics(zntrack.Node):
 
     model: NodeWithCalculator = zntrack.deps()
     thermostat: NodeWithMolecularDynamics = zntrack.deps()
-    data: list[ase.Atoms] = zntrack.deps()
+    data: list[ase.Atoms] = zntrack.deps(None)
+    data_path: pathlib.Path = zntrack.params(None)
     data_id: int = zntrack.params(-1)
     steps: int = zntrack.params(100)
     observers: list[DynamicsObserver] = zntrack.deps(None)
@@ -82,7 +86,10 @@ class MolecularDynamics(zntrack.Node):
             self.observers = []
         if self.modifiers is None:
             self.modifiers = []
-        atoms = self.data[self.data_id]
+        if self.data:
+            atoms = self.data[self.data_id]
+        elif self.data_path:
+            atoms = read(self.data_path, self.data_id)
         atoms.calc = self.model.get_calculator()
         dyn = self.thermostat.get_molecular_dynamics(atoms)
         for obs in self.observers:
