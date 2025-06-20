@@ -12,7 +12,7 @@ import zntrack
 from ase.md import Langevin
 from ase.io import read, write
 import typing as t
-
+import time
 
 from mlipx.abc import (
     ComparisonResults,
@@ -73,6 +73,7 @@ class MolecularDynamics(zntrack.Node):
     data_path: pathlib.Path = zntrack.params(None)
     data_id: int = zntrack.params(-1)
     steps: int = zntrack.params(100)
+    print_energy_every: int = zntrack.params(1000)
     observers: list[DynamicsObserver] = zntrack.deps(None)
     modifiers: list[DynamicsModifier] = zntrack.deps(None)
 
@@ -82,6 +83,8 @@ class MolecularDynamics(zntrack.Node):
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
 
     def run(self):
+        start_time = time.time()
+        
         if self.observers is None:
             self.observers = []
         if self.modifiers is None:
@@ -108,7 +111,19 @@ class MolecularDynamics(zntrack.Node):
                 "fnorm": np.linalg.norm(atoms.get_forces()),
             }
             self.plots.loc[len(self.plots)] = plots
-
+            
+            # print every x steps
+            if self.print_energy_every is not None and idx % self.print_energy_every == 0:
+                epot = atoms.get_potential_energy() / len(atoms)
+                ekin = atoms.get_kinetic_energy() / len(atoms)
+                elapsed_time = time.time() - start_time
+                elapsed_min, elapsed_sec = divmod(elapsed_time, 60)
+                print(
+                    f"Step {idx} | Epot = {epot:.3f} eV  Ekin = {ekin:.3f} eV  "
+                    f"(T = {ekin / (1.5 * ase.units.kB):.0f} K)  "
+                    f"Etot = {epot + ekin:.3f} eV  Elapsed: {int(elapsed_min)}m {elapsed_sec:.1f}s"
+                )
+                
             for obs in self.observers:
                 if obs.check(atoms):
                     self.observer_metrics[obs.name] = idx

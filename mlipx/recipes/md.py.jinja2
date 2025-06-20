@@ -20,9 +20,25 @@ with project.group("initialize"):
         frames.append(mlipx.Smiles2Conformers(smiles=smiles, num_confs=1))
 {% endif %}
 
-thermostat = mlipx.LangevinConfig(timestep=0.5, temperature=300, friction=0.05)
-force_check = mlipx.MaximumForceObserver(f_max=100)
-t_ramp = mlipx.TemperatureRampModifier(end_temperature=400, total_steps=100)
+
+{% if steps %}
+steps = {{ steps }}
+{% else %}
+steps = 1000
+{% endif %}
+
+{% if temperature %}
+temperature = {{ temperature }}
+{% else %}
+temperature = 300
+{% endif %}
+
+thermostat = mlipx.LangevinConfig(timestep=1, temperature=temperature, friction=0.05)
+#force_check = mlipx.MaximumForceObserver(f_max=100)
+#t_ramp = mlipx.TemperatureRampModifier(end_temperature=400, total_steps=100)
+
+
+print(f"Running MD for {steps} steps at {temperature} K with {len(frames)} initial configurations.")
 
 
 for model_name, model in MODELS.items():
@@ -32,9 +48,11 @@ for model_name, model in MODELS.items():
                 model=model,
                 thermostat=thermostat,
                 data=data.frames,
-                observers=[force_check],
-                modifiers=[t_ramp],
-                steps=1000,
+                #observers=[force_check],
+                #modifiers=[t_ramp],
+                steps=steps,
+                print_energy_every=1000,
+
             )
 
 project.build()
