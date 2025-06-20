@@ -63,7 +63,7 @@ import ray
 
 
 # Batched Ray remote function for processing multiple mp_ids at once
-@ray.remote
+@ray.remote(num_cpus=1, num_gpus=0.25)
 def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
     results = []
     for mp_id in mp_ids:
