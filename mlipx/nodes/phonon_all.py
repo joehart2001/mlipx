@@ -76,6 +76,36 @@ def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_
             print(f"Skipping {mp_id} due to error: {e}")
     return results
 
+# def get_remote_function(use_cpu=False):
+#     """Return appropriate remote function based on CPU/GPU preference"""
+#     if use_cpu:
+#         return ray.remote(num_cpus=1)(process_mp_ids_batch_base)
+#     else:
+#         return ray.remote(num_gpus=1)(process_mp_ids_batch_base)
+
+# def process_mp_ids_batch_base(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
+#     """Base processing function that works for both CPU and GPU"""
+#     results = []
+#     for mp_id in mp_ids:
+#         try:
+#             res = PhononAllBatch._process_mp_id_static(
+#                 mp_id, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed
+#             )
+#             results.append(res)
+#         except Exception as e:
+#             print(f"Skipping {mp_id} due to error: {e}")
+#     return results
+
+# # Create separate remote functions for CPU and GPU (simpler approach)
+# @ray.remote(num_cpus=1)
+# def process_mp_ids_batch_ray_cpu(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
+#     return process_mp_ids_batch_base(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed)
+
+# @ray.remote(num_gpus=1)
+# def process_mp_ids_batch_ray_gpu(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
+#     return process_mp_ids_batch_base(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed)
+
+
 
 class PhononAllBatch(zntrack.Node):
     """Batch phonon calculations (FC2 + thermal props) for multiple mp-ids."""
@@ -85,7 +115,8 @@ class PhononAllBatch(zntrack.Node):
     phonopy_yaml_dir: str = zntrack.params()
     n_jobs: int = zntrack.params(-1)
     check_completed: bool = zntrack.params(False)
-    threading: bool = zntrack.params(False)
+    #threading: bool = zntrack.params(False)
+    cpu: bool = zntrack.params(False)
 
     N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
@@ -198,7 +229,10 @@ class PhononAllBatch(zntrack.Node):
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
 
-        ray.init(ignore_reinit_error=True)
+
+        ray.init(ignore_reinit_error=True, num_gpus=1)
+            
+            
         register_ray()
         
         calc_model = self.model  # Materialize to avoid lazy ZnTrack object
