@@ -186,6 +186,11 @@ class PhononAllBatch(zntrack.Node):
 
 
     def run(self):
+        from joblib import Parallel, delayed, parallel_backend
+        import ray
+        from ray.util.joblib import register_ray
+        register_ray()
+
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
         fmax = self.fmax
@@ -193,89 +198,36 @@ class PhononAllBatch(zntrack.Node):
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
 
-        # Helper function to chunk the list into batches of size n
-        def chunk(lst, n):
-            for i in range(0, len(lst), n):
-                yield lst[i:i + n]
+        ray.init(ignore_reinit_error=True)
 
-        # Run jobs in parallel using Ray (batched)
-        import torch
-        import os
-        num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 0
-        num_cpus = os.cpu_count()
-        batch_size = 20 if num_gpus > 0 else 50
-        gpu_fraction = 0.25 if num_gpus > 0 else 0  # 4 tasks per GPU
-        
-        ray.init(
-            num_cpus=num_cpus,
-            num_gpus=num_gpus,
-        )
-    
-        print(f"Initialized Ray: {num_cpus} CPUs, {num_gpus} GPUs")
-        
+        calc_model = self.model  # Materialize to avoid lazy ZnTrack object
 
-        batched_ids = list(chunk(self.mp_ids, batch_size))
-        print(f"Created {len(batched_ids)} batches of size {batch_size}")
+        def process(mp_id):
+            return PhononAllBatch._process_mp_id_static(
+                mp_id, calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
+            )
 
-        futures = []
-        for batch in batched_ids:
-            if num_gpus > 0:
-                # Use gpu_fraction instead of 1 full GPU
-                futures.append(process_mp_ids_batch_ray.options(num_gpus=gpu_fraction, num_cpus=2).remote(
-                    batch, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
-                ))
-            else:
-                futures.append(process_mp_ids_batch_ray.options(num_cpus=4).remote(
-                    batch, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
-                ))
+        with parallel_backend("ray", n_jobs=self.n_jobs):
+            results = Parallel()(delayed(process)(mp_id) for mp_id in self.mp_ids)
 
-        raw_results = ray.get(futures)
-        results = [res for batch in raw_results for res in batch if res is not None]
-        print(f"\nFinished with {len(results)} successful results.")
         ray.shutdown()
-        
-        # from math import ceil
 
-        # def chunks(lst, n):
-        #     """Yield successive n-sized chunks from lst."""
-        #     for i in range(0, len(lst), n):
-        #         yield lst[i:i + n]
+        results = [res for res in results if res is not None]
+        print(f"\nFinished with {len(results)} successful results.")
 
-        # batch_size = 1000  # or adjust based on your available memory
-        # all_results = []
-
-        # for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
-        #     print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
-        #     results = Parallel(n_jobs=4)(  
-        #         delayed(process_mp_id)(
-        #             mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures
-        #         )
-        #         for mp_id in mp_batch
-        #     )
-        #     all_results.extend(results)
-
-
-
-        
         phonon_band_path_dict = {
-            res["mp_id"]: str(res["phonon_band_path_dict"])
-            for res in results if res is not None
+            res["mp_id"]: str(res["phonon_band_path_dict"]) for res in results
         }
         phonon_dos_path_dict = {
-            res["mp_id"]: str(res["phonon_dos_dict"])
-            for res in results if res is not None
+            res["mp_id"]: str(res["phonon_dos_dict"]) for res in results
         }
         thermal_properties_path_dict = {
-            res["mp_id"]: str(res["thermal_properties_dict"])
-            for res in results if res is not None
+            res["mp_id"]: str(res["thermal_properties_dict"]) for res in results
         }
         chemical_formula_dict = {
-            res["mp_id"]: res["formula"]
-            for res in results if res is not None
+            res["mp_id"]: res["formula"] for res in results
         }
 
-        
-        # Save paths to JSON files
         with open(self.phonon_band_paths, "w") as f:
             json.dump(phonon_band_path_dict, f, indent=4)
         with open(self.phonon_dos_paths, "w") as f:
@@ -437,4 +389,3 @@ class PhononAllBatch(zntrack.Node):
         return output
         
         
-
