@@ -63,7 +63,7 @@ import ray
 
 
 # Batched Ray remote function for processing multiple mp_ids at once
-@ray.remote(num_cpus=1, num_gpus=0.25)
+@ray.remote(num_gpus=1)
 def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
     results = []
     for mp_id in mp_ids:
@@ -189,7 +189,7 @@ class PhononAllBatch(zntrack.Node):
         from joblib import Parallel, delayed, parallel_backend
         import ray
         from ray.util.joblib import register_ray
-        register_ray()
+        
 
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
@@ -199,7 +199,8 @@ class PhononAllBatch(zntrack.Node):
         temperatures = self.thermal_properties_temperatures
 
         ray.init(ignore_reinit_error=True)
-
+        register_ray()
+        
         calc_model = self.model  # Materialize to avoid lazy ZnTrack object
 
         def process(mp_id):

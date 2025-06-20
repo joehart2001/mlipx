@@ -698,6 +698,12 @@ class PhononDispersion(zntrack.Node):
 
 
         for model_name in plot_stats_dict:
+            PhononDispersion.save_stability_outputs(
+                model_name,
+                model_benchmarks_dict[model_name]["min_freq"]["ref"],
+                model_benchmarks_dict[model_name]["min_freq"]["pred"],
+                save_plots=not no_plots  # new argument to control plot saving
+            )
             PhononDispersion.calculate_benchmark_statistics(model_name, model_benchmarks_dict, plot_stats_dict, benchmarks)
         
         # summary statistics and generate plots
@@ -1289,12 +1295,12 @@ class PhononDispersion(zntrack.Node):
                 PhononDispersion.update_plotting_data(mp_id, model_name, phonon_plot_path, scatter_to_dispersion_map)
 
             # Always save the confusion matrix CSV even if no_plots=True
-            PhononDispersion.save_stability_outputs(
-                model_name,
-                model_benchmarks_dict[model_name]["min_freq"]["ref"],
-                model_benchmarks_dict[model_name]["min_freq"]["pred"],
-                save_plots=not no_plots  # new argument to control plot saving
-            )
+            # PhononDispersion.save_stability_outputs(
+            #     model_name,
+            #     model_benchmarks_dict[model_name]["min_freq"]["ref"],
+            #     model_benchmarks_dict[model_name]["min_freq"]["pred"],
+            #     save_plots=not no_plots  # new argument to control plot saving
+            # )
             if not no_plots:
                 PhononDispersion.save_violin_plot_and_data(
                     model_name,
@@ -1606,7 +1612,7 @@ class PhononDispersion(zntrack.Node):
         y_true = np.array(ref_vals) > threshold
         y_pred = np.array(pred_vals) > threshold
         cm = confusion_matrix(y_true, y_pred, labels=[True, False])  # [[TN, FP], [FN, TP]]
-
+        print(f"Confusion Matrix for {model_name}:\n{cm}")
         cm_df = pd.DataFrame(cm, index=["Stable (True)", "Not Stable (True)"], columns=["Stable (Pred)", "Not Stable (Pred)"])
         cm_path = Path(output_dir) / model_name / "stability/stability_confusion_matrix.csv"
         cm_path.parent.mkdir(parents=True, exist_ok=True)
