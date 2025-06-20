@@ -118,7 +118,7 @@ class MolecularDynamics(zntrack.Node):
                 ekin = atoms.get_kinetic_energy() / len(atoms)
                 elapsed_time = time.time() - start_time
                 elapsed_min, elapsed_sec = divmod(elapsed_time, 60)
-                print(
+                tqdm.tqdm.write(
                     f"Step {idx} | Epot = {epot:.3f} eV  Ekin = {ekin:.3f} eV  "
                     f"(T = {ekin / (1.5 * ase.units.kB):.0f} K)  "
                     f"Etot = {epot + ekin:.3f} eV  Elapsed: {int(elapsed_min)}m {elapsed_sec:.1f}s"
