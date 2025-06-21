@@ -190,6 +190,8 @@ class SumCalcWrapper:
                         device=device,
                         kwargs=kwargs
                     )
+                    if hasattr(calc, "get_calculator"):
+                        calc = calc.get_calculator()
             else:
                 raise TypeError(f"Unsupported model type in SumCalculator: {type(model)}")
 

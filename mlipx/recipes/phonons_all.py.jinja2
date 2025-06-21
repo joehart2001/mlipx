@@ -24,7 +24,12 @@ local_path = Path(BENCHMARK_DATA_DIR) / "alex_phonons/alex_phonon_data"
 with open(f"{local_path}/../mp_ids_subsampled.txt", "r") as f:
     mp_ids = [line.strip() for line in f.readlines()]
 
-{% if n_phonons and n_phonons_start %}
+{% if small %}
+md_ids = mp_ids[:10]
+{% elif medium %}
+md_ids = mp_ids[:100]
+
+{% elif n_phonons and n_phonons_start %}
 mp_ids = mp_ids[{{ n_phonons_start }}:{{ n_phonons }}]
 
 {% elif n_phonons %}
@@ -57,11 +62,11 @@ check_completed = {{ check_completed }}
 check_completed = False
 {% endif %}
 
-# with project.group("phonons-dispersion-ref"):
-#     phonon_ref_node = mlipx.PhononAllRef(
-#             mp_ids=mp_ids,
-#             phonopy_yaml_dir=str(local_path),
-#     )
+with project.group("phonons-dispersion-ref"):
+    phonon_ref_node = mlipx.PhononAllRef(
+            mp_ids=mp_ids,
+            phonopy_yaml_dir=str(local_path),
+    )
 
 
 {% if threading == True %}
@@ -71,11 +76,11 @@ threading = False
 {% endif %}
 
 
-# with project.group("phonons-dispersion-ref"):
-#     phonon_ref_node = mlipx.PhononAllRef(
-#             mp_ids=alex_subset_mpids,
-#             phonopy_yaml_dir=str(local_path),
-#     )
+with project.group("phonons-dispersion-ref"):
+    phonon_ref_node = mlipx.PhononAllRef(
+            mp_ids=mp_ids,
+            phonopy_yaml_dir=str(local_path),
+    )
 
 
 {% if generate_displacements == True %}

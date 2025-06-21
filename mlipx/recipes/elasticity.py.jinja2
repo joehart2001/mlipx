@@ -12,8 +12,12 @@ project = zntrack.Project()
 {% endif %}
 
 
+{% if small %}
+n_materials = 100
+{% elif medium %}
+n_materials = 1000
 
-{% if n_materials %}
+{% elif n_materials %}
 n_materials = {{ n_materials }}
 {% else %}
 n_materials = None # none means all

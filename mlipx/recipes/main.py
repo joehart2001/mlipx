@@ -415,10 +415,11 @@ def phonons_all(
     datapath: str | None = None,
     n_phonons: int | None = None,
     n_phonons_start: int | None = None,
+    small: bool = False,
+    medium: bool = False,
     n_jobs: int | None = -1,
     check_completed: bool | None = None,
     generate_displacements: bool = False,
-    threading: bool = False,
     material_ids: str | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
@@ -433,11 +434,12 @@ def phonons_all(
         datapath=datapath,
         material_ids=material_ids,
         smiles=smiles,
-        n_materials=n_phonons,
-        n_materials_start=n_phonons_start,
+        n_phonons=n_phonons,
+        n_phonons_start=n_phonons_start,
+        small=small,
+        medium=medium,
         check_completed=check_completed,
         generate_displacements=generate_displacements,
-        threading=threading,
         n_jobs=n_jobs,
     )
     
@@ -515,6 +517,8 @@ def elasticity(
     datapath: str | None = None,
     material_ids: str | None = None,
     n_materials: int | None = None,
+    small: bool = False,
+    medium: bool = False,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
     n_jobs: int | None = -1,
@@ -541,6 +545,10 @@ def bulk_crystal(
     datapath: str | None = None,
     material_ids: str | None = None,
     n_materials: int | None = None,
+    n_phonons: int | None = None,
+    small: bool = False,
+    medium: bool = False,
+    n_jobs: int | None = -1,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
 ):
@@ -555,6 +563,10 @@ def bulk_crystal(
         material_ids=material_ids,
         smiles=smiles,
         n_materials=n_materials,
+        n_phonons=n_phonons,
+        small=small,
+        medium=medium,
+        n_jobs=n_jobs,
     )
     
 
@@ -682,6 +694,10 @@ def full_benchmark(
     datapath: str | None = None,
     material_ids: str | None = None,
     n_materials: int | None = None,
+    n_phonons: int | None = None,
+    small: bool = False,
+    medium: bool = False,
+    n_jobs: int | None = -1,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
 ):
@@ -696,6 +712,10 @@ def full_benchmark(
         material_ids=material_ids,
         smiles=smiles,
         n_materials=n_materials,
+        n_phonons=n_phonons,
+        small=small,
+        medium=medium,
+        n_jobs=n_jobs,
     )
     
     
