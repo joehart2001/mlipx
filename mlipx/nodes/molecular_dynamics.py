@@ -268,25 +268,30 @@ class MolecularDynamics(zntrack.Node):
     ):
         import pandas as pd
         import numpy as np
+        import tqdm
         from dash import dcc, html
-        from dash.dependencies import Input, Output, State
-        from dash.exceptions import PreventUpdate
         import dash
         from mlipx.dash_utils import dash_table_interactive, run_app
         import json
-        
+
         # Define which properties to compute
         properties = [
             'g_r_oo',
+            'g_r_oh',
+            'g_r_hh',
         ]
 
         from mlipx.benchmark_download_utils import get_benchmark_data
         ref_data_path = get_benchmark_data("water_MD.zip") / "water_MD"
 
         properties_dict = {}
-        # Add reference data
-        with open(ref_data_path / "pbe-d3-300k-g(r)_oo.json", "r") as f:
-            pbe_D3_330K = json.load(f)
+        # Add reference data (only for g_r_oo)
+        with open(ref_data_path / "pbe-d3-330k-g-r_oo.json", "r") as f:
+            pbe_D3_330K_oo = json.load(f)
+        with open(ref_data_path / "pbe-d3-330k-g-r_hh.json", "r") as f:
+            pbe_D3_330K_hh = json.load(f)
+        with open(ref_data_path / "pbe-d3-330k-g-r_oh.json", "r") as f:
+            pbe_D3_330K_oh = json.load(f)
         with open(ref_data_path / "exp-300k-g(r)_oo.json", "r") as f:
             exp_300K = json.load(f)
 
@@ -304,13 +309,16 @@ class MolecularDynamics(zntrack.Node):
         }
 
         # Compute properties for each model
-        for model_name, node in node_dict.items():
+        for model_name, node in tqdm.tqdm(node_dict.items(), desc="Computing properties for models"):
             properties_dict[model_name] = {}
             traj = node.frames
+            traj = traj[::50]
+            print("loaded trajectory for model:", model_name)
             o_indices = [atom.index for atom in traj[0] if atom.symbol == 'O']
+            h_indices = [atom.index for atom in traj[0] if atom.symbol == 'H']
             for prop in properties:
                 if prop == 'g_r_oo':
-                    # Compute RDF for the trajectory
+                    # O-O RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
                         traj,
                         i_indices=o_indices,
@@ -322,72 +330,222 @@ class MolecularDynamics(zntrack.Node):
                         "r": r,
                         "rdf": rdf,
                     }
+                elif prop == 'g_r_oh':
+                    # O-H RDF
+                    r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
+                        traj,
+                        i_indices=o_indices,
+                        j_indices=h_indices,
+                        r_max=6.0,
+                        bins=100,
+                    )
+                    properties_dict[model_name][prop] = {
+                        "r": r,
+                        "rdf": rdf,
+                    }
+                elif prop == 'g_r_hh':
+                    # H-H RDF
+                    r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
+                        traj,
+                        i_indices=h_indices,
+                        j_indices=h_indices,
+                        r_max=6.0,
+                        bins=100,
+                    )
+                    properties_dict[model_name][prop] = {
+                        "r": r,
+                        "rdf": rdf,
+                    }
 
-        # --- Generalized MAE summary table logic ---
-        # Prepare MAE data for all properties and references
-        mae_data = []
+        # --- Create separate MAE DataFrames for each property ---
         reference_keys = [k for k in properties_dict.keys() if k not in node_dict]
+        model_names = list(node_dict.keys())
 
-        for model_name in node_dict.keys():
-            for prop in properties:
-                for ref_key in reference_keys:
-                    if prop not in properties_dict[model_name] or prop not in properties_dict[ref_key]:
-                        continue
+        # O-O: MAE table (models vs references)
+        mae_data_oo = []
+        for model_name in model_names:
+            row = {"Model": model_name}
+            prop = 'g_r_oo'
+            for ref_key in reference_keys:
+                if (
+                    prop in properties_dict[model_name]
+                    and prop in properties_dict[ref_key]
+                ):
                     r_common = properties_dict[ref_key][prop]['r']
                     rdf_ref = np.interp(r_common, properties_dict[ref_key][prop]['r'], properties_dict[ref_key][prop]['rdf'])
                     rdf_model = np.interp(r_common, properties_dict[model_name][prop]['r'], properties_dict[model_name][prop]['rdf'])
                     mae = np.mean(np.abs(rdf_model - rdf_ref))
-                    mae_data.append({
-                        "Model": model_name,
-                        "Reference": ref_key,
-                        "Property": prop,
-                        "MAE": round(mae, 4)
-                    })
+                    row[ref_key] = round(mae, 4)
+            mae_data_oo.append(row)
+        mae_df_oo = pd.DataFrame(mae_data_oo)
+        # Score and rank logic using normalise_to_model if provided
+        if 'pbe_D3_330K' in mae_df_oo.columns:
+            if normalise_to_model is not None and normalise_to_model in mae_df_oo["Model"].values:
+                base_mae = mae_df_oo.loc[mae_df_oo["Model"] == normalise_to_model, "pbe_D3_330K"].values[0]
+            else:
+                base_mae = mae_df_oo["pbe_D3_330K"].min()
+            mae_df_oo["Score ↓ (PBE)"] = mae_df_oo["pbe_D3_330K"] / base_mae
+            mae_df_oo["Rank (PBE)"] = mae_df_oo["Score ↓ (PBE)"].rank(method="min").astype(int)
 
-        mae_df = pd.DataFrame(mae_data)
+        # O-H: MAE table (models vs models, no reference)
+        mae_data_oh = []
+        prop = 'g_r_oh'
+        for model_name in model_names:
+            row = {"Model": model_name}
+            for other_model in model_names:
+                if model_name == other_model:
+                    continue
+                if (
+                    prop in properties_dict[model_name]
+                    and prop in properties_dict[other_model]
+                ):
+                    r_common = properties_dict[model_name][prop]['r']
+                    rdf_other = np.interp(r_common, properties_dict[other_model][prop]['r'], properties_dict[other_model][prop]['rdf'])
+                    rdf_model = np.interp(r_common, properties_dict[model_name][prop]['r'], properties_dict[model_name][prop]['rdf'])
+                    mae = np.mean(np.abs(rdf_model - rdf_other))
+                    row[other_model] = round(mae, 4)
+            mae_data_oh.append(row)
+        mae_df_oh = pd.DataFrame(mae_data_oh)
 
-        # Create Dash App
-        if run_interactive:
-            app = dash.Dash(__name__)
-            app.layout = dash_table_interactive(
-                df=mae_df,
-                id="rdf-mae-score-table",
-                title="RDF MAE Summary Table",
+        # H-H: MAE table (models vs models, no reference)
+        mae_data_hh = []
+        prop = 'g_r_hh'
+        for model_name in model_names:
+            row = {"Model": model_name}
+            for other_model in model_names:
+                if model_name == other_model:
+                    continue
+                if (
+                    prop in properties_dict[model_name]
+                    and prop in properties_dict[other_model]
+                ):
+                    r_common = properties_dict[model_name][prop]['r']
+                    rdf_other = np.interp(r_common, properties_dict[other_model][prop]['r'], properties_dict[other_model][prop]['rdf'])
+                    rdf_model = np.interp(r_common, properties_dict[model_name][prop]['r'], properties_dict[model_name][prop]['rdf'])
+                    mae = np.mean(np.abs(rdf_model - rdf_other))
+                    row[other_model] = round(mae, 4)
+            mae_data_hh.append(row)
+        mae_df_hh = pd.DataFrame(mae_data_hh)
+
+        if ui is None and run_interactive:
+            return mae_df_oo, mae_df_oh, mae_df_hh
+
+        # --- Dash Layout ---
+        app = dash.Dash(__name__)
+        app.layout = html.Div([
+            html.H1("Water MD Benchmark"),
+            html.H3("O-O RDF MAE Table"),
+            dash_table_interactive(
+                df=mae_df_oo,
+                id="rdf-mae-score-table-oo",
+                title=None,
                 extra_components=[
-                    html.Div(id="rdf-table-details"),
-                    dcc.Store(id="rdf-table-last-clicked", data=None),
+                    html.Div(id="rdf-table-details-oo"),
+                    dcc.Store(id="rdf-table-last-clicked-oo", data=None),
                 ],
+            ),
+            html.H3("O-H RDF Table"),
+            dash_table_interactive(
+                df=mae_df_oh,
+                id="rdf-mae-score-table-oh",
+                title=None,
+                extra_components=[
+                    html.Div(id="rdf-table-details-oh"),
+                    dcc.Store(id="rdf-table-last-clicked-oh", data=None),
+                ],
+            ),
+            html.H3("H-H RDF Table"),
+            dash_table_interactive(
+                df=mae_df_hh,
+                id="rdf-mae-score-table-hh",
+                title=None,
+                extra_components=[
+                    html.Div(id="rdf-table-details-hh"),
+                    dcc.Store(id="rdf-table-last-clicked-hh", data=None),
+                ],
+            ),
+        ])
+
+        # Register callbacks for each table
+        MolecularDynamics.register_callbacks(
+            app, mae_df_oo, properties_dict,
+            table_id="rdf-mae-score-table-oo",
+            details_id="rdf-table-details-oo",
+            last_clicked_id="rdf-table-last-clicked-oo",
+            selected_property="g_r_oo",
+        )
+        MolecularDynamics.register_callbacks(
+            app, mae_df_oh, properties_dict,
+            table_id="rdf-mae-score-table-oh",
+            details_id="rdf-table-details-oh",
+            last_clicked_id="rdf-table-last-clicked-oh",
+            selected_property="g_r_oh",
+        )
+        MolecularDynamics.register_callbacks(
+            app, mae_df_hh, properties_dict,
+            table_id="rdf-mae-score-table-hh",
+            details_id="rdf-table-details-hh",
+            last_clicked_id="rdf-table-last-clicked-hh",
+            selected_property="g_r_hh",
+        )
+
+        if not run_interactive:
+            return app, (mae_df_oo, mae_df_oh, mae_df_hh), properties_dict
+        return run_app(app, ui=ui)
+
+
+
+    @staticmethod
+    def register_callbacks(app, mae_df, properties_dict, table_id, details_id, last_clicked_id, selected_property):
+        from dash.dependencies import Input, Output, State
+        from dash.exceptions import PreventUpdate
+        from dash import dcc
+        import plotly.graph_objs as go
+        import pandas as pd
+
+        # For O-O, show references; for O-H and H-H, only models
+        model_names = list(mae_df["Model"].values)
+        # All reference keys are those in properties_dict but not in model_names
+        reference_keys = [k for k in properties_dict if k not in model_names]
+
+        @app.callback(
+            Output(details_id, "children"),
+            Output(last_clicked_id, "data"),
+            Input(table_id, "active_cell"),
+            State(last_clicked_id, "data"),
+        )
+        def update_rdf_plot(active_cell, last_clicked):
+            if active_cell is None:
+                raise PreventUpdate
+            row = active_cell["row"]
+            model_name = mae_df.loc[row, "Model"]
+            if last_clicked is not None and active_cell == last_clicked:
+                return None, None
+
+            fig = go.Figure()
+            col = active_cell["column_id"]
+            # For O-O, show references, for O-H and H-H, just models
+            if selected_property == "g_r_oo":
+                for ref_key in reference_keys:
+                    if 'g_r_oo' in properties_dict[ref_key]:
+                        r = properties_dict[ref_key]['g_r_oo']['r']
+                        rdf = properties_dict[ref_key]['g_r_oo']['rdf']
+                        opacity = 1.0 if col == ref_key else 0.3
+                        fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{ref_key} (g_r_oo)", opacity=opacity))
+            # Plot all model RDFs for this property
+            for model in model_names:
+                if selected_property in properties_dict[model]:
+                    r = properties_dict[model][selected_property]['r']
+                    rdf = properties_dict[model][selected_property]['rdf']
+                    opacity = 1.0 if model == model_name else 0.4
+                    fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{model}", opacity=opacity))
+
+            fig.update_layout(
+                title=f"RDF Comparison for {model_name} ({selected_property.replace('_', '-')})",
+                xaxis_title="r (Å)",
+                yaxis_title="g(r)",
             )
-
-            @app.callback(
-                Output("rdf-table-details", "children"),
-                Output("rdf-table-last-clicked", "data"),
-                Input("rdf-mae-score-table", "active_cell"),
-                State("rdf-table-last-clicked", "data"),
-            )
-            def update_rdf_plot(active_cell, last_clicked):
-                if active_cell is None:
-                    raise PreventUpdate
-                row = active_cell["row"]
-                model_name = mae_df.loc[row, "Model"]
-                ref_model = mae_df.loc[row, "Reference"]
-                prop = mae_df.loc[row, "Property"]
-                if last_clicked is not None and active_cell == last_clicked:
-                    return None, None
-                r = properties_dict[ref_model][prop]['r']
-                rdf_ref = properties_dict[ref_model][prop]['rdf']
-                rdf_model = np.interp(r, properties_dict[model_name][prop]['r'], properties_dict[model_name][prop]['rdf'])
-
-                import plotly.graph_objs as go
-                fig = go.Figure()
-                fig.add_trace(go.Scatter(x=r, y=rdf_ref, mode='lines', name=f"{ref_model} ({prop})"))
-                fig.add_trace(go.Scatter(x=r, y=rdf_model, mode='lines', name=f"{model_name} ({prop})"))
-                fig.update_layout(title=f"{prop} Comparison: {model_name} vs {ref_model}", xaxis_title="r (Å)", yaxis_title="g(r)")
-                return dcc.Graph(figure=fig), active_cell
-
-            return run_app(app, ui=ui)
-        else:
-            return mae_df
+            return dcc.Graph(figure=fig), active_cell
             
     def _compute_partial_rdf(atoms, i_indices, j_indices, r_max):
         i_list, j_list, dists = neighbor_list('ijd', atoms, r_max)
@@ -400,8 +558,10 @@ class MolecularDynamics(zntrack.Node):
         i_indices = np.array(i_indices)
         j_indices = np.array(j_indices)
 
+        from tqdm import tqdm
         results = Parallel(n_jobs=n_jobs)(
-            delayed(MolecularDynamics._compute_partial_rdf)(atoms, i_indices, j_indices, r_max) for atoms in atoms_list
+            delayed(MolecularDynamics._compute_partial_rdf)(atoms, i_indices, j_indices, r_max)
+            for atoms in tqdm(atoms_list, desc="Computing RDF per frame")
         )
 
         all_distances = []
@@ -425,5 +585,7 @@ class MolecularDynamics(zntrack.Node):
         ideal_gas_distribution = shell_volumes * rho
 
         rdf = hist / (ideal_gas_distribution * total_pairs)
+        
+        rdf = rdf / rdf[np.argmax(r)] # liquid rdf should be 1 at large r
 
         return r, rdf

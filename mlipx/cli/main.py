@@ -939,3 +939,32 @@ def diatomics_compare(
     )
 
 
+@app.command()
+def md_compare(
+    nodes: Annotated[list[str], typer.Argument(help="Path(s) to diatomics nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+):
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_config-0_MolecularDynamics")
+    
+    benchmark_node_dict = load_nodes_model(node_objects, models, split_str="_config-0_MolecularDynamics")
+    
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    from mlipx import MolecularDynamics
+    MolecularDynamics.mae_plot_interactive(
+        node_dict=benchmark_node_dict,
+        ui=ui,
+        normalise_to_model=normalise_to_model,
+    )
+    

@@ -1612,7 +1612,6 @@ class PhononDispersion(zntrack.Node):
         y_true = np.array(ref_vals) > threshold
         y_pred = np.array(pred_vals) > threshold
         cm = confusion_matrix(y_true, y_pred, labels=[True, False])  # [[TN, FP], [FN, TP]]
-        print(f"Confusion Matrix for {model_name}:\n{cm}")
         cm_df = pd.DataFrame(cm, index=["Stable (True)", "Not Stable (True)"], columns=["Stable (Pred)", "Not Stable (Pred)"])
         cm_path = Path(output_dir) / model_name / "stability/stability_confusion_matrix.csv"
         cm_path.parent.mkdir(parents=True, exist_ok=True)

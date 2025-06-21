@@ -60,12 +60,6 @@ class BulkCrystalBenchmark(zntrack.Node):
     elasticity_list: List[Elasticity] = zntrack.deps()
     lattice_const_list: List[LatticeConstant] = zntrack.deps()
     
-    # outputs
-    # nwd: ZnTrack's node working directory for saving files
-    #elasticity_dict: pathlib.Path = zntrack.outs_path(zntrack.nwd / "elasticity_dict.json")
-    #phonon_ref_dict: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_ref_dict.json")
-    #phonon_pred_dict: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_pred_dict.json")
-
     
     def run(self):
         pass

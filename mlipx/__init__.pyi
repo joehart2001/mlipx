@@ -49,6 +49,7 @@ from .nodes.phonon_all_ref import PhononAllRef
 from .nodes.phonon_all_meta import PhononAllBatchMeta
 from .nodes.oc157 import OC157Benchmark
 from .nodes.wiggle150 import Wiggle150
+from .nodes.further_applications import FutherApplications
 from .project import Project
 from .version import __version__
 
@@ -107,5 +108,6 @@ __all__ = [
     "OC157Benchmark",
     "PhononAllBatchMeta",
     "Wiggle150",
+    "FutherApplications",
     "__version__",
 ]
