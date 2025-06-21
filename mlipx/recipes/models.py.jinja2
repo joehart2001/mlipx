@@ -157,11 +157,50 @@ class SumCalcWrapper:
         from ase import units
 
         calculators = []
-        for name in self.model_names:
-            calc = MODELS[name]
-            if hasattr(calc, "get_calculator"):
-                calc = calc.get_calculator()
+        for model in self.model_names:
+            if isinstance(model, str):
+                calc = MODELS[model]
+                if hasattr(calc, "get_calculator"):
+                    calc = calc.get_calculator()
+            elif isinstance(model, dict):
+                class_name = model["class_name"]
+                module = model.get("module", None)
+                device = model.get("device", "auto")
+                kwargs = model.get("kwargs", {})
+
+                if class_name == "FAIRChemCalculator":
+                    from fairchem.core import pretrained_mlip, FAIRChemCalculator
+                    predictor = pretrained_mlip.get_predict_unit(
+                        kwargs["model_name"],
+                        device=device,
+                        overrides=kwargs.get("overrides", {})
+                    )
+                    calc = FAIRChemCalculator(predictor, task_name=kwargs.get("task_name", "omat"))
+
+                elif class_name == "OrbCalc":
+                    from orb_models.forcefield import pretrained
+                    from orb_models.forcefield.calculator import ORBCalculator
+                    method = getattr(pretrained, kwargs["name"])
+                    calc = ORBCalculator(method(device=device, **kwargs), device=device, **kwargs)
+
+                else:
+                    calc = mlipx.GenericASECalculator(
+                        module=module,
+                        class_name=class_name,
+                        device=device,
+                        kwargs=kwargs
+                    )
+            else:
+                raise TypeError(f"Unsupported model type in SumCalculator: {type(model)}")
+
             calculators.append(calc)
+
+        # calculators = []
+        # for name in self.model_names:
+        #     calc = MODELS[name]
+        #     if hasattr(calc, "get_calculator"):
+        #         calc = calc.get_calculator()
+        #     calculators.append(calc)
 
         if self.d3_kwargs:
             d3_calc = TorchDFTD3Calculator(

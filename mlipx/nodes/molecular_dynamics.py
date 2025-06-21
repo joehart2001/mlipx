@@ -104,13 +104,14 @@ class MolecularDynamics(zntrack.Node):
         for idx, _ in enumerate(
             tqdm.tqdm(dyn.irun(steps=self.steps), total=self.steps)
         ):
-            ase.io.write(self.frames_path, atoms, append=True)
-            plots = {
-                "energy": atoms.get_potential_energy(),
-                "fmax": np.max(np.linalg.norm(atoms.get_forces(), axis=1)),
-                "fnorm": np.linalg.norm(atoms.get_forces()),
-            }
-            self.plots.loc[len(self.plots)] = plots
+            if idx % 10 == 0:
+                ase.io.write(self.frames_path, atoms, append=True)
+                plots = {
+                    "energy": atoms.get_potential_energy(),
+                    "fmax": np.max(np.linalg.norm(atoms.get_forces(), axis=1)),
+                    "fnorm": np.linalg.norm(atoms.get_forces()),
+                }
+                self.plots.loc[len(self.plots)] = plots
             
             # print every x steps
             if self.print_energy_every is not None and idx % self.print_energy_every == 0:
@@ -138,10 +139,16 @@ class MolecularDynamics(zntrack.Node):
             # document all attached observers
             self.observer_metrics[obs.name] = self.observer_metrics.get(obs.name, -1)
 
+
+
     @property
     def frames(self) -> list[ase.Atoms]:
         with self.state.fs.open(self.frames_path, "r") as f:
             return list(ase.io.iread(f, format="extxyz"))
+
+
+
+
 
     @property
     def figures(self) -> dict[str, go.Figure]:
@@ -245,3 +252,6 @@ class MolecularDynamics(zntrack.Node):
             frames=frames,
             figures={"energy_vs_steps": fig, "energy_vs_steps_adjusted": fig_adjusted},
         )
+
+
+
