@@ -95,7 +95,7 @@ class FullBenchmark(zntrack.Node):
     ):
         
         # extract apps
-        print("Building bulk crystal benchmark 1/3...")
+        print("Building bulk crystal benchmark 1/4...")
         bulk_benchmark_app, bulk_benchmark_score_df, bulk_register_callbacks = BulkCrystalBenchmark.benchmark_interactive(
             elasticity_data=elasticity_data,
             lattice_const_data=lattice_const_data,
@@ -107,7 +107,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
-        print("Building molecular crystal benchmark 2/3...")
+        print("Building molecular crystal benchmark 2/4...")
         mol_crystal_benchmark_app, mol_crystal_benchmark_score_df, mol_crystal_register_callbacks = MolecularCrystalBenchmark.benchmark_interactive(
             X23_data=X23_data,
             DMC_ICE_data=DMC_ICE_data,
@@ -115,7 +115,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
-        print("Building molecular benchmark 3/3...")
+        print("Building molecular benchmark 3/4...")
         mol_benchmark_app, mol_benchmark_score_df, mol_register_callbacks = MolecularBenchmark.benchmark_interactive(
             GMTKN55_data=GMTKN55_data,
             HD_data=HD_data,
@@ -123,6 +123,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
+        print("Building further applications benchmark 4/4...")
         further_apps_app, further_apps_score_df, further_apps_register_callbacks = FutherApplications.benchmark_interactive(
             MD_data=MD_data,
             ui=ui,
