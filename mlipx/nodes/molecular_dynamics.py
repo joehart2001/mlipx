@@ -322,7 +322,7 @@ class MolecularDynamics(zntrack.Node):
         # Compute properties for each model
         for model_name, node in tqdm.tqdm(node_dict.items(), desc="Computing properties for models"):
             traj = node.frames
-            traj = traj[::50]
+            traj = traj[::10]
             print("loaded trajectory for model:", model_name)
             o_indices = [atom.index for atom in traj[0] if atom.symbol == 'O']
             h_indices = [atom.index for atom in traj[0] if atom.symbol == 'H']
