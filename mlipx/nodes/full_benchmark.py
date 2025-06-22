@@ -34,7 +34,7 @@ from typing import List, Dict, Any, Optional
 
 import mlipx
 from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, MolecularBenchmark, HomonuclearDiatomics
-from mlipx import PhononAllRef, PhononAllBatch
+from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, FutherApplications
 
 
 
@@ -57,6 +57,7 @@ class FullBenchmark(zntrack.Node):
     bulk_crystal_benchmark: List[BulkCrystalBenchmark] = zntrack.deps()
     mol_crystal_benchmark: List[MolecularCrystalBenchmark] = zntrack.deps()
     mol_benchmark: List[MolecularBenchmark] = zntrack.deps()
+    further_apps_benchmark: List[FutherApplications] = zntrack.deps()
     
     # outputs
     # nwd: ZnTrack's node working directory for saving files
@@ -83,6 +84,8 @@ class FullBenchmark(zntrack.Node):
         
         GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
         HD_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
+        
+        MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics] = None,
         
         ui: str = "browser",
         
@@ -116,6 +119,13 @@ class FullBenchmark(zntrack.Node):
         mol_benchmark_app, mol_benchmark_score_df, mol_register_callbacks = MolecularBenchmark.benchmark_interactive(
             GMTKN55_data=GMTKN55_data,
             HD_data=HD_data,
+            full_benchmark=True,
+            normalise_to_model=normalise_to_model,
+        )
+        
+        further_apps_app, further_apps_score_df, further_apps_register_callbacks = FutherApplications.benchmark_interactive(
+            MD_data=MD_data,
+            ui=ui,
             full_benchmark=True,
             normalise_to_model=normalise_to_model,
         )
@@ -162,12 +172,14 @@ class FullBenchmark(zntrack.Node):
             "Bulk Crystal Score": bulk_benchmark_app.layout,
             "Molecular Crystal Score": mol_crystal_benchmark_app.layout,
             "Molecular Score": mol_benchmark_app.layout,
+            "Further Applications": further_apps_app.layout,
         }
         
         # Register callbacks for each app
         bulk_register_callbacks(app_summary)
         mol_crystal_register_callbacks(app_summary)
         mol_register_callbacks(app_summary)
+        further_apps_register_callbacks(app_summary)
         
         app_summary.layout = html.Div([
             dcc.Tabs(

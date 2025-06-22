@@ -766,6 +766,7 @@ def full_benchmark_compare(
         "*DMCICE13Benchmark*",
         "*GMTKN55Benchmark*",
         "*HomonuclearDiatomics*",
+        "*MolecularDynamics*",
     ]
     glob = True
     
@@ -803,6 +804,14 @@ def full_benchmark_compare(
         split_str_HD="_homonuclear-diatomics",
     )
     
+    MD_dict = get_further_apps_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_MD="_config-0_MolecularDynamicss",
+    )
+    
 
     
     
@@ -824,6 +833,7 @@ def full_benchmark_compare(
             DMC_ICE_data=ICE_DMC_dict,
             GMTKN55_data=GMTKN55_dict,
             HD_data=HD_dict,
+            MD_data=MD_dict,
             ui=ui,
             return_app = return_app,
             report=report,
@@ -840,6 +850,7 @@ def full_benchmark_compare(
             DMC_ICE_data=ICE_DMC_dict,
             GMTKN55_data=GMTKN55_dict,
             HD_data=HD_dict,
+            MD_data=MD_dict,
             ui=ui,
             report=report,
             normalise_to_model=normalise_to_model,
@@ -905,6 +916,23 @@ def get_mol_benchmark_node_dicts(
     
     return GMTKN55_dict, HD_dict
 
+
+
+def get_further_apps_benchmark_node_dicts(
+    nodes: list[str],
+    glob: bool,
+    models: list[str] | None,
+    all_nodes: list[str],
+    split_str_MD: str = "_config-0_MolecularDynamics",
+) -> dict[str, zntrack.Node]:
+    
+    MD_nodes = [node for node in all_nodes if "MolecularDynamics" in node]
+    
+    MD_node_objects = load_node_objects(nodes, glob, models, MD_nodes, split_str="_config-0_MolecularDynamics")
+    
+    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
+    
+    return MD_dict
 
 
 

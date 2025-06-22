@@ -1265,8 +1265,8 @@ class PhononDispersion(zntrack.Node):
             for p, r in zip(pred_freqs, ref_freqs):
                 len_p = len(p)
                 len_r = len(r)
-                if len_p != len_r:
-                    print(f"Warning: Mismatched band lengths for {model_name} at {mp_id}: {len_p} vs {len_r}. Skipping band error calculation for extra points.")
+                # if len_p != len_r:
+                #     print(f"Warning: Mismatched band lengths for {model_name} at {mp_id}: {len_p} vs {len_r}. Skipping band error calculation for extra points.")
                 min_len = min(len_p, len_r)
 
                 p_arr = np.array(p[:min_len])

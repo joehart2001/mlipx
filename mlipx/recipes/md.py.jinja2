@@ -3,7 +3,13 @@ import zntrack
 
 from models import MODELS
 
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
 project = zntrack.Project()
+{% endif %}
 
 frames = []
 {% if datapath %}
@@ -40,8 +46,8 @@ thermostat = mlipx.LangevinConfig(timestep=1, temperature=temperature, friction=
 
 print(f"Running MD for {steps} steps at {temperature} K with {len(frames)} initial configurations.")
 
-md_dict = {}
-md_list = []
+MD_dict = {}
+MD_list = []
 
 for model_name, model in MODELS.items():
     for idx, data in enumerate(frames):
@@ -56,9 +62,11 @@ for model_name, model in MODELS.items():
                 print_energy_every=1000,
             )
             if len(frames) == 1:
-                md_dict[model_name] = md
+                MD_dict[model_name] = md
             else:
-                md_dict[f"{model_name}_{idx}"] = md
-            md_list.append(md)
+                MD_dict[f"{model_name}_{idx}"] = md
+            MD_list.append(md)
 
+{% if standalone %}
 project.build()
+{% endif %}

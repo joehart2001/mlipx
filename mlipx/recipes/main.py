@@ -697,6 +697,8 @@ def full_benchmark(
     n_phonons: int | None = None,
     small: bool = False,
     medium: bool = False,
+    steps: int = 1000,
+    temperature: int = 300,
     n_jobs: int | None = -1,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
@@ -715,6 +717,8 @@ def full_benchmark(
         n_phonons=n_phonons,
         small=small,
         medium=medium,
+        steps=steps,
+        temperature=temperature,
         n_jobs=n_jobs,
     )
     
@@ -755,4 +759,29 @@ def homonuclear_diatomics_benchmark(
         material_ids=material_ids,
         smiles=smiles,
         het_diatomics=het_diatomics,
+    )
+    
+@app.command()
+def further_applications_benchmark(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+    steps: int = 1000,
+    temperature: int = 300,
+):
+    """Run further applications benchmark."""
+    if models is not None:
+        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipeception(
+        "further_applications_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+        steps=steps,
+        temperature=temperature,
     )

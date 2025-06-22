@@ -62,12 +62,6 @@ check_completed = {{ check_completed }}
 check_completed = False
 {% endif %}
 
-with project.group("phonons-dispersion-ref"):
-    phonon_ref_node = mlipx.PhononAllRef(
-            mp_ids=mp_ids,
-            phonopy_yaml_dir=str(local_path),
-    )
-
 
 {% if threading == True %}
 threading = True

@@ -318,10 +318,7 @@ class MolecularDynamics(zntrack.Node):
             'rdf': exp_300K['y']
         }
         
-        print("oo", pbe_D3_330K_oo['y'][:5])
-        print("oh", pbe_D3_330K_oh['y'][:5])
-        print("hh", pbe_D3_330K_hh['y'][:5])
-                
+
         # Compute properties for each model
         for model_name, node in tqdm.tqdm(node_dict.items(), desc="Computing properties for models"):
             traj = node.frames
@@ -423,7 +420,7 @@ class MolecularDynamics(zntrack.Node):
                 mae_df.loc[valid_scores, rank_col] = (
                     mae_df.loc[valid_scores, score_col].rank(method="min").astype(int)
                 )
-            return mae_df
+            return mae_df.round(3)
 
         model_names = list(node_dict.keys())
         # Compute MAE DataFrames for each property
@@ -468,7 +465,8 @@ class MolecularDynamics(zntrack.Node):
                     dcc.Store(id="rdf-table-last-clicked-hh", data=None),
                 ],
             ),
-        ])
+        ],
+        style={"backgroundColor": "white"})
 
         # Register callbacks for all tables at once
         MolecularDynamics.register_callbacks(
@@ -527,15 +525,15 @@ class MolecularDynamics(zntrack.Node):
                         if model_rdf is not None:
                             r = model_rdf['r']
                             rdf = model_rdf['rdf']
-                            opacity = 1.0 if model == model_name else 0.4
+                            opacity = 1.0 if model == model_name else 0.2
                             fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{model}", opacity=opacity))
                     # Ensure selected model and selected reference are fully plotted
                     model_rdf = properties_dict[selected_property].get(model_name)
                     if model_rdf is not None:
-                        fig.add_trace(go.Scatter(x=model_rdf['r'], y=model_rdf['rdf'], mode='lines', name=f"{model_name} (selected)", line=dict(width=3, dash='solid'), opacity=1.0))
+                        fig.add_trace(go.Scatter(x=model_rdf['r'], y=model_rdf['rdf'], mode='lines', name=f"{model_name}", line=dict(width=3, dash='solid'), opacity=1.0))
                     ref_rdf = properties_dict[selected_property].get(col)
                     if ref_rdf is not None:
-                        fig.add_trace(go.Scatter(x=ref_rdf['r'], y=ref_rdf['rdf'], mode='lines', name=f"{col} (selected ref)", line=dict(width=3, dash='dot'), opacity=1.0))
+                        fig.add_trace(go.Scatter(x=ref_rdf['r'], y=ref_rdf['rdf'], mode='lines', name=f"{col}", line=dict(width=3, dash='dot'), opacity=1.0))
 
                     fig.update_layout(
                         title=f"RDF Comparison for {model_name} ({selected_property.replace('_', '-')})",

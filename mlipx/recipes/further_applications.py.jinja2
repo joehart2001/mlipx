@@ -1,0 +1,31 @@
+import mlipx
+import zntrack
+
+from models import MODELS
+
+
+from pathlib import Path
+
+
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+project = zntrack.Project()
+{% endif %}
+
+
+{% set standalone = false %}
+{% include "md.py.jinja2" %}
+
+
+with project.group('further-applications-benchmark'):
+    further_apps_benchmark = mlipx.FutherApplications(
+        MD_list = MD_list,
+    )
+
+
+{% if standalone %}
+project.build()
+{% endif %}
