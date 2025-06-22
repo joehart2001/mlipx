@@ -279,7 +279,7 @@ class MolecularDynamics(zntrack.Node):
         ]
 
         from mlipx.benchmark_download_utils import get_benchmark_data
-        ref_data_path = get_benchmark_data("water_MD.zip", force=True) / "water_MD"
+        ref_data_path = get_benchmark_data("water_MD_data.zip", force=True) / "water_MD_data"
 
         properties_dict = {}
         # Add reference data for all RDFs
