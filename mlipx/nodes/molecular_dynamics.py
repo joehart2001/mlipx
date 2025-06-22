@@ -156,19 +156,10 @@ class MolecularDynamics(zntrack.Node):
 
     @property
     def figures(self) -> dict[str, go.Figure]:
-        plots = {}
-        for key in self.plots.columns:
-            fig = px.line(
-                self.plots,
-                x=self.plots.index,
-                y=key,
-                title=key,
-            )
-            fig.update_traces(
-                customdata=np.stack([np.arange(len(self.plots))], axis=1),
-            )
-            plots[key] = fig
-        return plots
+        return {
+            key: px.line(self.plots, x=self.plots.index, y=key, title=key)
+            for key in self.plots.columns
+        }
 
     @staticmethod
     def compare(*nodes: "MolecularDynamics") -> ComparisonResults:
@@ -259,6 +250,12 @@ class MolecularDynamics(zntrack.Node):
 
 
 
+
+
+
+
+
+
     @staticmethod
     def mae_plot_interactive(
         node_dict,
@@ -282,41 +279,59 @@ class MolecularDynamics(zntrack.Node):
         ]
 
         from mlipx.benchmark_download_utils import get_benchmark_data
-        ref_data_path = get_benchmark_data("water_MD.zip") / "water_MD"
+        ref_data_path = get_benchmark_data("water_MD.zip", force=True) / "water_MD"
 
         properties_dict = {}
-        # Add reference data (only for g_r_oo)
+        # Add reference data for all RDFs
         with open(ref_data_path / "pbe-d3-330k-g-r_oo.json", "r") as f:
             pbe_D3_330K_oo = json.load(f)
         with open(ref_data_path / "pbe-d3-330k-g-r_hh.json", "r") as f:
             pbe_D3_330K_hh = json.load(f)
         with open(ref_data_path / "pbe-d3-330k-g-r_oh.json", "r") as f:
             pbe_D3_330K_oh = json.load(f)
-        with open(ref_data_path / "exp-300k-g(r)_oo.json", "r") as f:
+        with open(ref_data_path / "exp-300k-g-r_oo.json", "r") as f:
             exp_300K = json.load(f)
 
-        properties_dict['pbe_D3_330K'] = {
-            'g_r_oo': {
-                'r': pbe_D3_330K['x'],
-                'rdf': pbe_D3_330K['y']
-            }
-        }
-        properties_dict['exp_300K'] = {
-            'g_r_oo': {
-                'r': exp_300K['x'],
-                'rdf': exp_300K['y']
+
+        properties_dict['g_r_oo'] = {
+            'pbe_D3_330K_oo': {
+                'r': pbe_D3_330K_oo['x'],
+                'rdf': pbe_D3_330K_oo['y']
             }
         }
 
+        properties_dict['g_r_oh'] = {
+            'pbe_D3_330K_oh': {
+                'r': pbe_D3_330K_oh['x'],
+                'rdf': pbe_D3_330K_oh['y']
+            }
+        }
+        properties_dict['g_r_hh'] = {
+            'pbe_D3_330K_hh': {
+                'r': pbe_D3_330K_hh['x'],
+                'rdf': pbe_D3_330K_hh['y']
+            }
+        }
+        # Merge in exp_300K data for g_r_oo without overwriting existing dict
+        properties_dict['g_r_oo']['exp_300K'] = {
+            'r': exp_300K['x'],
+            'rdf': exp_300K['y']
+        }
+        
+        print("oo", pbe_D3_330K_oo['y'][:5])
+        print("oh", pbe_D3_330K_oh['y'][:5])
+        print("hh", pbe_D3_330K_hh['y'][:5])
+                
         # Compute properties for each model
         for model_name, node in tqdm.tqdm(node_dict.items(), desc="Computing properties for models"):
-            properties_dict[model_name] = {}
             traj = node.frames
             traj = traj[::50]
             print("loaded trajectory for model:", model_name)
             o_indices = [atom.index for atom in traj[0] if atom.symbol == 'O']
             h_indices = [atom.index for atom in traj[0] if atom.symbol == 'H']
             for prop in properties:
+                if prop not in properties_dict:
+                    properties_dict[prop] = {}
                 if prop == 'g_r_oo':
                     # O-O RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
@@ -326,7 +341,7 @@ class MolecularDynamics(zntrack.Node):
                         r_max=6.0,
                         bins=100,
                     )
-                    properties_dict[model_name][prop] = {
+                    properties_dict[prop][model_name] = {
                         "r": r,
                         "rdf": rdf,
                     }
@@ -339,7 +354,7 @@ class MolecularDynamics(zntrack.Node):
                         r_max=6.0,
                         bins=100,
                     )
-                    properties_dict[model_name][prop] = {
+                    properties_dict[prop][model_name] = {
                         "r": r,
                         "rdf": rdf,
                     }
@@ -352,80 +367,69 @@ class MolecularDynamics(zntrack.Node):
                         r_max=6.0,
                         bins=100,
                     )
-                    properties_dict[model_name][prop] = {
+                    properties_dict[prop][model_name] = {
                         "r": r,
                         "rdf": rdf,
                     }
 
-        # --- Create separate MAE DataFrames for each property ---
-        reference_keys = [k for k in properties_dict.keys() if k not in node_dict]
+        # --- Helper to compute MAE DataFrame for a property ---
+        def compute_mae_table(prop, properties_dict, model_names, normalise_to_model=None):
+            # Reference keys are those in properties_dict[prop] but not in model_names and must contain 'rdf'
+            reference_keys = [
+                k for k in properties_dict[prop].keys()
+                if k not in model_names and 'rdf' in properties_dict[prop][k]
+            ]
+            mae_data = []
+            for model_name in model_names:
+                row = {"Model": model_name}
+                # For each reference, compute MAE if both model and reference data are available
+                for ref_key in reference_keys:
+                    model_rdf_data = properties_dict[prop].get(model_name)
+                    if model_rdf_data is None:
+                        # fallback: check if model_name is a top-level key (legacy)
+                        if model_name in properties_dict and prop in properties_dict[model_name]:
+                            model_rdf_data = properties_dict[model_name][prop]
+                    if (
+                        ref_key in properties_dict[prop]
+                        and model_rdf_data is not None
+                    ):
+                        # Interpolate both to common r grid (use reference's r grid)
+                        r_common = properties_dict[prop][ref_key]['r']
+                        rdf_ref = np.interp(r_common, properties_dict[prop][ref_key]['r'], properties_dict[prop][ref_key]['rdf'])
+                        rdf_model = np.interp(r_common, model_rdf_data['r'], model_rdf_data['rdf'])
+                        mae = np.mean(np.abs(rdf_model - rdf_ref))
+                        row[ref_key] = round(mae, 4)
+                mae_data.append(row)
+            # Construct the dataframe with 'Model' as the first column and one column per reference
+            columns = ['Model'] + reference_keys
+            mae_df = pd.DataFrame(mae_data, columns=columns)
+            # Score and rank logic using PBE reference if present
+            ref_col = None
+            if prop == "g_r_oo":
+                ref_col = "pbe_D3_330K_oo"
+            elif prop == "g_r_oh":
+                ref_col = "pbe_D3_330K_oh"
+            elif prop == "g_r_hh":
+                ref_col = "pbe_D3_330K_hh"
+            if ref_col is not None and ref_col in mae_df.columns:
+                if normalise_to_model is not None and normalise_to_model in mae_df["Model"].values:
+                    base_mae = mae_df.loc[mae_df["Model"] == normalise_to_model, ref_col].values[0]
+                else:
+                    base_mae = mae_df[ref_col].min()
+                mae_df[f"Score ↓ (PBE)"] = mae_df[ref_col] / base_mae
+                rank_col = f"Rank (PBE)"
+                score_col = f"Score ↓ (PBE)"
+                valid_scores = mae_df[score_col].notna()
+                mae_df.loc[valid_scores, rank_col] = (
+                    mae_df.loc[valid_scores, score_col].rank(method="min").astype(int)
+                )
+            return mae_df
+
         model_names = list(node_dict.keys())
-
-        # O-O: MAE table (models vs references)
-        mae_data_oo = []
-        for model_name in model_names:
-            row = {"Model": model_name}
-            prop = 'g_r_oo'
-            for ref_key in reference_keys:
-                if (
-                    prop in properties_dict[model_name]
-                    and prop in properties_dict[ref_key]
-                ):
-                    r_common = properties_dict[ref_key][prop]['r']
-                    rdf_ref = np.interp(r_common, properties_dict[ref_key][prop]['r'], properties_dict[ref_key][prop]['rdf'])
-                    rdf_model = np.interp(r_common, properties_dict[model_name][prop]['r'], properties_dict[model_name][prop]['rdf'])
-                    mae = np.mean(np.abs(rdf_model - rdf_ref))
-                    row[ref_key] = round(mae, 4)
-            mae_data_oo.append(row)
-        mae_df_oo = pd.DataFrame(mae_data_oo)
-        # Score and rank logic using normalise_to_model if provided
-        if 'pbe_D3_330K' in mae_df_oo.columns:
-            if normalise_to_model is not None and normalise_to_model in mae_df_oo["Model"].values:
-                base_mae = mae_df_oo.loc[mae_df_oo["Model"] == normalise_to_model, "pbe_D3_330K"].values[0]
-            else:
-                base_mae = mae_df_oo["pbe_D3_330K"].min()
-            mae_df_oo["Score ↓ (PBE)"] = mae_df_oo["pbe_D3_330K"] / base_mae
-            mae_df_oo["Rank (PBE)"] = mae_df_oo["Score ↓ (PBE)"].rank(method="min").astype(int)
-
-        # O-H: MAE table (models vs models, no reference)
-        mae_data_oh = []
-        prop = 'g_r_oh'
-        for model_name in model_names:
-            row = {"Model": model_name}
-            for other_model in model_names:
-                if model_name == other_model:
-                    continue
-                if (
-                    prop in properties_dict[model_name]
-                    and prop in properties_dict[other_model]
-                ):
-                    r_common = properties_dict[model_name][prop]['r']
-                    rdf_other = np.interp(r_common, properties_dict[other_model][prop]['r'], properties_dict[other_model][prop]['rdf'])
-                    rdf_model = np.interp(r_common, properties_dict[model_name][prop]['r'], properties_dict[model_name][prop]['rdf'])
-                    mae = np.mean(np.abs(rdf_model - rdf_other))
-                    row[other_model] = round(mae, 4)
-            mae_data_oh.append(row)
-        mae_df_oh = pd.DataFrame(mae_data_oh)
-
-        # H-H: MAE table (models vs models, no reference)
-        mae_data_hh = []
-        prop = 'g_r_hh'
-        for model_name in model_names:
-            row = {"Model": model_name}
-            for other_model in model_names:
-                if model_name == other_model:
-                    continue
-                if (
-                    prop in properties_dict[model_name]
-                    and prop in properties_dict[other_model]
-                ):
-                    r_common = properties_dict[model_name][prop]['r']
-                    rdf_other = np.interp(r_common, properties_dict[other_model][prop]['r'], properties_dict[other_model][prop]['rdf'])
-                    rdf_model = np.interp(r_common, properties_dict[model_name][prop]['r'], properties_dict[model_name][prop]['rdf'])
-                    mae = np.mean(np.abs(rdf_model - rdf_other))
-                    row[other_model] = round(mae, 4)
-            mae_data_hh.append(row)
-        mae_df_hh = pd.DataFrame(mae_data_hh)
+        # Compute MAE DataFrames for each property
+        mae_df_oo = compute_mae_table('g_r_oo', properties_dict, model_names, normalise_to_model)
+        mae_df_oh = compute_mae_table('g_r_oh', properties_dict, model_names, normalise_to_model)
+        mae_df_hh = compute_mae_table('g_r_hh', properties_dict, model_names, normalise_to_model)
 
         if ui is None and run_interactive:
             return mae_df_oo, mae_df_oh, mae_df_hh
@@ -466,27 +470,13 @@ class MolecularDynamics(zntrack.Node):
             ),
         ])
 
-        # Register callbacks for each table
+        # Register callbacks for all tables at once
         MolecularDynamics.register_callbacks(
-            app, mae_df_oo, properties_dict,
-            table_id="rdf-mae-score-table-oo",
-            details_id="rdf-table-details-oo",
-            last_clicked_id="rdf-table-last-clicked-oo",
-            selected_property="g_r_oo",
-        )
-        MolecularDynamics.register_callbacks(
-            app, mae_df_oh, properties_dict,
-            table_id="rdf-mae-score-table-oh",
-            details_id="rdf-table-details-oh",
-            last_clicked_id="rdf-table-last-clicked-oh",
-            selected_property="g_r_oh",
-        )
-        MolecularDynamics.register_callbacks(
-            app, mae_df_hh, properties_dict,
-            table_id="rdf-mae-score-table-hh",
-            details_id="rdf-table-details-hh",
-            last_clicked_id="rdf-table-last-clicked-hh",
-            selected_property="g_r_hh",
+            app, [
+                ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
+                ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
+                ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
+            ], mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh], properties_dict=properties_dict
         )
 
         if not run_interactive:
@@ -496,56 +486,71 @@ class MolecularDynamics(zntrack.Node):
 
 
     @staticmethod
-    def register_callbacks(app, mae_df, properties_dict, table_id, details_id, last_clicked_id, selected_property):
+    def register_callbacks(app, table_configs, mae_df_list, properties_dict):
         from dash.dependencies import Input, Output, State
         from dash.exceptions import PreventUpdate
         from dash import dcc
         import plotly.graph_objs as go
-        import pandas as pd
 
-        # For O-O, show references; for O-H and H-H, only models
-        model_names = list(mae_df["Model"].values)
-        # All reference keys are those in properties_dict but not in model_names
-        reference_keys = [k for k in properties_dict if k not in model_names]
+        # Use default arguments in the loop to capture loop variables at definition time (avoid late binding)
+        for config in zip(table_configs, mae_df_list):
+            table_id, details_id, last_clicked_id, selected_property = config[0]
+            mae_df = config[1]
+            model_names = list(mae_df["Model"].values)
 
-        @app.callback(
-            Output(details_id, "children"),
-            Output(last_clicked_id, "data"),
-            Input(table_id, "active_cell"),
-            State(last_clicked_id, "data"),
-        )
-        def update_rdf_plot(active_cell, last_clicked):
-            if active_cell is None:
-                raise PreventUpdate
-            row = active_cell["row"]
-            model_name = mae_df.loc[row, "Model"]
-            if last_clicked is not None and active_cell == last_clicked:
-                return None, None
+            def make_callback(selected_property=selected_property, mae_df=mae_df, model_names=model_names):
+                def update_rdf_plot(active_cell, last_clicked):
+                    # Reference keys are those in properties_dict[selected_property] but not in model_names and must contain 'rdf'
+                    reference_keys = [
+                        k for k in properties_dict[selected_property]
+                        if k not in model_names and 'rdf' in properties_dict[selected_property][k]
+                    ]
+                    if active_cell is None:
+                        raise PreventUpdate
+                    row = active_cell["row"]
+                    model_name = mae_df.loc[row, "Model"]
+                    if last_clicked is not None and active_cell == last_clicked:
+                        return None, None
 
-            fig = go.Figure()
-            col = active_cell["column_id"]
-            # For O-O, show references, for O-H and H-H, just models
-            if selected_property == "g_r_oo":
-                for ref_key in reference_keys:
-                    if 'g_r_oo' in properties_dict[ref_key]:
-                        r = properties_dict[ref_key]['g_r_oo']['r']
-                        rdf = properties_dict[ref_key]['g_r_oo']['rdf']
-                        opacity = 1.0 if col == ref_key else 0.3
-                        fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{ref_key} (g_r_oo)", opacity=opacity))
-            # Plot all model RDFs for this property
-            for model in model_names:
-                if selected_property in properties_dict[model]:
-                    r = properties_dict[model][selected_property]['r']
-                    rdf = properties_dict[model][selected_property]['rdf']
-                    opacity = 1.0 if model == model_name else 0.4
-                    fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{model}", opacity=opacity))
+                    fig = go.Figure()
+                    col = active_cell["column_id"]
+                    # Plot all reference traces, highlight the selected one
+                    for ref_key in reference_keys:
+                        if ref_key in properties_dict[selected_property]:
+                            r = properties_dict[selected_property][ref_key]['r']
+                            rdf = properties_dict[selected_property][ref_key]['rdf']
+                            opacity = 1.0 if col == ref_key else 0.3
+                            fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{ref_key} ({selected_property})", opacity=opacity))
+                    # Plot all model traces, highlight the selected one
+                    for model in model_names:
+                        model_rdf = properties_dict[selected_property].get(model)
+                        if model_rdf is not None:
+                            r = model_rdf['r']
+                            rdf = model_rdf['rdf']
+                            opacity = 1.0 if model == model_name else 0.4
+                            fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{model}", opacity=opacity))
+                    # Ensure selected model and selected reference are fully plotted
+                    model_rdf = properties_dict[selected_property].get(model_name)
+                    if model_rdf is not None:
+                        fig.add_trace(go.Scatter(x=model_rdf['r'], y=model_rdf['rdf'], mode='lines', name=f"{model_name} (selected)", line=dict(width=3, dash='solid'), opacity=1.0))
+                    ref_rdf = properties_dict[selected_property].get(col)
+                    if ref_rdf is not None:
+                        fig.add_trace(go.Scatter(x=ref_rdf['r'], y=ref_rdf['rdf'], mode='lines', name=f"{col} (selected ref)", line=dict(width=3, dash='dot'), opacity=1.0))
 
-            fig.update_layout(
-                title=f"RDF Comparison for {model_name} ({selected_property.replace('_', '-')})",
-                xaxis_title="r (Å)",
-                yaxis_title="g(r)",
-            )
-            return dcc.Graph(figure=fig), active_cell
+                    fig.update_layout(
+                        title=f"RDF Comparison for {model_name} ({selected_property.replace('_', '-')})",
+                        xaxis_title="r (Å)",
+                        yaxis_title="g(r)",
+                    )
+                    return dcc.Graph(figure=fig), active_cell
+                return update_rdf_plot
+
+            app.callback(
+                Output(details_id, "children"),
+                Output(last_clicked_id, "data"),
+                Input(table_id, "active_cell"),
+                State(last_clicked_id, "data"),
+            )(make_callback())
             
     def _compute_partial_rdf(atoms, i_indices, j_indices, r_max):
         i_list, j_list, dists = neighbor_list('ijd', atoms, r_max)
