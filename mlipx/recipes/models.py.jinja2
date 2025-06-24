@@ -178,10 +178,8 @@ class SumCalcWrapper:
                     calc = FAIRChemCalculator(predictor, task_name=kwargs.get("task_name", "omat"))
 
                 elif class_name == "OrbCalc":
-                    from orb_models.forcefield import pretrained
-                    from orb_models.forcefield.calculator import ORBCalculator
-                    method = getattr(pretrained, kwargs["name"])
-                    calc = ORBCalculator(method(device=device, **kwargs), device=device, **kwargs)
+                    name = kwargs.pop("name")
+                    calc = OrbCalc(name=name, device=device, kwargs=kwargs).get_calculator()
 
                 else:
                     calc = mlipx.GenericASECalculator(
