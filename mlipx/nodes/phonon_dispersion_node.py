@@ -1509,8 +1509,10 @@ class PhononDispersion(zntrack.Node):
             plot_bgcolor="white", 
             paper_bgcolor="white", 
             font_color="black",
-            xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1), 
-            yaxis=dict(showgrid=True, gridcolor="lightgray")
+            xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1,
+                       tickformat=".1e",), 
+            yaxis=dict(showgrid=True, gridcolor="lightgray",
+                       tickformat=".1e",)
         )
         
         # legend
@@ -1571,12 +1573,17 @@ class PhononDispersion(zntrack.Node):
             yref='y',
             line=dict(color="black", dash="dash")
         )
+        fig.update_traces(
+            hovertemplate="Ref: %{x:.6f}<br>Pred: %{y:.6f}<extra></extra>"
+        )
         fig.update_layout(
             plot_bgcolor="white",
             paper_bgcolor="white",
             font_color="black",
-            xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1),
-            yaxis=dict(showgrid=True, gridcolor="lightgray")
+            xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1,
+                       tickformat=".1e",),
+            yaxis=dict(showgrid=True, gridcolor="lightgray",
+                       tickformat=".1e",)
         )
         return fig
 

@@ -765,7 +765,7 @@ def full_benchmark_precompute(
     #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     #ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
-    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+    #return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
     report: Annotated[bool, Option("--report", help="Generate a report")] = True,
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
     ):

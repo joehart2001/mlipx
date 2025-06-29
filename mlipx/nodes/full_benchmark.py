@@ -267,6 +267,7 @@ class FullBenchmark(zntrack.Node):
         cache_dir = Path("app_cache/")
         cache_dir.mkdir(parents=True, exist_ok=True)
 
+        print("Precomputing Bulk Crystal Benchmark (1/4)...")
         BulkCrystalBenchmark.benchmark_precompute(
             elasticity_data=elasticity_data,
             lattice_const_data=lattice_const_data,
@@ -278,6 +279,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
 
+        print("Precomputing Molecular Crystal Benchmark (2/4)...")
         MolecularCrystalBenchmark.benchmark_precompute(
             X23_data=X23_data,
             DMC_ICE_data=DMC_ICE_data,
@@ -286,6 +288,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
 
+        print("Precomputing Molecular Benchmark (3/4)...")
         MolecularBenchmark.benchmark_precompute(
             GMTKN55_data=GMTKN55_data,
             HD_data=HD_data,
@@ -294,6 +297,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
+        print("Precomputing Further Applications Benchmark (4/4)...")
         FutherApplications.benchmark_precompute(
             MD_data=MD_data,
             cache_dir=str(cache_dir / "further_applications_benchmark"),
