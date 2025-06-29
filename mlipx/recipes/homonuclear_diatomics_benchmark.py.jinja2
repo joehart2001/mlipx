@@ -1,6 +1,3 @@
-
-from ase.data import chemical_symbols
-
 {% if standalone is not defined %}
 {% set standalone = true %}
 {% endif %}
@@ -9,6 +6,8 @@ from ase.data import chemical_symbols
 import mlipx
 import zntrack
 from models import MODELS
+from ase.data import chemical_symbols
+
 project = zntrack.Project()
 {% endif %}
 

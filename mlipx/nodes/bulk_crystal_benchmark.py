@@ -47,7 +47,7 @@ import csv
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from typing import Union
-
+from mlipx.dash_utils import colour_table
 
 
 
@@ -83,202 +83,241 @@ class BulkCrystalBenchmark(zntrack.Node):
     
 
     @staticmethod
-    def benchmark_interactive(
+    def register_callbacks(
+        app,
+        phonon_mae_df,
+        mae_df_elas,
+        mae_df_lattice_const,
+        normalise_to_model=None,
+    ):
+        """
+        Register callbacks for the interactive benchmark dashboard, including the weight update callback.
+        """
+        # --- Callback to update benchmark table based on weights (now uses input fields) ---
+        @app.callback(
+            Output("phonon-benchmark-score-table", "data"),
+            Output("phonon-benchmark-score-table", "style_data_conditional"),
+            Input("phonon-weight-input", "value"),
+            Input("elasticity-weight-input", "value"),
+            Input("lattice-const-weight-input", "value"),
+        )
+        def update_benchmark_table(phonon_w, elas_w, lat_w):
+            phonon_w = phonon_w if phonon_w is not None else 1.0
+            elas_w = elas_w if elas_w is not None else 1.0
+            lat_w = lat_w if lat_w is not None else 0.2
+            weights = {"phonon": phonon_w, "elasticity": elas_w, "lattice_const": lat_w}
+            updated_df = BulkCrystalBenchmark.bulk_crystal_benchmark_score(
+                phonon_mae_df,
+                mae_df_elas,
+                mae_df_lattice_const,
+                normalise_to_model=normalise_to_model,
+                weights=weights
+            ).round(3).sort_values(by='Avg MAE \u2193').reset_index(drop=True)
+            updated_df["Rank"] = updated_df['Avg MAE \u2193'].rank(ascending=True)
+            style_data_conditional = colour_table(updated_df, all_cols=True)
+            return updated_df.to_dict("records"), style_data_conditional
+
+        # --- Callbacks to sync sliders and input fields ---
+        @app.callback(
+            Output("phonon-weight", "value"),
+            Output("phonon-weight-input", "value"),
+            Input("phonon-weight", "value"),
+            Input("phonon-weight-input", "value"),
+            prevent_initial_call=True,
+        )
+        def sync_phonon_weight(slider_val, input_val):
+            ctx = dash.callback_context
+            if not ctx.triggered:
+                raise PreventUpdate
+            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
+
+        @app.callback(
+            Output("elasticity-weight", "value"),
+            Output("elasticity-weight-input", "value"),
+            Input("elasticity-weight", "value"),
+            Input("elasticity-weight-input", "value"),
+            prevent_initial_call=True,
+        )
+        def sync_elasticity_weight(slider_val, input_val):
+            ctx = dash.callback_context
+            if not ctx.triggered:
+                raise PreventUpdate
+            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
+
+        @app.callback(
+            Output("lattice-const-weight", "value"),
+            Output("lattice-const-weight-input", "value"),
+            Input("lattice-const-weight", "value"),
+            Input("lattice-const-weight-input", "value"),
+            prevent_initial_call=True,
+        )
+        def sync_lattice_const_weight(slider_val, input_val):
+            ctx = dash.callback_context
+            if not ctx.triggered:
+                raise PreventUpdate
+            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
+        
+        
+        
+
+    @staticmethod
+    def benchmark_precompute(
         elasticity_data: List[Elasticity] | Dict[str, Elasticity],
         lattice_const_data: List[LatticeConstant] | Dict[str, Dict[str, LatticeConstant]],
         lattice_const_ref_node_dict: LatticeConstant,
         phonon_ref_data: List[PhononDispersion] | Dict[str, PhononDispersion] | PhononAllRef,
         phonon_pred_data: List[PhononDispersion] | Dict[str, Dict[str, PhononDispersion]] | List[PhononAllBatch] | Dict[str, PhononAllBatch],
-        ui: str = "browser",
-        full_benchmark: bool = False,
-        report: bool = True,
+        cache_dir: str = "app_cache/bulk_crystal_benchmark",
+        ui = None,
+        report: bool = False,
         normalise_to_model: Optional[str] = None,
     ):
         
-        
-        """ Interactive dashboard + saving plots and data for all bulk crystal benchmarks
         """
-        
+        Precompute and cache all sub-benchmarks for bulk crystal benchmark.
+        """
+
         from mlipx.dash_utils import process_data
         from mlipx.phonons_utils import convert_batch_to_node_dict
 
-        # ---- Lattice constant ----
+        # ---- convert all data to dicts if not already----
         lattice_const_dict = process_data(
             lattice_const_data,
             key_extractor=lambda node: node.name.split("LatticeConst-")[1],
             value_extractor=lambda node: {node.name.split("_lattice-constant-pred")[0]: node}
         )            
-
-        # ---- elasticity ----
         elasticity_dict = process_data(
             elasticity_data,
             key_extractor=lambda node: node.name.split("_Elasticity")[0],
             value_extractor=lambda node: node
         )
+        phonon_dict_pred = process_data(
+            phonon_pred_data,
+            key_extractor=lambda node: node.name.split("_phonons-dispersion")[0],
+            value_extractor=lambda node: node
+        ) 
+            
+        
+        os.makedirs(cache_dir, exist_ok=True)
 
-        # ---- phonons -----
-        # if PhononAllRef then use adapter to convert to dict
-        # if isinstance(phonon_ref_data, PhononAllRef):
-        #     phonon_ref_data = convert_batch_to_node_dict(phonon_ref_data)
-
-        # phonon_dict_ref = process_data(
-        #     phonon_ref_data,
-        #     key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
-        #     value_extractor=lambda node: node
-        # )
-        
-        # if PhononAllBatch then use adapter to convert to dict
-        if isinstance(phonon_ref_data, PhononAllRef):
-            if isinstance(phonon_pred_data, list) and all(isinstance(node, PhononAllBatch) for node in phonon_pred_data):
-                use_phonon_all_batch = True
-                # convert from list to {model_name: node} dict
-                phonon_pred_data = {node.name.split("_phonons-dispersion")[0]: node for node in phonon_pred_data}
-            elif isinstance(phonon_pred_data, dict) and all(isinstance(node, PhononAllBatch) for node in phonon_pred_data.values()):
-                use_phonon_all_batch = True
-            else:
-                use_phonon_all_batch = False
-
-            if use_phonon_all_batch:
-                (app_phonon, phonon_mae_df, phonon_scatter_to_dispersion_map,
-                phonon_benchmarks_scatter_dict, phonon_md_path) = PhononAllBatch.benchmark_interactive(
-                    pred_node_dict=phonon_pred_data,
-                    ref_phonon_node=phonon_ref_data,
-                    ui=ui,
-                    run_interactive=False,
-                    report=report,
-                    normalise_to_model=normalise_to_model,
-                )
-            else:
-                raise ValueError("phonon_ref_data is PhononAllRef but phonon_pred_data is not a list or dict of PhononAllBatch.")
-            
-        
-        elif all(isinstance(node, PhononDispersion) for node in phonon_ref_data):
-            
-            phonon_dict_ref = process_data(
-                phonon_ref_data,
-                key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
-                value_extractor=lambda node: node
-            )
-            phonon_dict_pred = process_data(
-                phonon_pred_data,
-                key_extractor=lambda node: node.name.split("PhononDispersion_")[1],
-                value_extractor=lambda node: {node.name.split("_phonons-dispersion")[0]: node}
-            )  
-        
-            (app_phonon, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict, phonon_md_path
-            ) = PhononDispersion.benchmark_interactive(
-                pred_node_dict=phonon_dict_pred,
-                ref_node_dict=phonon_dict_ref,
-                run_interactive=False,
-                report=report,
-                normalise_to_model=normalise_to_model,
-            )
-        
-        else:
-            raise ValueError("phonon_ref_data must be a PhononAllRef or a list of PhononDispersion nodes, and phonon_pred_data must be a PhononAllBatch or a list of PhononDispersion nodes.")
-            
-            
-            
-        
-        # ---- get apps ----- (phonon app already above)
-        
-        app_elasticity, mae_df_elas, elas_md_path = mlipx.Elasticity.mae_plot_interactive(
+        # Run precomputes for all sub-benchmarks
+        PhononAllBatch.benchmark_precompute(
+            pred_node_dict=phonon_dict_pred,
+            ref_phonon_node=phonon_ref_data,
+            ui=ui,
+            run_interactive=False,
+            report=report,
+            normalise_to_model=normalise_to_model,
+        )
+        Elasticity.benchmark_precompute(
             node_dict=elasticity_dict,
+            ui=ui,
             run_interactive=False,
             report=report,
             normalise_to_model=normalise_to_model,
         )
-        
-        
-        app_lattice_const, mae_df_lattice_const, lattice_const_dict_with_ref, lattice_const_md_path = LatticeConstant.mae_plot_interactive(
+        LatticeConstant.benchmark_precompute(
             node_dict=lattice_const_dict,
-            ref_node_dict = lattice_const_ref_node_dict,
+            ref_node_dict=lattice_const_ref_node_dict,
+            ui=ui,
             run_interactive=False,
             report=report,
             normalise_to_model=normalise_to_model,
         )
 
-        # Combine all MAE tables
-        combined_mae_table = BulkCrystalBenchmark.combine_mae_tables(
+        # Load precomputed data
+        mae_df_elas = pd.read_pickle(f"{cache_dir}/elasticity_cache/mae_summary.pkl")
+        mae_df_lattice_const = pd.read_pickle(f"{cache_dir}/lattice_cache/mae_summary.pkl")
+        phonon_mae_df = pd.read_pickle(f"{cache_dir}/phonons_cache/mae_summary.pkl")
+
+        benchmark_score_df = BulkCrystalBenchmark.bulk_crystal_benchmark_score(
+            phonon_mae_df,
             mae_df_elas,
             mae_df_lattice_const,
-            phonon_mae_df,
-        ) # TODO: use this in the benchmark score func for ease
+            normalise_to_model=normalise_to_model,
+        ).round(3).sort_values(by='Avg MAE \u2193').reset_index(drop=True)
+        benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
+
+        benchmark_score_df.to_pickle(f"{cache_dir}/benchmark_score.pkl")
+                
+        callback_fn = BulkCrystalBenchmark.callback_fn_from_cache(
+            cache_dir=cache_dir,
+            phonon_mae_df=phonon_mae_df,
+            mae_df_elas=mae_df_elas,
+            mae_df_lattice_const=mae_df_lattice_const,
+            normalise_to_model=normalise_to_model,
+        )
+
+        with open(f"{cache_dir}/callback_data.pkl", "wb") as f:
+            pickle.dump(BulkCrystalBenchmark.callback_fn_from_cache, f)
+            
+            
+            
+    @staticmethod
+    def callback_fn_from_cache(cache_dir, phonon_mae_df, mae_df_elas, mae_df_lattice_const, normalise_to_model=None):
+        from mlipx import PhononDispersion, Elasticity, LatticeConstant
+
+        def callback_fn(app):
+            with open(f"{cache_dir}/phonons_cache/scatter_to_dispersion_map.pkl", "rb") as f:
+                scatter_to_dispersion_map = pickle.load(f)
+            with open(f"{cache_dir}/phonons_cache/model_benchmarks_dict.pkl", "rb") as f:
+                model_benchmarks_dict = pickle.load(f)
+            lat_const_df = pd.read_pickle(f"{cache_dir}/lattice_cache/lat_const_df.pkl")
+            with open(f"{cache_dir}/elasticity_cache/results_dict.pkl", "rb") as f:
+                results_dict = pickle.load(f)
+                
+            PhononDispersion.register_callbacks(app, phonon_mae_df, scatter_to_dispersion_map, model_benchmarks_dict)
+            Elasticity.register_callbacks(app, mae_df_elas, results_dict)
+            LatticeConstant.register_callbacks(app, mae_df_lattice_const, lat_const_df)
+            BulkCrystalBenchmark.register_callbacks(app, phonon_mae_df, mae_df_elas, mae_df_lattice_const, normalise_to_model=normalise_to_model)
+
+        return callback_fn
+
+        
+        
     
-
-        bulk_crystal_benchmark_score_df = BulkCrystalBenchmark.bulk_crystal_benchmark_score(
-            phonon_mae_df, 
-            mae_df_elas, 
-            mae_df_lattice_const, 
-            normalise_to_model=normalise_to_model
-        ).round(3)
-        bulk_crystal_benchmark_score_df = bulk_crystal_benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True)
-        bulk_crystal_benchmark_score_df = bulk_crystal_benchmark_score_df.reset_index(drop=True)
-        bulk_crystal_benchmark_score_df['Rank'] = bulk_crystal_benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
-        
-        if not os.path.exists("benchmark_stats/bulk_crystal_benchmark/"):
-            os.makedirs("benchmark_stats/bulk_crystal_benchmark")
-        bulk_crystal_benchmark_score_df.to_csv("benchmark_stats/bulk_crystal_benchmark/bulk_crystal_benchmark_score.csv", index=False)
-        
-        from mlipx.dash_utils import colour_table
-        # Viridis-style colormap for Dash DataTable
-        style_data_conditional = colour_table(bulk_crystal_benchmark_score_df, col_name="Avg MAE \u2193")
-        
-        
-        md_path_list = [elas_md_path, lattice_const_md_path, phonon_md_path]
     
-        if report:
-            BulkCrystalBenchmark.generate_report(
-                bulk_crystal_benchmark_score_df=bulk_crystal_benchmark_score_df,
-                md_report_paths=md_path_list,
-                markdown_path="benchmark_stats/bulk_crystal_benchmark/bulk_crystal_benchmark_report.md",
-                combined_mae_table=combined_mae_table,
-            )
-
-
-        if ui is None and not full_benchmark:
-            return
     
-        app = dash.Dash(__name__, suppress_callback_exceptions=True)
-        
-        from mlipx.dash_utils import combine_apps
-        apps_list = [app_phonon, app_lattice_const, app_elasticity]
-        benchmark_table_info = f"Scores normalised to: {normalise_to_model}" if normalise_to_model else ""
-        layout = combine_apps(
-            benchmark_score_df=bulk_crystal_benchmark_score_df,
-            benchmark_title="Bulk Crystal Benchmark",
-            benchmark_table_info=benchmark_table_info,
-            apps_list=apps_list,
-            style_data_conditional=style_data_conditional,
-        )
-
-        app.layout = layout
-        
-        # Register callbacks for each app
-        PhononDispersion.register_callbacks(
-            app, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict,
-        )
-        Elasticity.register_callbacks(
-            app, mae_df_elas, elasticity_dict,
-        )
-        LatticeConstant.register_callbacks(
-            app, mae_df_lattice_const, lattice_const_dict_with_ref,
-        )
-        
-        
+    @staticmethod
+    def launch_dashboard(
+        cache_dir="app_cache/bulk_crystal_benchmark",
+        ui=None,
+        full_benchmark: bool = False,
+        normalise_to_model: Optional[str] = None,
+    ):
+        import pandas as pd
+        import pickle
         from mlipx.dash_utils import run_app
+        import dash
 
+        benchmark_score_df = pd.read_pickle(f"{cache_dir}/benchmark_score.pkl")
+        phonon_mae_df = pd.read_pickle(f"{cache_dir}/phonons_cache/mae_summary.pkl")
+        mae_df_elas = pd.read_pickle(f"{cache_dir}/elasticity_cache/mae_summary.pkl")
+        mae_df_lattice_const = pd.read_pickle(f"{cache_dir}/lattice_cache/mae_summary.pkl")
+        callback_fn = BulkCrystalBenchmark.callback_fn_from_cache(
+            cache_dir, phonon_mae_df, mae_df_elas, mae_df_lattice_const
+        )
+
+        app = dash.Dash(__name__)
+
+        layout = BulkCrystalBenchmark.build_layout(
+            benchmark_score_df=benchmark_score_df,
+            phonon_mae_df=phonon_mae_df,
+            mae_df_elas=mae_df_elas,
+            mae_df_lattice_const=mae_df_lattice_const,
+            normalise_to_model=normalise_to_model,
+        )
+        
         if full_benchmark:
-            return app, bulk_crystal_benchmark_score_df, lambda app: (
-                PhononDispersion.register_callbacks(app, phonon_mae_df, phonon_scatter_to_dispersion_map, phonon_benchmarks_scatter_dict),
-                Elasticity.register_callbacks(app, mae_df_elas, elasticity_dict),
-                LatticeConstant.register_callbacks(app, mae_df_lattice_const, lattice_const_dict_with_ref),
-            )
+            return layout, callback_fn
+        
+        app.layout = layout
+        callback_fn(app)
 
         return run_app(app, ui=ui)
-    
-    
-    
     
     
     
@@ -295,38 +334,72 @@ class BulkCrystalBenchmark(zntrack.Node):
 
 
 
+    # def bulk_crystal_benchmark_score(
+    #     phonon_mae_df, 
+    #     mae_df_elas, 
+    #     mae_df_lattice_const,
+    #     normalise_to_model: Optional[str] = None,
+    #     weights: Dict[str, float] = None
+    # ):
+    #     if weights is None:
+    #         weights = {"phonon": 1.0, "elasticity": 1.0, "lattice_const": 0.2}
+
+    #     scores = {}
+    #     model_list = phonon_mae_df['Model'].values.tolist()
+
+    #     for model in model_list:
+    #         score = 0
+    #         score += weights["lattice_const"] * mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, "Lat Const Score \u2193 (PBE)"].values[0]
+    #         score += weights["phonon"] * phonon_mae_df.loc[phonon_mae_df['Model'] == model, "Phonon Score \u2193"].values[0]
+    #         score += weights["elasticity"] * mae_df_elas.loc[mae_df_elas['Model'] == model, "Elasticity Score \u2193"].values[0]
+    #         scores[model] = score / sum(weights.values())
+
+    #     if normalise_to_model:
+    #         scores = {k: v / scores[normalise_to_model] for k, v in scores.items()}
+
+    #     return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})
+
+    @staticmethod
     def bulk_crystal_benchmark_score(
         phonon_mae_df, 
         mae_df_elas, 
         mae_df_lattice_const,
-        normalise_to_model: Optional[str] = None
+        normalise_to_model: Optional[str] = None,
+        weights: Dict[str, float] = None
     ):
-        """ Currently avg mae
-        """
-        # Initialize scores
+        if weights is None:
+            weights = {"phonon": 1.0, "elasticity": 1.0, "lattice_const": 0.2}
+
         scores = {}
-        
-        # Calculate scores for each model
         model_list = phonon_mae_df['Model'].values.tolist()
-                
+
         for model in model_list:
-            scores[model] = 0
-            
-            scores[model] += 0.2 * mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, "Lat Const Score \u2193 (PBE)"].values[0]
-            scores[model] += 1 * phonon_mae_df.loc[phonon_mae_df['Model'] == model, "Phonon Score \u2193"].values[0]
-            scores[model] += 1 * mae_df_elas.loc[mae_df_elas['Model'] == model, "Elasticity Score \u2193"].values[0]
-            
-            scores[model] = scores[model] / 3
-            
-        # normalise scores 
+            phonon_score = phonon_mae_df.loc[phonon_mae_df['Model'] == model, "Phonon Score \u2193"].values[0]
+            #print(mae_df_elas)
+            #print(model)
+            elas_score = mae_df_elas.loc[mae_df_elas['Model'] == model, "Elasticity Score \u2193"].values[0]
+            lat_score = mae_df_lattice_const.loc[mae_df_lattice_const['Model'] == model, "Lat Const Score \u2193 (PBE)"].values[0]
+
+            weighted_avg = (
+                weights["phonon"] * phonon_score +
+                weights["elasticity"] * elas_score +
+                weights["lattice_const"] * lat_score
+            ) / sum(weights.values())
+
+            scores[model] = {
+                "Phonon Score \u2193": phonon_score,
+                "Elasticity Score \u2193": elas_score,
+                "Lat Const Score \u2193 (PBE)": lat_score,
+                "Avg MAE \u2193": weighted_avg,
+            }
+
+        df = pd.DataFrame.from_dict(scores, orient='index').reset_index().rename(columns={"index": "Model"})
+
         if normalise_to_model:
-            scores = {k: v / scores[normalise_to_model] for k, v in scores.items()}
-            
-            
-        return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})
+            norm_val = df.loc[df["Model"] == normalise_to_model, "Avg MAE \u2193"].values[0]
+            df["Avg MAE \u2193"] = df["Avg MAE \u2193"] / norm_val
 
-
-
+        return df
 
     def combine_mae_tables(*mae_dfs):
         """ combine mae tables from different nodes for a summary table
@@ -420,3 +493,56 @@ class BulkCrystalBenchmark(zntrack.Node):
         
         
         return markdown_path
+
+    @staticmethod
+    def build_layout(benchmark_score_df, phonon_mae_df, mae_df_elas, mae_df_lattice_const, normalise_to_model=None):
+        from dash import html, dcc
+        from mlipx.dash_utils import combine_apps
+        from mlipx import PhononDispersion, LatticeConstant, Elasticity
+
+        def weight_control(label, slider_id, input_id, default_value):
+            return html.Div([
+                html.Label(label),
+                html.Div([
+                    html.Div(
+                        dcc.Slider(
+                            id=slider_id,
+                            min=0,
+                            max=5,
+                            step=0.1,
+                            value=default_value,
+                            tooltip={"always_visible": False},
+                            marks=None,
+                        ),
+                        style={"flex": "1 1 80%"},
+                    ),
+                    dcc.Input(
+                        id=input_id,
+                        type="number",
+                        value=default_value,
+                        step=0.1,
+                        style={"width": "80px"},
+                    ),
+                ], style={"display": "flex", "gap": "10px", "alignItems": "center"})
+            ])
+
+        weight_controls = html.Div([
+            weight_control("Phonon Weight", "phonon-weight", "phonon-weight-input", 1.0),
+            weight_control("Elasticity Weight", "elasticity-weight", "elasticity-weight-input", 1.0),
+            weight_control("Lattice Const Weight", "lattice-const-weight", "lattice-const-weight-input", 0.2),
+        ], style={"margin": "20px"})
+
+        layout = combine_apps(
+            benchmark_score_df=benchmark_score_df,
+            benchmark_title="Bulk Crystal Benchmark",
+            benchmark_table_info=f"Scores normalised to: {normalise_to_model}" if normalise_to_model else "",
+            apps_or_layouts_list=[
+                PhononDispersion.build_layout(phonon_mae_df),
+                LatticeConstant.build_layout(mae_df_lattice_const),
+                Elasticity.build_layout(mae_df_elas),
+            ],
+            id="phonon-benchmark-score-table",
+            weights_components=[weight_controls],
+        )
+
+        return layout

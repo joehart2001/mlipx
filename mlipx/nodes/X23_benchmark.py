@@ -171,6 +171,39 @@ class X23Benchmark(zntrack.Node):
 
 
     @staticmethod
+    def build_layout(mae_df, abs_error_df, lattice_e_df):
+        from mlipx.dash_utils import dash_table_interactive
+        from dash import html, dcc
+        import plotly.express as px
+
+        df_abs_long = abs_error_df.melt(id_vars="System", var_name="Model", value_name="Absolute Error")
+        fig_abs = px.line(df_abs_long, x="System", y="Absolute Error", color="Model", markers=True)
+
+        df_lat_long = lattice_e_df.melt(id_vars="System", var_name="Model", value_name="Energy")
+        fig_lat = px.line(df_lat_long, x="System", y="Energy", color="Model", markers=True)
+
+        tabs = X23Benchmark.create_tabs_from_figures(
+            tab1_label="Predicted Lattice Energies",
+            tab1_fig=fig_lat,
+            tab2_label="Absolute Errors",
+            tab2_fig=fig_abs
+        )
+
+        return html.Div([
+            html.H1("X23 Lattice Energy Benchmark", style={"color": "black"}),
+
+            dash_table_interactive(
+                df=mae_df.round(3),
+                id="x23-mae-table",
+                title="X23 dataset: MAE Table (kJ/mol)",
+                info="This table is not interactive.",
+            ),
+
+            tabs
+        ], style={"backgroundColor": "white", "padding": "20px"})
+
+
+    @staticmethod
     def mae_plot_interactive(
         node_dict: dict[str, "X23Benchmark"],
         ui: str | None = None,
@@ -253,7 +286,7 @@ class X23Benchmark(zntrack.Node):
         ], style={"backgroundColor": "white", "padding": "20px"})
 
         if not run_interactive:
-            return app, mae_df #, md_path
+            return app, mae_df, abs_error_df_all, lattice_e_df_all
 
         return run_app(app, ui=ui)
 
@@ -279,3 +312,39 @@ class X23Benchmark(zntrack.Node):
 
 
 
+
+    @staticmethod
+    def benchmark_precompute(
+        node_dict, 
+        cache_dir="app_cache/molecular_crystal_benchmark/X23_cache", 
+        ui=None, 
+        run_interactive=False, 
+        normalise_to_model=None
+    ):
+        os.makedirs(cache_dir, exist_ok=True)
+        app, mae_df, abs_error_df, lattice_e_df = X23Benchmark.mae_plot_interactive(
+            node_dict=node_dict,
+            run_interactive=run_interactive,
+            ui=ui,
+            normalise_to_model=normalise_to_model,
+        )
+        mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+        abs_error_df.to_pickle(os.path.join(cache_dir, "abs_error_df.pkl"))
+        lattice_e_df.to_pickle(os.path.join(cache_dir, "lattice_e_df.pkl"))
+        return app
+
+
+
+    @staticmethod
+    def launch_dashboard(
+        cache_dir="app_cache/molecular_crystal_benchmark/X23_cache", 
+        ui=None
+    ):
+        import pandas as pd
+        from mlipx.dash_utils import run_app
+        app = dash.Dash(__name__)
+        mae_df = pd.read_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+        abs_error_df = pd.read_pickle(os.path.join(cache_dir, "abs_error_df.pkl"))
+        lattice_e_df = pd.read_pickle(os.path.join(cache_dir, "lattice_e_df.pkl"))
+        app.layout = X23Benchmark.build_layout(mae_df, abs_error_df, lattice_e_df)
+        return run_app(app, ui=ui)

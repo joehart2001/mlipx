@@ -1,13 +1,12 @@
-import mlipx
-import zntrack
-
-from models import MODELS
-
 {% if standalone is not defined %}
 {% set standalone = true %}
 {% endif %}
 
 {% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+
 project = zntrack.Project()
 {% endif %}
 

@@ -1,16 +1,14 @@
-import mlipx
-import zntrack
-import json
-
-from models import MODELS
-from mlipx.benchmark_download_utils import get_benchmark_data
-
-
 {% if standalone is not defined %}
 {% set standalone = true %}
 {% endif %}
 
 {% if standalone %}
+import mlipx
+import zntrack
+import json
+from models import MODELS
+from mlipx.benchmark_download_utils import get_benchmark_data
+
 project = zntrack.Project()
 {% endif %}
 
@@ -35,6 +33,10 @@ with project.group("ref", "lattice-constant"):
         ref_path=str(ref_path_type),
         name="Lattice-ref-types")
 
+
+ref_node_dict = {}
+ref_node_dict['exp'] = ref_lat_const_node_exp
+ref_node_dict['dft'] = ref_lat_const_node_dft
     
 with open(ref_path_const_exp) as f:
     ref_lat_const = json.load(f)

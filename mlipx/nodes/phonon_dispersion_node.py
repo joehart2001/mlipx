@@ -552,6 +552,7 @@ class PhononDispersion(zntrack.Node):
 
 
     @staticmethod
+    #@profile
     def benchmark_interactive(
         pred_node_dict: t.Dict[str, t.Dict[str, zntrack.Node]],
         ref_node_dict: t.Dict[str, zntrack.Node],
@@ -649,7 +650,7 @@ class PhononDispersion(zntrack.Node):
                     ref_node_dict,
                     benchmarks,
                     no_plots=no_plots
-                ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures")
+                ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing phonons")
             )
             
         # results = Parallel(n_jobs=-1)(
@@ -712,12 +713,14 @@ class PhononDispersion(zntrack.Node):
             pretty_benchmark_labels, 
             benchmarks,
         )
+        #print(mae_summary_df)
+        
         # Add stability classification column using static method
         mae_summary_df = PhononDispersion.add_stability_classification_column(mae_summary_df, model_benchmarks_dict)
         mae_summary_df = PhononDispersion.add_band_mae_column(mae_summary_df, scatter_to_dispersion_map)
         
         # recalculate phonon score (avg) to include band MAE
-        mae_cols = [col for col in mae_summary_df.columns if col not in ['Model', 'Phonon Score \u2193', 'Rank']]
+        mae_cols = [col for col in mae_summary_df.columns if col not in ['Model', 'Phonon Score \u2193', 'Rank', 'Stability Classification (F1)']]
 
         model_list = list(pred_node_dict[list(pred_node_dict.keys())[0]].keys())
         
@@ -727,17 +730,20 @@ class PhononDispersion(zntrack.Node):
                 score = 0
                 effective_cols = mae_cols.copy()
                 for col in mae_cols:
-                    #print(col)
-                    #print(mae_summary_df)
-                    #print(mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0])
-                    #print(mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0])
+                    print("col", col)
+                    print("mae_summary_df", mae_summary_df)
+                    print("top",mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0])
+                    print("bottom",mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0])
                     score += mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0] / mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0]
-                
+
+                    #print("score", score)
+                # issue: divide by 0 error if the normalisation model = 1
                 # 1-F1 score
-                f1_model = mae_summary_df.loc[mae_summary_df['Model'] == model, "Stability Classification (F1)"].values[0]
-                f1_base = mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, "Stability Classification (F1)"].values[0]
-                score += (1 - f1_model) / (1 - f1_base) if (1 - f1_base) != 0 else 0
-                effective_cols.append("1 - F1")
+                #f1_model = mae_summary_df.loc[mae_summary_df['Model'] == model, "Stability Classification (F1)"].values[0]
+                #f1_base = mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, "Stability Classification (F1)"].values[0]
+                #score += (1 - f1_model) / (1 - f1_base) if (1 - f1_base) != 0 else 0
+                #effective_cols.append("1 - F1")
+                
                 
                 
                 mae_summary_df.loc[mae_summary_df['Model'] == model, 'Phonon Score \u2193'] = score / len(effective_cols)
@@ -746,7 +752,11 @@ class PhononDispersion(zntrack.Node):
             # recalc score with band mae included
             mae_summary_df['Phonon Score \u2193'] = mae_summary_df[mae_cols].mean(axis=1).round(3)
         
+        
+        
         mae_summary_df = mae_summary_df.round(3)
+        #mae_summary_df['Rank'] = mae_summary_df['Rank'].fillna(-1).astype(int)
+        #print(mae_summary_df)
         mae_summary_df['Rank'] = mae_summary_df['Phonon Score \u2193'].rank(method='min').astype(int)
         
         #if not no_plots:
@@ -778,51 +788,52 @@ class PhononDispersion(zntrack.Node):
         app = dash.Dash(__name__)
 
         # Separate the "Stability Classification (F1)" column for the stability table
-        summary_columns = [col for col in mae_summary_df.columns if col != "Stability Classification (F1)"]
-        stability_columns = ["Model", "Stability Classification (F1)"] if "Stability Classification (F1)" in mae_summary_df.columns else []
+        # summary_columns = [col for col in mae_summary_df.columns if col != "Stability Classification (F1)"]
+        # stability_columns = ["Model", "Stability Classification (F1)"] if "Stability Classification (F1)" in mae_summary_df.columns else []
 
 
-        summary_table_layout = dash_table_interactive(
-            df=mae_summary_df[summary_columns],
-            id='phonon-mae-summary-table',
-            title="Phonon dispersion MAE Summary Table (300 K)",
-            extra_components=[
-                dcc.Store(id="phonon-summary-table-last-clicked"),
-                html.Div(id="phonon-summary-plot-container"),
-            ],
-        )
+        # summary_table_layout = dash_table_interactive(
+        #     df=mae_summary_df[summary_columns],
+        #     id='phonon-mae-summary-table',
+        #     title="Phonon dispersion MAE Summary Table (300 K)",
+        #     extra_components=[
+        #         dcc.Store(id="phonon-summary-table-last-clicked"),
+        #         html.Div(id="phonon-summary-plot-container"),
+        #     ],
+        # )
 
 
-        stability_table_layout = dash_table_interactive(
-            df=mae_summary_df[stability_columns],
-            id='phonon-stability-table',
-            title=html.Span([
-                "Stability Classification: imaginary modes (threshold |ω",
-                html.Sub("imag"),
-                "| < 0.05 THz)"
-            ]),
-            extra_components=[
-                dcc.Store(id="phonon-stability-table-last-clicked"),
-                html.Div(id="phonon-stability-plot-container"),
-            ],
-        )
+        # stability_table_layout = dash_table_interactive(
+        #     df=mae_summary_df[stability_columns],
+        #     id='phonon-stability-table',
+        #     title=html.Span([
+        #         "Stability Classification: imaginary modes (threshold |ω",
+        #         html.Sub("imag"),
+        #         "| < 0.05 THz)"
+        #     ]),
+        #     extra_components=[
+        #         dcc.Store(id="phonon-stability-table-last-clicked"),
+        #         html.Div(id="phonon-stability-plot-container"),
+        #     ],
+        # )
 
-        app.layout = html.Div(
-            [
-                summary_table_layout,
-                html.Br(),
-                stability_table_layout,
-            ],
-            style={"backgroundColor": "white", "padding": "20px"}
-        )
+        # app.layout = html.Div(
+        #     [
+        #         summary_table_layout,
+        #         html.Br(),
+        #         stability_table_layout,
+        #     ],
+        #     style={"backgroundColor": "white", "padding": "20px"}
+        # )
+        app.layout = PhononDispersion.build_layout(mae_summary_df)
 
-
-        PhononDispersion.register_callbacks(
-            app=app,
-            mae_df=mae_summary_df,
-            scatter_to_dispersion_map=scatter_to_dispersion_map,
-            model_benchmarks_dict=model_benchmarks_dict,
-        )
+        if run_interactive:
+            PhononDispersion.register_callbacks(
+                app=app,
+                mae_df=mae_summary_df,
+                scatter_to_dispersion_map=scatter_to_dispersion_map,
+                model_benchmarks_dict=model_benchmarks_dict,
+            )
 
         from mlipx.dash_utils import run_app
 
@@ -842,6 +853,48 @@ class PhononDispersion(zntrack.Node):
     # --------------------------------- Helper Functions ---------------------------------
 
 
+    @staticmethod
+    def build_layout(mae_summary_df):
+        from mlipx.dash_utils import dash_table_interactive
+        from dash import html, dcc
+
+        summary_columns = [col for col in mae_summary_df.columns if col != "Stability Classification (F1)"]
+        stability_columns = ["Model", "Stability Classification (F1)"] if "Stability Classification (F1)" in mae_summary_df.columns else []
+
+        summary_table_layout = dash_table_interactive(
+            df=mae_summary_df[summary_columns],
+            id='phonon-mae-summary-table',
+            title="Phonon dispersion MAE Summary Table (300 K)",
+            extra_components=[
+                dcc.Store(id="phonon-summary-table-last-clicked"),
+                html.Div(id="phonon-summary-plot-container"),
+            ],
+        )
+
+        stability_table_layout = dash_table_interactive(
+            df=mae_summary_df[stability_columns],
+            id='phonon-stability-table',
+            title=html.Span([
+                "Stability Classification: imaginary modes (threshold |ω",
+                html.Sub("imag"),
+                "| < 0.05 THz)"
+            ]),
+            extra_components=[
+                dcc.Store(id="phonon-stability-table-last-clicked"),
+                html.Div(id="phonon-stability-plot-container"),
+            ],
+        )
+
+        return html.Div(
+            [
+                summary_table_layout,
+                html.Br(),
+                stability_table_layout,
+            ],
+            style={"backgroundColor": "white", "padding": "20px"}
+        )
+        
+        
 
     @staticmethod
     def register_callbacks(
@@ -1418,7 +1471,6 @@ class PhononDispersion(zntrack.Node):
                 model_figures_dict[model_name][benchmark] = fig
                 fig.write_image(scatter_dir / f"{benchmark}.png", width=800, height=600)
         
-        #mae_summary_df = PhononDispersion.calculate_summary_statistics(plot_stats_dict, pretty_benchmark_labels, benchmarks)
         mae_summary_df.to_csv(results_dir / "mae_phonons.csv", index=False)
 
 
@@ -1697,3 +1749,9 @@ class PhononDispersion(zntrack.Node):
         )
         plot_path = data_dir / "bz_rmse_distribution.png"
         fig.write_image(plot_path, width=800, height=600)
+
+
+
+            
+
+

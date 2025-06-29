@@ -1,17 +1,14 @@
-import mlipx
-import zntrack
-
-from models import MODELS
-
-
-from pathlib import Path
-
-
 {% if standalone is not defined %}
 {% set standalone = true %}
 {% endif %}
 
 {% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+from pathlib import Path
+from ase.data import chemical_symbols
+
 project = zntrack.Project()
 {% endif %}
 

@@ -1,3 +1,5 @@
+import os
+import pickle
 import functools
 import pathlib
 import typing as t
@@ -16,7 +18,15 @@ from mlipx.abc import ComparisonResults, NodeWithCalculator
 from mlipx.utils import freeze_copy_atoms
 from pathlib import Path
 import matplotlib
-matplotlib.use("Agg") 
+matplotlib.use("Agg")
+import warnings
+from scipy.stats import ConstantInputWarning
+
+warnings.filterwarnings("ignore", message=".*empty or all-NA entries.*", category=FutureWarning)
+warnings.filterwarnings("ignore", message=".*invalid value encountered in scalar divide.*", category=RuntimeWarning)
+warnings.filterwarnings("ignore", category=ConstantInputWarning)
+warnings.filterwarnings("ignore", message=".*figure layout has changed to tight.*", category=UserWarning)
+
 
 class HomonuclearDiatomics(zntrack.Node):
     """Compute energy-bondlength curves for homonuclear diatomic molecules.
@@ -374,7 +384,8 @@ class HomonuclearDiatomics(zntrack.Node):
 
         stats_df = get_homonuclear_diatomic_stats(list(node_dict.keys()))
         stats_df = HomonuclearDiatomics.score_diatomics(stats_df, normalise_to_model=normalise_to_model)
-        stats_df["Rank"] = stats_df["Score"].rank(ascending=True, method="min").astype(int)
+        stats_df["Rank"] = stats_df["Score"].rank(ascending=True, method="min"
+                                                  ).fillna(-1).astype(int)
         
         # stats_df["Rank"] = (
         #     stats_df["Score"]
@@ -427,7 +438,7 @@ class HomonuclearDiatomics(zntrack.Node):
         
         
         # Register callbacks before running the app (+ make the tables etc)
-        HomonuclearDiatomics.register_callbacks(app, node_dict, results_dict)
+        HomonuclearDiatomics.register_callbacks(app, results_dict)
         
         from mlipx.dash_utils import run_app
         if not run_interactive:
@@ -457,7 +468,7 @@ class HomonuclearDiatomics(zntrack.Node):
 
 
     @staticmethod
-    def register_callbacks(app, node_dict, results_dict):
+    def register_callbacks(app, results_dict):
         """Register Dash callbacks for the MAE interactive plot."""
 
 
@@ -701,9 +712,9 @@ class HomonuclearDiatomics(zntrack.Node):
                     axes[r, c].axis("off")
 
         if selected_element:
-            plt.suptitle(f"Diatomics for {selected_element} with {model_name}", fontsize=18)
+            plt.suptitle(f"Heteronuclear Diatomics for {selected_element}: {model_name}", fontsize=30)
         else:
-            plt.suptitle(f"Homonuclear Diatomics: {model_name}", fontsize=18)
+            plt.suptitle(f"Homonuclear Diatomics: {model_name}", fontsize=30)
 
 
         
@@ -753,3 +764,69 @@ class HomonuclearDiatomics(zntrack.Node):
         
         return stats_df.round(3)
     
+    
+    
+    @staticmethod
+    def benchmark_precompute(
+        node_dict, 
+        cache_dir="app_cache/molecular_benchmark/diatomics_cache", 
+        ui=None, 
+        run_interactive=False, 
+        normalise_to_model=None
+    ):
+        
+        os.makedirs(cache_dir, exist_ok=True)
+        app, results_dict, stats_df = HomonuclearDiatomics.mae_plot_interactive(
+            node_dict=node_dict,
+            run_interactive=run_interactive,
+            ui=ui,
+            normalise_to_model=normalise_to_model,
+        )
+        with open(f"{cache_dir}/results_dict.pkl", "wb") as f:
+            pickle.dump(results_dict, f)
+        stats_df.to_pickle(f"{cache_dir}/stats_df.pkl")
+        return app
+
+    @staticmethod
+    def launch_dashboard(cache_dir="app_cache/molecular_benchmark/diatomics_cache", ui=None):
+        from mlipx.dash_utils import run_app
+        import pandas as pd
+        import dash
+        app = dash.Dash(__name__)
+        with open(f"{cache_dir}/results_dict.pkl", "rb") as f:
+            results_dict = pickle.load(f)
+        stats_df = pd.read_pickle(f"{cache_dir}/stats_df.pkl")
+
+        app.layout = HomonuclearDiatomics.build_layout(stats_df, results_dict)
+        HomonuclearDiatomics.register_callbacks(app, results_dict)
+        return run_app(app, ui=ui)
+
+    @staticmethod
+    def build_layout(stats_df, results_dict):
+        from mlipx.dash_utils import dash_table_interactive
+        return html.Div([
+            dash_table_interactive(
+                df=stats_df,
+                id='diatomics-stats-table',
+                title="Homo- and heteronuclear Diatomics Statistics",
+                info="This table is not interactive.",
+            ),
+            html.H2("Homo- and heteronuclear Diatomic Explorer"),
+            html.Label("Select Model:"),
+            dcc.Dropdown(
+                id="model-dropdown",
+                options=[{"label": name, "value": name} for name in results_dict],
+                value=list(results_dict.keys())[0],
+                clearable=False,
+                style={"width": "300px", "marginBottom": "20px"}
+            ),
+            html.Label("Select Element:"),
+            dcc.Dropdown(
+                id="element-dropdown",
+                options=[{"label": "All", "value": "All"}],
+                value="All",
+                clearable=False,
+                style={"width": "300px", "marginBottom": "20px"}
+            ),
+            dcc.Graph(id="diatom-element-or-ptable-plot", style={"height": "700px", "width": "100%", "marginTop": "20px"}),
+        ], style={"backgroundColor": "white"})

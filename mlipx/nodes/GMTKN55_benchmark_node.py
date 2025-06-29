@@ -42,7 +42,7 @@ import csv
 import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 from mlipx.benchmark_download_utils import get_benchmark_data
-
+import pickle
 
 
 
@@ -72,25 +72,23 @@ class GMTKN55Benchmark(zntrack.Node):
 
 
     def run(self):
-        
         calc = self.model.get_calculator()
-        
+
         # download GMTKN55_yaml and subsets.csv
         GMTKN55_dir = get_benchmark_data("GMTKN55.zip") / "GMTKN55"
-        
+
         with open(GMTKN55_dir / "GMTKN55.yaml", "r") as file:
             structure_dict = yaml.safe_load(file)
 
-            
         ref_values = {}
         pred_values = {}
-            
+
         results_summary = []
-        
+
         print(f"\nEvaluating with model: {self.model_name}")
         overall_errors = []
         overall_weights = []
-        
+
         with open(self.model_benchmark_output, "w", newline="") as csv_file:
             csv_writer = csv.writer(csv_file)
             csv_writer.writerow(["Subset", "MAE", "Completed"])
@@ -101,29 +99,26 @@ class GMTKN55Benchmark(zntrack.Node):
                     continue
                 if self.skip_subsets and subset_name in self.skip_subsets:
                     continue
-                
-                subset_name = subset_name.lower()
-                
 
-                
+                subset_name = subset_name.lower()
+
                 subset_errors = []
                 weights = []
-                
+
                 ref_values[subset_name] = {}
                 pred_values[subset_name] = {}
 
                 for system_name, system in subset.items():
                     # sytem 1,2,3...
 
-                    
                     ref_value = system["Energy"]
                     weight = system["Weight"]
-                    
+
                     def _should_run_system(
-                    system: Dict[str, Any],
-                    allowed_elements: Optional[List[int]],
-                    allowed_multiplicity: Optional[List[int]],
-                    allowed_charge: Optional[List[int]],
+                        system: Dict[str, Any],
+                        allowed_elements: Optional[List[int]],
+                        allowed_multiplicity: Optional[List[int]],
+                        allowed_charge: Optional[List[int]],
                     ) -> bool:
                         for species in system["Species"].values():
                             elements = [cctk.helper_functions.get_number(e) for e in species["Elements"]]
@@ -149,9 +144,9 @@ class GMTKN55Benchmark(zntrack.Node):
                         species_involved = []
                         for species_name, species in system["Species"].items():
                             #e.g. species name ALA_xac, ALA_xag (for Amino20x4)
-                            
+
                             species_involved.append(species_name)
-                            
+
                             atoms = ase.Atoms(
                                 species["Elements"],
                                 positions=np.array(species["Positions"])
@@ -164,7 +159,7 @@ class GMTKN55Benchmark(zntrack.Node):
                             result = atoms.get_potential_energy()
                             comp_value += result * species["Count"] * 23.0609  # eV to kcal/mol
                             # the sign of count is defined so the correct relative energy is calculated
-                            
+
                         overall_label = "-".join(str(s) for s in species_involved)
 
                         error = ref_value - comp_value
@@ -172,7 +167,6 @@ class GMTKN55Benchmark(zntrack.Node):
                         pred_values[subset_name][overall_label] = comp_value
                         weights.append(weight)
                         subset_errors.append(error)
-                        
 
                     except Exception as e:
                         print(f"Error in system {system_name}, skipping. Exception: {e}")
@@ -183,15 +177,12 @@ class GMTKN55Benchmark(zntrack.Node):
                 overall_errors.extend(subset_errors)
                 overall_weights.extend(weights)
 
-
-        
-        
         with open(self.reference_values_ouptut, "w") as f:
             json.dump(ref_values, f)
         with open(self.predicted_values_output, "w") as f:
             json.dump(pred_values, f)
-       
-            
+
+
             
     @property
     def reference_dict(self):
@@ -469,14 +460,34 @@ class GMTKN55Benchmark(zntrack.Node):
         ], style={"backgroundColor": "white", "padding": "20px"})
 
 
+
+        # --- Extract reference and predicted dicts from each node and save nested dict as pickle ---
+        cache_dir = "app_cache/molecular_benchmark/GMTKN55_cache"
+        os.makedirs(cache_dir, exist_ok=True)
+        ref_pred_dict = {}
+        for model_name, node in node_dict.items():
+            try:
+                with open(node.reference_values_ouptut, "r") as f:
+                    ref_dict = json.load(f)
+                with open(node.predicted_values_output, "r") as f:
+                    pred_dict = json.load(f)
+                ref_pred_dict[model_name] = {"reference": ref_dict, "predicted": pred_dict}
+            except Exception as e:
+                print(f"Skipping model {model_name} due to error loading outputs: {e}")
+
+        with open(os.path.join(cache_dir, "all_model_dicts.pkl"), "wb") as f:
+            pickle.dump(ref_pred_dict, f)
+            
+            
+
         # Register callbacks
-        GMTKN55Benchmark.register_callbacks(app, node_dict, mae_df)
+        GMTKN55Benchmark.register_callbacks(app, mae_df, ref_pred_dict)
 
 
         from mlipx.dash_utils import run_app
 
         if not run_interactive:
-            return app, wtmad_table, mae_df
+            return app, wtmad_table, benchmark_df, mae_df
 
         return run_app(app, ui=ui)
     
@@ -490,8 +501,8 @@ class GMTKN55Benchmark(zntrack.Node):
     @staticmethod
     def register_callbacks(
         app: dash.Dash,
-        node_dict: Dict[str, NodeWithCalculator],
-        mae_df: pd.DataFrame
+        mae_df: pd.DataFrame,
+        all_model_dicts: Dict[str, Dict[str, Dict[str, Any]]],
     ):
 
         @app.callback(
@@ -554,20 +565,18 @@ class GMTKN55Benchmark(zntrack.Node):
             print(f"Selected: {model_name} | {subset_name}")
 
             try:
-                pred_list = [node_dict[model_name].predicted_dict[subset_name][label] for label in node_dict[model_name].predicted_dict[subset_name]]
-                ref_list = [node_dict[model_name].reference_dict[subset_name][label] for label in node_dict[model_name].reference_dict[subset_name]]
-                species_list = [label for label in node_dict[model_name].predicted_dict[subset_name]]
+                refs_dict = all_model_dicts[model_name]["reference"][subset_name]
+                preds_dict = all_model_dicts[model_name]["predicted"][subset_name]
             except KeyError:
-                print(f"Model {model_name} or subset {subset_name} not found in data.")
-                # Return the default children (section header and empty graph)
                 return [
                     html.H2("Predicted vs Reference Energies", style={"color": "black", "marginTop": "30px"}),
-                    dcc.Graph(id="GMTKN55-pred-vs-ref-plot")
+                    html.P("No data available for this selection.")
                 ]
 
-            preds = np.array([i for i in pred_list])
-            refs = np.array([i for i in ref_list])
-            mae = np.mean(np.abs(refs - preds))
+            species_list = list(refs_dict.keys())
+            refs = [refs_dict[s] for s in species_list]
+            preds = [preds_dict[s] for s in species_list]
+            mae = np.mean(np.abs(np.array(refs) - np.array(preds)))
 
             from mlipx.dash_utils import create_scatter_plot
             scatter_fig = create_scatter_plot(
@@ -590,3 +599,94 @@ class GMTKN55Benchmark(zntrack.Node):
                 dcc.Graph(id="GMTKN55-pred-vs-ref-plot", figure=scatter_fig)
             ]
     
+    @staticmethod
+    def benchmark_precompute(
+        node_dict,
+        cache_dir="app_cache/molecular_benchmark/GMTKN55_cache",
+        ui=None,
+        run_interactive=False,
+        normalise_to_model=None
+    ):
+        import json
+        import pickle
+        os.makedirs(cache_dir, exist_ok=True)
+        app, wtmad_table, benchmark_df, mae_df = GMTKN55Benchmark.mae_plot_interactive(
+            node_dict=node_dict,
+            ui=ui,
+            run_interactive=run_interactive,
+            normalise_to_model=normalise_to_model,
+        )
+        wtmad_table.to_pickle(os.path.join(cache_dir, "wtmad_table.pkl"))
+        benchmark_df.to_pickle(os.path.join(cache_dir, "benchmark_df.pkl"))
+        mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+
+
+
+        return app
+
+    @staticmethod
+    def launch_dashboard(
+        cache_dir="app_cache/molecular_benchmark/GMTKN55_cache", 
+        ui=None
+    ):
+        from mlipx.dash_utils import run_app
+        app = dash.Dash(__name__)
+        wtmad_table = pd.read_pickle(os.path.join(cache_dir, "wtmad_table.pkl"))
+        benchmark_df = pd.read_pickle(os.path.join(cache_dir, "benchmark_df.pkl"))
+        mae_df = pd.read_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+
+        app.title = "GMTKN55 Dashboard"
+
+        app.layout = GMTKN55Benchmark.build_layout(wtmad_table, benchmark_df)
+
+        with open(os.path.join(cache_dir, "all_model_dicts.pkl"), "rb") as f:
+            all_model_dicts = pickle.load(f)
+        GMTKN55Benchmark.register_callbacks(app, mae_df, all_model_dicts)
+
+        return run_app(app, ui=ui)
+
+
+
+    @staticmethod
+    def build_layout(wtmad_table, benchmark_df):
+        from mlipx.dash_utils import dash_table_interactive
+        from dash import html, dcc
+
+        return html.Div([
+            html.H1("GMTKN55 Benchmarking Dashboard", style={"color": "black"}),
+
+            dash_table_interactive(
+                df=wtmad_table,
+                id="GMTKN55-wtmad-table",
+                title="WTMAD (weighted total mean absolute deviation)",
+                info="This table is not interactive.",
+            ),
+
+            dash_table_interactive(
+                df=benchmark_df.round(3),
+                id="GMTKN55-category-table",
+                title="MAD/MAE per Category (kcal/mol)",
+                info="This table is not interactive.",
+            ),
+
+            html.H2("MAD/MAE per Subset", style={"color": "black", "marginTop": "30px"}),
+            html.P("Click on a point to see the scatter plot of predicted vs reference energies used for the MAE calculation."),
+            html.Div([
+                html.Label("Color by:", style={"marginRight": "10px"}),
+                dcc.RadioItems(
+                    id="GMTKN55-color-toggle",
+                    options=[
+                        {"label": "Category", "value": "category"},
+                        {"label": "Model", "value": "model"},
+                    ],
+                    value="category",
+                    labelStyle={"display": "inline-block", "marginRight": "15px"}
+                )
+            ], style={"marginBottom": "20px"}),
+
+            html.Div([
+                dcc.Graph(id="GMTKN55-mae-plot", style={"width": "100%"})
+            ]),
+
+            html.Div(id="pred-vs-ref-container", children=[]),
+        ], style={"backgroundColor": "white", "padding": "20px"})

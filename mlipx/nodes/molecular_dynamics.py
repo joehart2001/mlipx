@@ -16,7 +16,12 @@ import time
 import json
 from ase.neighborlist import neighbor_list
 from joblib import Parallel, delayed
-
+import pandas as pd
+import json
+from dash import dash_table, dcc, html
+import dash
+from mlipx.dash_utils import run_app, dash_table_interactive
+import pickle
 
 from mlipx.abc import (
     ComparisonResults,
@@ -337,6 +342,7 @@ class MolecularDynamics(zntrack.Node):
                         j_indices=o_indices,
                         r_max=6.0,
                         bins=100,
+                        n_jobs=1,
                     )
                     properties_dict[prop][model_name] = {
                         "r": r,
@@ -350,6 +356,7 @@ class MolecularDynamics(zntrack.Node):
                         j_indices=h_indices,
                         r_max=6.0,
                         bins=100,
+                        n_jobs=1,
                     )
                     properties_dict[prop][model_name] = {
                         "r": r,
@@ -363,6 +370,7 @@ class MolecularDynamics(zntrack.Node):
                         j_indices=h_indices,
                         r_max=6.0,
                         bins=100,
+                        n_jobs=1,
                     )
                     properties_dict[prop][model_name] = {
                         "r": r,
@@ -510,30 +518,73 @@ class MolecularDynamics(zntrack.Node):
                     if last_clicked is not None and active_cell == last_clicked:
                         return None, None
 
-                    fig = go.Figure()
                     col = active_cell["column_id"]
-                    # Plot all reference traces, highlight the selected one
+                    # Begin new logic for consistent ordering, labeling, and coloring
+                    fig = go.Figure()
+                    legend_order = reference_keys + model_names
+
+                    # Assign consistent colors from Plotly's qualitative palette
+                    from plotly.express.colors import qualitative
+                    color_map = {name: qualitative.Plotly[i % len(qualitative.Plotly)] for i, name in enumerate(legend_order)}
+
+                    # Plot all references
                     for ref_key in reference_keys:
-                        if ref_key in properties_dict[selected_property]:
-                            r = properties_dict[selected_property][ref_key]['r']
-                            rdf = properties_dict[selected_property][ref_key]['rdf']
-                            opacity = 1.0 if col == ref_key else 0.3
-                            fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{ref_key} ({selected_property})", opacity=opacity))
-                    # Plot all model traces, highlight the selected one
+                        trace_name = f"{ref_key} ({selected_property})"
+                        r = properties_dict[selected_property][ref_key]['r']
+                        rdf = properties_dict[selected_property][ref_key]['rdf']
+                        opacity = 1.0 if col == ref_key else 0.3
+                        fig.add_trace(go.Scatter(
+                            x=r,
+                            y=rdf,
+                            mode='lines',
+                            name=trace_name,
+                            opacity=opacity,
+                            # Always dashed for reference curves
+                            line=dict(color=color_map[ref_key], width=2, dash='dot'),
+                        ))
+
+                    # Plot all models
                     for model in model_names:
                         model_rdf = properties_dict[selected_property].get(model)
                         if model_rdf is not None:
                             r = model_rdf['r']
                             rdf = model_rdf['rdf']
                             opacity = 1.0 if model == model_name else 0.2
-                            fig.add_trace(go.Scatter(x=r, y=rdf, mode='lines', name=f"{model}", opacity=opacity))
-                    # Ensure selected model and selected reference are fully plotted
-                    model_rdf = properties_dict[selected_property].get(model_name)
-                    if model_rdf is not None:
-                        fig.add_trace(go.Scatter(x=model_rdf['r'], y=model_rdf['rdf'], mode='lines', name=f"{model_name}", line=dict(width=3, dash='solid'), opacity=1.0))
-                    ref_rdf = properties_dict[selected_property].get(col)
-                    if ref_rdf is not None:
-                        fig.add_trace(go.Scatter(x=ref_rdf['r'], y=ref_rdf['rdf'], mode='lines', name=f"{col}", line=dict(width=3, dash='dot'), opacity=1.0))
+                            fig.add_trace(go.Scatter(
+                                x=r,
+                                y=rdf,
+                                mode='lines',
+                                name=model,
+                                opacity=opacity,
+                                line=dict(color=color_map[model], width=2),
+                            ))
+
+                    # Highlight selected model and reference again for emphasis
+                    if model_name in color_map and model_name in properties_dict[selected_property]:
+                        r = properties_dict[selected_property][model_name]['r']
+                        rdf = properties_dict[selected_property][model_name]['rdf']
+                        fig.add_trace(go.Scatter(
+                            x=r,
+                            y=rdf,
+                            mode='lines',
+                            name=f"{model_name} (highlight)",
+                            line=dict(color=color_map[model_name], width=3),
+                            opacity=1.0,
+                            showlegend=False,
+                        ))
+
+                    if col in reference_keys and col in properties_dict[selected_property]:
+                        r = properties_dict[selected_property][col]['r']
+                        rdf = properties_dict[selected_property][col]['rdf']
+                        fig.add_trace(go.Scatter(
+                            x=r,
+                            y=rdf,
+                            mode='lines',
+                            name=f"{col} (highlight)",
+                            line=dict(color=color_map[col], width=3, dash='dot'),
+                            opacity=1.0,
+                            showlegend=False,
+                        ))
 
                     fig.update_layout(
                         title=f"RDF Comparison for {model_name} ({selected_property.replace('_', '-')})",
@@ -592,3 +643,99 @@ class MolecularDynamics(zntrack.Node):
         rdf = rdf / rdf[np.argmax(r)] # liquid rdf should be 1 at large r
 
         return r, rdf
+    
+    
+    
+    
+    @staticmethod
+    def benchmark_precompute(
+        node_dict,
+        cache_dir="app_cache/further_applications_benchmark/molecular_dynamics_cache",
+        ui=None,
+        run_interactive=False,
+        normalise_to_model=None,
+    ):
+        import os
+        os.makedirs(cache_dir, exist_ok=True)
+        app, (mae_df_oo, mae_df_oh, mae_df_hh), properties_dict = MolecularDynamics.mae_plot_interactive(
+            node_dict=node_dict,
+            run_interactive=run_interactive,
+            ui=ui,
+            normalise_to_model=normalise_to_model,
+        )
+        mae_df_oo.to_pickle(f"{cache_dir}/mae_df_oo.pkl")
+        mae_df_oh.to_pickle(f"{cache_dir}/mae_df_oh.pkl")
+        mae_df_hh.to_pickle(f"{cache_dir}/mae_df_hh.pkl")
+        with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
+            pickle.dump(properties_dict, f)
+            
+            
+        return app
+
+
+
+    @staticmethod
+    def launch_dashboard(
+        cache_dir="app_cache/further_applications_benchmark/molecular_dynamics_cache", 
+        ui=None
+    ):
+
+        mae_df_oo = pd.read_pickle(f"{cache_dir}/mae_df_oo.pkl")
+        mae_df_oh = pd.read_pickle(f"{cache_dir}/mae_df_oh.pkl")
+        mae_df_hh = pd.read_pickle(f"{cache_dir}/mae_df_hh.pkl")
+        with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
+            properties_dict = pickle.load(f)
+
+        app = dash.Dash(__name__)
+        app.layout = MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh)
+
+        MolecularDynamics.register_callbacks(
+            app, [
+                ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
+                ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
+                ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
+            ], mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh], properties_dict=properties_dict
+        )
+
+        return run_app(app, ui=ui)
+    
+    
+    
+    
+    
+    @staticmethod
+    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh):
+
+        return html.Div([
+            html.H1("Water MD Benchmark"),
+            html.H3("O-O RDF MAE Table"),
+            dash_table_interactive(
+                df=mae_df_oo,
+                id="rdf-mae-score-table-oo",
+                title=None,
+                extra_components=[
+                    html.Div(id="rdf-table-details-oo"),
+                    dcc.Store(id="rdf-table-last-clicked-oo", data=None),
+                ],
+            ),
+            html.H3("O-H RDF Table"),
+            dash_table_interactive(
+                df=mae_df_oh,
+                id="rdf-mae-score-table-oh",
+                title=None,
+                extra_components=[
+                    html.Div(id="rdf-table-details-oh"),
+                    dcc.Store(id="rdf-table-last-clicked-oh", data=None),
+                ],
+            ),
+            html.H3("H-H RDF Table"),
+            dash_table_interactive(
+                df=mae_df_hh,
+                id="rdf-mae-score-table-hh",
+                title=None,
+                extra_components=[
+                    html.Div(id="rdf-table-details-hh"),
+                    dcc.Store(id="rdf-table-last-clicked-hh", data=None),
+                ],
+            ),
+        ], style={"backgroundColor": "white"})

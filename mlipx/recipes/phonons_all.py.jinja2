@@ -1,11 +1,4 @@
-import mlipx
-import zntrack
 
-from models import MODELS
-
-from mlipx.phonons_utils import download_alex_parallel
-from mlipx.benchmark_download_utils import BENCHMARK_DATA_DIR
-from pathlib import Path
 
 
 {% if standalone is not defined %}
@@ -13,6 +6,13 @@ from pathlib import Path
 {% endif %}
 
 {% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+from mlipx.phonons_utils import download_alex_parallel
+from mlipx.benchmark_download_utils import BENCHMARK_DATA_DIR
+from pathlib import Path
+
 project = zntrack.Project()
 {% endif %}
 

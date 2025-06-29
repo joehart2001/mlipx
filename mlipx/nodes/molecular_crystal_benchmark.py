@@ -158,7 +158,7 @@ class MolecularCrystalBenchmark(zntrack.Node):
             benchmark_title="Molecular Crystal Benchmark",
             apps_list=apps_list,
             benchmark_table_info=benchmark_table_info,
-            style_data_conditional=style_data_conditional,
+            #style_data_conditional=style_data_conditional,
         )
         app.layout = layout
         
@@ -181,24 +181,203 @@ class MolecularCrystalBenchmark(zntrack.Node):
     # ------------- helper functions -------------
 
     def mol_crystal_benchmark_score(
-        mae_df_X23, 
-        mae_df_DMC_ICE, 
+        mae_df_X23,
+        mae_df_DMC_ICE,
+        normalise_to_model: t.Optional[str] = None,
+        weights: Dict[str, float] = None,
     ):
-        """ Currently avg mae
-        """
-        # Initialize scores
-        maes = {}
+        """Weighted molecular crystal benchmark scoring."""
+        if weights is None:
+            weights = {"X23": 1.0, "DMC_ICE": 1.0}
+
         scores = {}
-        
-        # Calculate scores for each model
         model_list = mae_df_X23['Model'].values.tolist()
-        
+
         for model in model_list:
-            scores[model] = 0
+            x23_score = mae_df_X23.loc[mae_df_X23['Model'] == model, 'Score'].values[0]
+            dmc_ice_score = mae_df_DMC_ICE.loc[mae_df_DMC_ICE['Model'] == model, 'Score'].values[0]
+
+            weighted_avg = (
+                weights["X23"] * x23_score +
+                weights["DMC_ICE"] * dmc_ice_score
+            ) / sum(weights.values())
+
+            scores[model] = {
+                "X23 Score \u2193": x23_score,
+                "DMC-ICE13 Score \u2193": dmc_ice_score,
+                "Avg MAE \u2193": weighted_avg,
+            }
+
+        df = pd.DataFrame.from_dict(scores, orient='index').reset_index().rename(columns={'index': 'Model'})
+
+        if normalise_to_model is not None:
+            norm_val = df.loc[df["Model"] == normalise_to_model, "Avg MAE \u2193"].values[0]
+            df["Avg MAE \u2193"] = df["Avg MAE \u2193"] / norm_val
+
+        return df
+
+
+
+
+
+    @staticmethod
+    def benchmark_precompute(
+        X23_data: List[X23Benchmark] | Dict[str, X23Benchmark],
+        DMC_ICE_data: List[DMCICE13Benchmark] | Dict[str, DMCICE13Benchmark],
+        cache_dir: str = "app_cache/molecular_crystal_benchmark",
+        ui=None,
+        run_interactive=False,
+        report: bool = False,
+        normalise_to_model: str | None = None,
+    ):
+        os.makedirs(cache_dir, exist_ok=True)
+
+        from mlipx.dash_utils import process_data
+        # list -> dict or dict -> dict
+        # GMTKN55
+        X23_dict = process_data(
+            X23_data,
+            key_extractor=lambda node: node.name.split("_X23Benchmark")[0],
+            value_extractor=lambda node: node
+        )
+        
+        # Homonuclear Diatomics
+        DMC_ICE_dict = process_data(
+            DMC_ICE_data,
+            key_extractor=lambda node: node.name.split("_DMCICE13Benchmark")[0],
+            value_extractor=lambda node: node
+        )
+        
+        
+        
+        os.makedirs(cache_dir, exist_ok=True)
+        X23Benchmark.benchmark_precompute(
+            node_dict=X23_dict,
+            ui=ui,
+            run_interactive=False,
+            normalise_to_model=normalise_to_model,
+        )
+        DMCICE13Benchmark.benchmark_precompute(
+            node_dict=DMC_ICE_dict,
+            ui=ui,
+            run_interactive=False,
+            normalise_to_model=normalise_to_model,
+        )
+        
+
+        
+        mae_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/mae_df.pkl")
+        abs_error_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/abs_error_df.pkl")
+        lattice_e_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/lattice_e_df.pkl")
+        
+        mae_df_ICE = pd.read_pickle(f"{cache_dir}/DMC_ICE_13_cache/mae_df.pkl")
+        lattice_e_all_df_ICE = pd.read_pickle(f"{cache_dir}/DMC_ICE_13_cache/lattice_e_all_df.pkl")
+        with open(f"{cache_dir}/DMC_ICE_13_cache/rel_poly_dfs.pkl", "rb") as f:
+            rel_poly_dfs_ICE = pickle.load(f)
+        
+
+        
+        benchmark_score_df = MolecularCrystalBenchmark.mol_crystal_benchmark_score(
+            mae_df_X23=mae_df_X23,
+            mae_df_DMC_ICE=mae_df_ICE,
+            normalise_to_model=normalise_to_model,
+        ).round(3).sort_values(by='Avg MAE \u2193').reset_index(drop=True)
+        benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
+        
+        benchmark_score_df.to_pickle(f"{cache_dir}/benchmark_score.pkl")
+        
+        callback_fn = MolecularCrystalBenchmark.callback_fn_from_cache(
+            mae_df_X23=mae_df_X23,
+            rel_poly_dfs_DMC_ICE=rel_poly_dfs_ICE,
+        )
+        
+        with open(f"{cache_dir}/callback_data.pkl", "wb") as f:
+            pickle.dump(MolecularCrystalBenchmark.callback_fn_from_cache, f)
+
+        return
+
+
+
+    @staticmethod
+    def launch_dashboard(
+        cache_dir: str = "app_cache/molecular_crystal_benchmark",
+        ui=None,
+        full_benchmark: bool = False,
+        normalise_to_model: str | None = None,
+    ):
+        import pandas as pd
+        from mlipx.dash_utils import run_app, combine_apps
+
+        app = dash.Dash(__name__, suppress_callback_exceptions=True)
+
+        mae_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/mae_df.pkl")
+        abs_error_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/abs_error_df.pkl")
+        lattice_e_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/lattice_e_df.pkl")
+        
+        mae_df_ICE = pd.read_pickle(f"{cache_dir}/DMC_ICE_13_cache/mae_df.pkl")
+        lattice_e_all_df_ICE = pd.read_pickle(f"{cache_dir}/DMC_ICE_13_cache/lattice_e_all_df.pkl")
+        with open(f"{cache_dir}/DMC_ICE_13_cache/rel_poly_dfs.pkl", "rb") as f:
+            rel_poly_dfs_ICE = pickle.load(f)
             
-            scores[model] += mae_df_X23.loc[mae_df_X23['Model'] == model, 'Score'].values[0]
-            scores[model] += mae_df_DMC_ICE.loc[mae_df_DMC_ICE['Model'] == model, 'Score'].values[0]
-            scores[model] = scores[model] / 2
-            
-                        
-        return pd.DataFrame.from_dict(scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})
+        benchmark_score_df = pd.read_pickle(f"{cache_dir}/benchmark_score.pkl")
+
+
+        callback_fn = MolecularCrystalBenchmark.callback_fn_from_cache(
+            #cache_dir=cache_dir,
+            mae_df_X23=mae_df_X23,
+            rel_poly_dfs_DMC_ICE=rel_poly_dfs_ICE,
+        )
+
+
+        app = dash.Dash(__name__, suppress_callback_exceptions=True)
+        
+
+        layout = MolecularCrystalBenchmark.build_layout(
+            benchmark_score_df=benchmark_score_df,
+            apps_or_layouts_list=[
+                X23Benchmark.build_layout(mae_df_X23, abs_error_df_X23, lattice_e_df_X23),
+                DMCICE13Benchmark.build_layout(mae_df_ICE, rel_poly_dfs_ICE, lattice_e_all_df_ICE),
+            ],
+            benchmark_table_info=f"Scores normalised to: {normalise_to_model}" if normalise_to_model else "",
+        )
+
+        if full_benchmark:
+            return layout, callback_fn
+
+        app.layout = layout
+        callback_fn(app)
+        
+        return run_app(app, ui=ui)
+    
+    @staticmethod
+    def build_layout(
+        benchmark_score_df: pd.DataFrame,
+        apps_or_layouts_list: t.List[t.Union[dash.Dash, t.Callable, html.Div]],
+        benchmark_table_info: str = "",
+        id: str = "molecular-benchmark-score-table",
+    ):
+        """ Build the layout for the molecular crystal benchmark dashboard
+        """
+        from mlipx.dash_utils import combine_apps
+        
+        return combine_apps(
+            benchmark_score_df=benchmark_score_df,
+            benchmark_title="Molecular Crystal Benchmark",
+            apps_or_layouts_list=apps_or_layouts_list,
+            benchmark_table_info=benchmark_table_info,
+            id=id,
+            static_coloured_table=True,
+        )
+    
+    @staticmethod
+    def callback_fn_from_cache(
+        mae_df_X23,
+        rel_poly_dfs_DMC_ICE,
+    ):
+        from mlipx import X23Benchmark, DMCICE13Benchmark
+
+        def callback_fn(app):
+            #X23Benchmark.register_callbacks(app, mae_df_X23)
+            DMCICE13Benchmark.register_callbacks(app, rel_poly_dfs_DMC_ICE)
+
+        return callback_fn

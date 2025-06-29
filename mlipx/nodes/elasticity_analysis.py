@@ -134,45 +134,65 @@ class Elasticity(zntrack.Node):
     
     @staticmethod
     def mae_plot_interactive(
-        node_dict,
-        ui=None,
-        run_interactive=True,
-        report=True,
+        node_dict, 
+        ui = None, 
+        run_interactive = True,
+        report = True,
         normalise_to_model: t.Optional[str] = None,
     ):
-        """Interactive MAE table -> scatter plot for bulk and shear moduli for each model
+        """Interactive MAE table -> scatter plot for bulk and shear moduli for each model 
         """
+        
+        
         benchmarks = [
-            'K_vrh',
+            'K_vrh', 
             'G_vrh',
         ]
         benchmark_units = {
-            'K_vrh': '[GPa]',
+            'K_vrh': '[GPa]', 
             'G_vrh': '[GPa]',
         }
         benchmark_labels = {
             'K_vrh': 'K_bulk',
             'G_vrh': 'K_shear',
         }
+        
         label_to_key = {v: k for k, v in benchmark_labels.items()}
-
+        
+        
         mae_df = pd.DataFrame()
+
         for model in node_dict.keys():
             results_df = node_dict[model].results
+
             full_count = len(results_df)
+            
             mask_K = (results_df[f'K_vrh_{model}'] > -50) & (results_df[f'K_vrh_{model}'] < 600)
             mask_G = (results_df[f'G_vrh_{model}'] > -50) & (results_df[f'G_vrh_{model}'] < 600)
+
             valid_mask = mask_K & mask_G
+            
             results_df = results_df[valid_mask].copy()
-            #print(f"Model: {model}, Valid entries: {len(results_df)}")
+            print(f"Model: {model}, Valid entries: {len(results_df)}")
+                        
+            
+            # results_df[f'K_vrh_{model}'] = results_df[mask_K][f'K_vrh_{model}']
+            # results_df['K_vrh_DFT'] = results_df[mask_K]['K_vrh_DFT']
+            # results_df[f'G_vrh_{model}'] = results_df[mask_G][f'G_vrh_{model}']
+            # results_df['G_vrh_DFT'] = results_df[mask_G]['G_vrh_DFT']
+            
+
             mae_K = np.abs(results_df[f'K_vrh_{model}'].values - results_df['K_vrh_DFT'].values).mean()
             mae_G = np.abs(results_df[f'G_vrh_{model}'].values - results_df['G_vrh_DFT'].values).mean()
             mae_df.loc[model, 'K_bulk [GPa]'] = mae_K
             mae_df.loc[model, 'K_shear [GPa]'] = mae_G
-            mae_df.loc[model, "excluded count"] = full_count - len(results_df)
+            mae_df.loc[model, "excluded count"] = full_count - len(results_df) 
+
         mae_df = mae_df.reset_index().rename(columns={'index': 'Model'})
-        mae_df = mae_df
+        mae_df = mae_df.round(3)
+        
         mae_cols = [col for col in mae_df.columns if col not in ['Model']]
+        
         if normalise_to_model is not None:
             for model in node_dict.keys():
                 score = 0
@@ -181,48 +201,39 @@ class Elasticity(zntrack.Node):
                         continue
                     else:
                         score += mae_df.loc[mae_df['Model'] == model, col].values[0] / mae_df.loc[mae_df['Model'] == normalise_to_model, col].values[0]
-                mae_df.loc[mae_df['Model'] == model, 'Elasticity Score \u2193'] = score / (len(mae_cols) - 1)  # -1 to exclude 'excluded count'
+                mae_df.loc[mae_df['Model'] == model, 'Elasticity Score \u2193'] = score / len(mae_cols)
         else:
-            mae_df['Elasticity Score \u2193'] = mae_df[mae_cols].mean(axis=1)
+            mae_df['Elasticity Score \u2193'] = mae_df[mae_cols].mean(axis=1).round(3)
+        
         mae_df = mae_df.round(3)
         mae_df['Rank'] = mae_df['Elasticity Score \u2193'].rank(method='min', ascending=True).astype(int)
 
+        
+            
         Elasticity.save_scatter_plots_stats(
             node_dict=node_dict,
             mae_df=mae_df,
             save_path=f"benchmark_stats/bulk_crystal_benchmark/elasticity/"
         )
+        
         models_list = list(node_dict.keys())
         if report:
             md_path = Elasticity.generate_elasticity_report(
                 mae_df=mae_df,
                 models_list=models_list,
+                
             )
         else:
             md_path = None
+        
         if ui is None and run_interactive:
             return
+        
 
         # Dash app
         app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
-        # Use the class method to build the layout
-        app.layout = Elasticity.build_layout(mae_df)
-
-        results_dict = {model: node.results for model, node in node_dict.items()}
-        if run_interactive:
-            Elasticity.register_callbacks(app, mae_df, results_dict)
-
-        from mlipx.dash_utils import run_app
-        if not run_interactive:
-            return app, mae_df, md_path, results_dict
-        return run_app(app, ui=ui)
-
-
-    @staticmethod
-    def build_layout(mae_df):
-        """Return the Dash layout for the elasticity MAE dashboard."""
-        return html.Div([
+        app.layout = html.Div([
             dash_table_interactive(
                 df=mae_df,
                 id='elas-mae-table',
@@ -239,6 +250,20 @@ class Elasticity(zntrack.Node):
         style={
             'backgroundColor': 'white',
         })
+        
+        
+        results_dict = {model: node.results for model, node in node_dict.items()}
+        if run_interactive:
+            Elasticity.register_callbacks(app, mae_df, results_dict)
+
+
+
+        from mlipx.dash_utils import run_app
+
+        if not run_interactive:
+            return app, mae_df, md_path, results_dict
+
+        return run_app(app, ui=ui)
                 
 
 
@@ -306,7 +331,7 @@ class Elasticity(zntrack.Node):
             
 
     @staticmethod
-    def generate_density_scatter_figure(x, y, label, model, mae=None, max_points=500, num_cells=100):
+    def generate_density_scatter_figure(x, y, label, model, mae=None, max_points=500, num_cells=200):
         x, y = np.array(x), np.array(y)
         x_min, x_max = x.min() - 0.05, x.max() + 0.05 # add a small margin otherwise the egde points are cut off
         y_min, y_max = y.min() - 0.05, y.max() + 0.05
@@ -536,7 +561,7 @@ class Elasticity(zntrack.Node):
     @staticmethod
     def benchmark_precompute(
         node_dict,
-        cache_dir: str = "app_cache/bulk_crystal_benchmark/elasticity_cache",
+        cache_dir: str = "app_cache/elasticity_cache",
         ui=None,
         run_interactive: bool = False,
         report: bool = True,
@@ -554,44 +579,18 @@ class Elasticity(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         mae_df.to_pickle(f"{cache_dir}/mae_summary.pkl")
-        with open(f"{cache_dir}/results_dict.pkl", "wb") as f: # cant use to_pickle on plain dict
-            pickle.dump(results_dict, f)
-    
-        # for model, df in results_dict.items():
-        #     df.to_csv(f"{cache_dir}/{model}_results.csv", index=False)
+        for model, df in results_dict.items():
+            df.to_csv(f"{cache_dir}/{model}_results.csv", index=False)
             
-        return
+        return app
 
     @staticmethod
-    def build_layout(mae_df):
-        return html.Div([
-            dash_table_interactive(
-                df=mae_df,
-                id='elas-mae-table',
-                title="Bulk and Shear Moduli MAEs",
-                extra_components=[
-                    dcc.Store(id="stored-cell-points"),
-                    dcc.Store(id="stored-results-df"),
-                    dcc.Store(id='elas-mae-table-last-clicked'),
-                    html.Div(id='scatter-plot-container'),
-                    dash_table.DataTable(id="material-table"),
-                ]
-            )
-        ],
-        style={'backgroundColor': 'white'})
-
-
-    @staticmethod
-    def launch_dashboard(cache_dir: str = "app_cache/bulk_crystal_cache/elasticity_cache", ui=None):
+    def launch_dashboard(app, cache_dir: str = "app_cache/elasticity_cache", ui=None):
+        
         mae_df = pd.read_pickle(f"{cache_dir}/mae_summary.pkl")
-        with open(f"{cache_dir}/results_dict.pkl", "rb") as f:
-            results_dict = pickle.load(f)
-        #results_dict = pd.read_pickle(f"{cache_dir}/results_dict.pkl")
-        # results_dict = {
-        #     row["Model"]: pd.read_csv(f"{cache_dir}/{row['Model']}_results.csv")
-        #     for _, row in mae_df.iterrows()
-        # }
-        app = dash.Dash(__name__)
-        app.layout = Elasticity.build_layout(mae_df)
+        results_dict = {
+            row["Model"]: pd.read_csv(f"{cache_dir}/{row['Model']}_results.csv")
+            for _, row in mae_df.iterrows()
+        }
         Elasticity.register_callbacks(app, mae_df, results_dict)
         return run_app(app, ui=ui)

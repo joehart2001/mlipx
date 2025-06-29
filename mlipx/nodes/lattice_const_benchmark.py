@@ -51,7 +51,19 @@ class LatticeConstant(zntrack.Node):
     """
     # inputs
     structure: List[mlipx.StructureOptimization] = zntrack.deps()
-    
+    @staticmethod
+    def build_layout(mae_df):
+        from mlipx.dash_utils import dash_table_interactive
+        from dash import html, dcc
+        return dash_table_interactive(
+            df=mae_df,
+            id="lat-mae-score-table",
+            title="Lattice Constants MAE Summary Table",
+            extra_components=[
+                html.Div(id="lattice-const-table"),
+                dcc.Store(id="lattice-table-last-clicked", data=None),
+            ],
+        )
     # outputs
     # nwd: ZnTrack's node working directory for saving files
     lattice_const_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_const.json")
@@ -193,16 +205,7 @@ class LatticeConstant(zntrack.Node):
 
         # ------------ Dash App ----------------
         app = dash.Dash(__name__)
-        from mlipx.dash_utils import dash_table_interactive
-        app.layout = dash_table_interactive(
-            df=mae_df,
-            id="lat-mae-score-table",
-            title="Lattice Constants MAE Summary Table",
-            extra_components=[
-                html.Div(id="lattice-const-table"),
-                dcc.Store(id="lattice-table-last-clicked", data=None),
-            ],
-        )
+        app.layout = LatticeConstant.build_layout(mae_df)
 
         LatticeConstant.register_callbacks(app, mae_df, lat_const_df)
 
@@ -453,3 +456,29 @@ class LatticeConstant(zntrack.Node):
                     dcc.Tab(label="Δ Table", children=[html.Div(summary_table_combined, style={"padding": "20px"})])
                 ])
             ]), active_cell
+
+    @staticmethod
+    def benchmark_precompute(node_dict, ref_node_dict, cache_dir="app_cache/bulk_crystal_benchmark/lattice_cache", ui=None, run_interactive=False, report=True, normalise_to_model=None):
+        os.makedirs(cache_dir, exist_ok=True)
+        app, mae_df, lat_const_df, md_path = LatticeConstant.mae_plot_interactive(
+            node_dict=node_dict,
+            ref_node_dict=ref_node_dict,
+            ui=ui,
+            run_interactive=run_interactive,
+            report=report,
+            normalise_to_model=normalise_to_model,
+        )
+        mae_df.to_pickle(f"{cache_dir}/mae_summary.pkl")
+        lat_const_df.to_pickle(f"{cache_dir}/lat_const_df.pkl")
+        return app
+
+    @staticmethod
+    def launch_dashboard(cache_dir="app_cache/bulk_crystal_cache/lattice_cache", ui=None):
+        import pandas as pd
+        from mlipx.dash_utils import run_app
+        app = dash.Dash(__name__)
+        mae_df = pd.read_pickle(f"{cache_dir}/mae_summary.pkl")
+        lat_const_df = pd.read_pickle(f"{cache_dir}/lat_const_df.pkl")
+        app.layout = LatticeConstant.build_layout(mae_df)
+        LatticeConstant.register_callbacks(app, mae_df, lat_const_df)
+        return run_app(app, ui=ui)

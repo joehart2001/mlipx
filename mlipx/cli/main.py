@@ -23,7 +23,13 @@ from mlipx import benchmark, recipes
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from tqdm import tqdm
-
+import warnings
+warnings.filterwarnings(
+    "ignore",
+    message="Node name should not contain '_'",
+    category=UserWarning,
+    module="zntrack.node"
+)
 
 
 app = typer.Typer()
@@ -197,8 +203,8 @@ from typer import Option, Argument
 
 @app.command()
 def phonon_compare(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
-    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
@@ -206,6 +212,12 @@ def phonon_compare(
     no_plots: Annotated[bool, Option("--no_plots", help="Disable plots")] = False,
 
     ):
+    
+    nodes = [
+        "*Phonon*",
+    ]
+    glob = True
+    
     """Launch interactive benchmark for phonon dispersion."""
     import fnmatch
     import dvc.api
@@ -598,7 +610,7 @@ def load_nodes_and_ref_node_lat(node_objects, models, split_str):
         model = name.split(split_str)[0]
         
         if "ref" in model:
-            print(f"Found reference node: {name}, {node}")
+            #print(f"Found reference node: {name}, {node}")
             if "exp" in name:
                 ref_node_dict["exp"] = node
             elif "dft" in name:
@@ -748,11 +760,11 @@ def get_mol_crystal_benchmark_node_dicts(
     
     
 @app.command()
-def full_benchmark_compare(
+def full_benchmark_precompute(
     #nodes: Annotated[list[str], typer.Argument(help="Path(s) to full benchmark nodes")],
     #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
-    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    #ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
     report: Annotated[bool, Option("--report", help="Generate a report")] = True,
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
@@ -769,6 +781,8 @@ def full_benchmark_compare(
         "*MolecularDynamics*",
     ]
     glob = True
+    
+    print("Loading nodes for full benchmark...")
     
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()
@@ -816,47 +830,92 @@ def full_benchmark_compare(
     
     
     
+    # if ui not in {None, "browser"}:
+    #     typer.echo("Invalid UI mode. Choose from: none or browser.")
+    #     raise typer.Exit(1)
+    # print('\n UI = ', ui)
+    
+    print("Running full benchmark precompute...")
+    from mlipx import FullBenchmark
+    FullBenchmark.benchmark_precompute(
+        phonon_ref_data=phonon_ref_node,
+        phonon_pred_data=phonon_pred_node_dict,
+        elasticity_data=elasticity_dict,
+        lattice_const_data=lattice_const_dict,
+        lattice_const_ref_node_dict=lattice_const_ref_node_dict,
+        X23_data=X23_dict,
+        DMC_ICE_data=ICE_DMC_dict,
+        GMTKN55_data=GMTKN55_dict,
+        HD_data=HD_dict,
+        MD_data=MD_dict,
+        #ui=ui,
+        #return_app = return_app,
+        #report=report,
+        normalise_to_model=normalise_to_model,
+    )
+    
+    # if return_app:
+    #     return FullBenchmark.benchmark_interactive(
+    #         phonon_ref_data=phonon_ref_node,
+    #         phonon_pred_data=phonon_pred_node_dict,
+    #         elasticity_data=elasticity_dict,
+    #         lattice_const_data=lattice_const_dict,
+    #         lattice_const_ref_node_dict=lattice_const_ref_node_dict,
+    #         X23_data=X23_dict,
+    #         DMC_ICE_data=ICE_DMC_dict,
+    #         GMTKN55_data=GMTKN55_dict,
+    #         HD_data=HD_dict,
+    #         MD_data=MD_dict,
+    #         ui=ui,
+    #         return_app = return_app,
+    #         report=report,
+    #         normalise_to_model=normalise_to_model,
+    #     )
+    # else:
+    #     FullBenchmark.benchmark_interactive(
+    #         phonon_ref_data=phonon_ref_node,
+    #         phonon_pred_data=phonon_pred_node_dict,
+    #         elasticity_data=elasticity_dict,
+    #         lattice_const_data=lattice_const_dict,
+    #         lattice_const_ref_node_dict=lattice_const_ref_node_dict,
+    #         X23_data=X23_dict,
+    #         DMC_ICE_data=ICE_DMC_dict,
+    #         GMTKN55_data=GMTKN55_dict,
+    #         HD_data=HD_dict,
+    #         MD_data=MD_dict,
+    #         ui=ui,
+    #         report=report,
+    #         normalise_to_model=normalise_to_model,
+    #     )
+    
+    
+    
+@app.command()
+def full_benchmark_launch_dashboard(
+    cache_dir="app_cache/",
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
     if ui not in {None, "browser"}:
         typer.echo("Invalid UI mode. Choose from: none or browser.")
         raise typer.Exit(1)
     print('\n UI = ', ui)
     
     from mlipx import FullBenchmark
-    if return_app:
-        return FullBenchmark.benchmark_interactive(
-            phonon_ref_data=phonon_ref_node,
-            phonon_pred_data=phonon_pred_node_dict,
-            elasticity_data=elasticity_dict,
-            lattice_const_data=lattice_const_dict,
-            lattice_const_ref_node_dict=lattice_const_ref_node_dict,
-            X23_data=X23_dict,
-            DMC_ICE_data=ICE_DMC_dict,
-            GMTKN55_data=GMTKN55_dict,
-            HD_data=HD_dict,
-            MD_data=MD_dict,
+    if return_app == True:
+        return FullBenchmark.launch_dashboard(
+            cache_dir=cache_dir,
             ui=ui,
-            return_app = return_app,
-            report=report,
-            normalise_to_model=normalise_to_model,
+            return_app=return_app,
         )
     else:
-        FullBenchmark.benchmark_interactive(
-            phonon_ref_data=phonon_ref_node,
-            phonon_pred_data=phonon_pred_node_dict,
-            elasticity_data=elasticity_dict,
-            lattice_const_data=lattice_const_dict,
-            lattice_const_ref_node_dict=lattice_const_ref_node_dict,
-            X23_data=X23_dict,
-            DMC_ICE_data=ICE_DMC_dict,
-            GMTKN55_data=GMTKN55_dict,
-            HD_data=HD_dict,
-            MD_data=MD_dict,
+        FullBenchmark.launch_dashboard(
+            cache_dir=cache_dir,
             ui=ui,
-            report=report,
-            normalise_to_model=normalise_to_model,
-        )
+        )    
     
-    
+
     
     
 @app.command()

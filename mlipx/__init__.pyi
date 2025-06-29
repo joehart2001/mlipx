@@ -50,6 +50,8 @@ from .nodes.phonon_all_meta import PhononAllBatchMeta
 from .nodes.oc157 import OC157Benchmark
 from .nodes.wiggle150 import Wiggle150
 from .nodes.further_applications import FutherApplications
+from .nodes.phonon_dispersion_node_analysis import PhononDispersion2
+from .nodes.phonon_all_analysis import PhononAllBatch2
 from .project import Project
 from .version import __version__
 

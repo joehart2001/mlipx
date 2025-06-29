@@ -1,6 +1,5 @@
 import mlipx
 import zntrack
-
 from models import MODELS
 from pathlib import Path
 
@@ -10,6 +9,16 @@ from pathlib import Path
 {% endif %}
 
 {% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+from pathlib import Path
+import json
+from mlipx.benchmark_download_utils import get_benchmark_data
+from mlipx.phonons_utils import download_alex_parallel
+from mlipx.benchmark_download_utils import BENCHMARK_DATA_DIR
+from ase.data import chemical_symbols
+
 project = zntrack.Project()
 {% endif %}
 

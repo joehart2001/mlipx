@@ -34,7 +34,7 @@ from typing import List, Dict, Any, Optional
 
 import mlipx
 from mlipx import MolecularDynamics
-
+from mlipx.dash_utils import combine_apps
 
 
 import os
@@ -102,7 +102,7 @@ class FutherApplications(zntrack.Node):
 
         from mlipx.dash_utils import colour_table
         # Viridis-style colormap for Dash DataTable
-        style_data_conditional = colour_table(benchmark_score_df, col_name="Avg MAE \u2193")
+        style_data_conditional = colour_table(benchmark_score_df, all_cols=True)
         
         
         # md_path_list = [elas_md_path, lattice_const_md_path, phonon_md_path]
@@ -129,7 +129,7 @@ class FutherApplications(zntrack.Node):
             benchmark_title="Further Applications",
             apps_list=apps_list,
             benchmark_table_info=benchmark_table_info,
-            style_data_conditional=style_data_conditional,
+            #style_data_conditional=style_data_conditional,
         )
         app.layout = layout
         
@@ -186,8 +186,149 @@ class FutherApplications(zntrack.Node):
                     scores[model].append(value[0])
 
         # Compute average
-        import numpy as np
         avg_scores = {model: np.mean(vals) for model, vals in scores.items()}
 
-        import pandas as pd
         return pd.DataFrame.from_dict(avg_scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})
+
+
+
+
+
+    @staticmethod
+    def benchmark_precompute(
+        MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
+        cache_dir: str = "app_cache/further_applications_benchmark",
+        ui: str = "browser",
+        report: bool = False,
+        normalise_to_model: Optional[str] = None,
+    ):
+        from mlipx.dash_utils import process_data
+        os.makedirs(cache_dir, exist_ok=True)
+
+        MD_dict = process_data(
+            MD_data,
+            key_extractor=lambda node: node.name.split("_config-0_MolecularDynamics")[0],
+            value_extractor=lambda node: node
+        )
+
+        app_MD, (mae_df_oo, mae_df_oh, mae_df_hh), properties_dict = MolecularDynamics.mae_plot_interactive(
+            node_dict=MD_dict,
+            run_interactive=False,
+            normalise_to_model=normalise_to_model,
+        )
+
+        benchmark_score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh)).round(3)
+        benchmark_score_df = benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True).reset_index(drop=True)
+        benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
+
+        benchmark_score_df.to_csv(f"{cache_dir}/benchmark_score.csv", index=False)
+        mae_df_oo.to_pickle(f"{cache_dir}/mae_oo.pkl")
+        mae_df_oh.to_pickle(f"{cache_dir}/mae_oh.pkl")
+        mae_df_hh.to_pickle(f"{cache_dir}/mae_hh.pkl")
+
+        with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
+            pickle.dump(properties_dict, f)
+
+
+
+    @staticmethod
+    def launch_dashboard(
+        cache_dir: str = "app_cache/further_applications_benchmark",
+        ui: str = "browser",
+        full_benchmark: bool = False,
+        normalise_to_model: Optional[str] = None,
+    ):
+        import pandas as pd
+        import json
+        from mlipx.dash_utils import run_app
+        import dash
+
+        benchmark_score_df = pd.read_csv(f"{cache_dir}/benchmark_score.csv")
+        mae_df_oo = pd.read_pickle(f"{cache_dir}/mae_oo.pkl")
+        mae_df_oh = pd.read_pickle(f"{cache_dir}/mae_oh.pkl")
+        mae_df_hh = pd.read_pickle(f"{cache_dir}/mae_hh.pkl")
+        with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
+            properties_dict = pickle.load(f)
+
+        callback_fn = FutherApplications.callback_fn_from_cache(
+            cache_dir=cache_dir,
+            mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh],
+            properties_dict=properties_dict,
+        )
+
+        app = dash.Dash(__name__)
+
+        layout = FutherApplications.build_layout(
+            mae_df_oo=mae_df_oo,
+            mae_df_oh=mae_df_oh,
+            mae_df_hh=mae_df_hh,
+            properties_dict=properties_dict,
+            normalise_to_model=normalise_to_model,
+        )
+        
+        mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh]
+        
+        if full_benchmark:
+            return layout, callback_fn
+
+        app.layout = layout
+        callback_fn(app)
+        #FutherApplications.register_callbacks(app, mae_df_oo, mae_df_oh, mae_df_hh, properties_dict)
+
+        return run_app(app, ui=ui)
+    
+
+    @staticmethod
+    def callback_fn_from_cache(
+        cache_dir, 
+        mae_df_list, 
+        properties_dict, 
+        normalise_to_model=None
+    ):
+
+        def callback_fn(app):
+            
+            MolecularDynamics.register_callbacks(
+                app, [
+                    ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
+                    ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
+                    ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
+                ], mae_df_list=mae_df_list, properties_dict=properties_dict
+            )
+            
+        return callback_fn
+    
+    
+    @staticmethod
+    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, properties_dict, normalise_to_model=None):
+        
+        score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh)).round(3)
+        score_df["Rank"] = score_df["Avg MAE \u2193"].rank(ascending=True).astype(int)
+        score_df = score_df.sort_values(by="Avg MAE \u2193", ascending=True).reset_index(drop=True)
+
+        layout = combine_apps(
+            benchmark_score_df=score_df,
+            benchmark_title="Further Applications",
+            benchmark_table_info=f"Scores normalised to: {normalise_to_model}" if normalise_to_model else "",
+            apps_or_layouts_list=[
+                MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh)
+            ],
+            id="rdf-benchmark-score-table",
+        )
+
+        return layout
+    
+    
+    
+    @staticmethod
+    def register_callbacks(app, mae_df_oo, mae_df_oh, mae_df_hh, properties_dict):
+        from mlipx import MolecularDynamics
+        MolecularDynamics.register_callbacks(
+            app, [
+                ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
+                ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
+                ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
+            ],
+            mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh],
+            properties_dict=properties_dict
+        )

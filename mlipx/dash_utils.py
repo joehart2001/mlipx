@@ -14,7 +14,9 @@ import csv
 import warnings
 import matplotlib
 import matplotlib.cm
-
+from dash import Dash, html
+from dash.development.base_component import Component
+from typing import List, Union
 
 # ----
 
@@ -56,6 +58,8 @@ def dash_table_interactive(
                 info: str = "Info: click on an interactive cell to show plots, click on the models column to collapse",
                 extra_components: list = None,
                 interactive: bool = True,
+                static_coloured_table: bool = False,
+                
 ) -> html.Div:
     
     """
@@ -75,6 +79,9 @@ def dash_table_interactive(
 
     """
     
+    
+    
+    
     return html.Div([
         html.H2(title, style={"color": "black"}),
         html.P(info, style={"fontSize": "14px", "color": "#555"}) if interactive else None,
@@ -86,6 +93,13 @@ def dash_table_interactive(
             style_cell={'textAlign': 'center', 'fontSize': '14px'},
             style_header={'fontWeight': 'bold',"whiteSpace": "normal"},
             cell_selectable=interactive,
+            style_data_conditional=colour_table(df, all_cols=True) if static_coloured_table else None,
+            # col sorting, doesn't move the selected cell
+            # sort_action="native", # enable column header sort
+            # sort_mode="single", # allow sorting by one column at a time
+            
+            # persistence=True,
+            # persistence_type='memory'
         ),
 
         html.Br(),
@@ -190,69 +204,137 @@ def colour_table(
 
 
 
-
-
 def combine_apps(
     benchmark_score_df: pd.DataFrame,
     benchmark_title: str,
-    apps_list: List[dash.Dash],
+    apps_or_layouts_list: List[Union[Dash, Component]],
+    id: str = "benchmark-score-table",
     benchmark_table_info: str = "",
-    style_data_conditional: List[Dict[str, Any]] | None = None,
+    extra_components: list = None,
+    static_coloured_table: bool = False,
+    weights_components: list = None,
 ):
-    """ combines multiple Dash apps into a single app, where the first app is the main app
-         e.g. used in bulk_crystal_benchmark
-         
-         TODO: potential issue: id='benchmark-score-table' will be duplicated in each benchmark
+    """Combines multiple Dash apps or layouts into a single layout.
+
+    Accepts a list of Dash apps (`dash.Dash`) or Dash layout components (`html.Div`, `dcc.Graph`, etc.).
+
+    Args:
+        benchmark_score_df: Benchmark score table data.
+        benchmark_title: Title at the top of the app.
+        apps_or_layouts_list: List of Dash apps or layout components.
+        id: HTML ID of the score table.
+        benchmark_table_info: Info box content for the benchmark table.
+        extra_components: Optional additional components for the table.
+        static_coloured_table: If True, disables dynamic coloring.
+        weights_components: Optional list of Dash components (e.g., sliders and input boxes) for editing benchmark weights, shown below the benchmark score table.
     """
-    
-    benchmark_score_table = html.Div([
-        html.H2("Benchmark Score Table", style={'color': 'Black', 'padding': '1rem'}),
-        html.P(benchmark_table_info, style={"fontSize": "14px", "color": "#555"}),
-        dash_table.DataTable(
-            id='benchmark-score-table',
-            columns=[{"name": col, "id": col} for col in benchmark_score_df.columns],
-            data=benchmark_score_df.to_dict('records'),
-            style_cell={'textAlign': 'center', 'fontSize': '14px'},
-            style_header={'fontWeight': 'bold'},
-            style_data_conditional=style_data_conditional if style_data_conditional else None,
-        ),
-    ], style={"backgroundColor": "white", "padding": "20px"})
-    
+    benchmark_score_table = dash_table_interactive(
+        df=benchmark_score_df,
+        id=id,
+        title="Benchmark Score Table",
+        info=benchmark_table_info,
+        extra_components=extra_components,
+        interactive=True,
+        static_coloured_table=static_coloured_table,
+    )
 
-
-    app_layout_dict = {f"app_{i}": app.layout for i, app in enumerate(apps_list)}
-    
     children = [
         html.H1(f"{benchmark_title}", style={"color": "black"}),
-        html.Div(benchmark_score_table, style={
+        html.Div([
+            benchmark_score_table,
+            html.Br(),
+            *(weights_components if weights_components else [])
+        ], style={
             "backgroundColor": "white",
             "padding": "20px",
             "border": "2px solid black",
         })
     ]
 
-    # add all other app layouts except app_1
-    for idx in range(len(apps_list)):
+    # Extract and wrap all layout components
+    for idx, entry in enumerate(apps_or_layouts_list):
+        layout = entry.layout if isinstance(entry, Dash) else entry
         children.append(
-            html.Div(app_layout_dict[f"app_{idx}"].children, style={
+            html.Div(layout.children if hasattr(layout, "children") else layout, style={
                 "backgroundColor": "white",
                 "padding": "20px",
                 "border": "2px solid black",
             })
         )
 
-    # assign layout to app_1 (main app)
-    # apps_list[0].layout = html.Div(
-    #     children,
-    #     style={"backgroundColor": "#f8f8f8"}
-    # )
-    
     return html.Div(
         children,
         style={"backgroundColor": "#f8f8f8"}
     )
     
-    #return apps_list[0]
+
+
+# def combine_apps(
+#     benchmark_score_df: pd.DataFrame,
+#     benchmark_title: str,
+#     apps_list: List[dash.Dash],
+#     id: str = "benchmark-score-table",
+#     benchmark_table_info: str = "",
+#     #style_data_conditional: List[Dict[str, Any]] | None = None,
+#     extra_components: list = None,
+#     static_coloured_table: bool = False,
+# ):
+#     """ combines multiple Dash apps into a single app, where the first app is the main app
+#          e.g. used in bulk_crystal_benchmark
+         
+#          TODO: potential issue: id='benchmark-score-table' will be duplicated in each benchmark
+         
+#          static_coloured_table: use false when you want no colours or when adding a dynamically coloured table
+#     """
+    
+#     benchmark_score_table = dash_table_interactive(
+#         df=benchmark_score_df,
+#         id=id,
+#         title="Benchmark Score Table",
+#         info=benchmark_table_info,
+#         extra_components=extra_components,
+#         interactive=True,
+#         static_coloured_table=static_coloured_table,
+#     )
+
+
+
+#     app_layout_dict = {
+#         f"app_{i}": app.layout if hasattr(app, "layout") else app
+#         for i, app in enumerate(apps_list)
+#     }
+    
+#     children = [
+#         html.H1(f"{benchmark_title}", style={"color": "black"}),
+#         html.Div(benchmark_score_table, style={
+#             "backgroundColor": "white",
+#             "padding": "20px",
+#             "border": "2px solid black",
+#         })
+#     ]
+
+#     # add all other app layouts except app_1
+#     for idx in range(len(apps_list)):
+#         children.append(
+#             html.Div(app_layout_dict[f"app_{idx}"].children, style={
+#                 "backgroundColor": "white",
+#                 "padding": "20px",
+#                 "border": "2px solid black",
+#             })
+#         )
+
+#     # assign layout to app_1 (main app)
+#     # apps_list[0].layout = html.Div(
+#     #     children,
+#     #     style={"backgroundColor": "#f8f8f8"}
+#     # )
+    
+#     return html.Div(
+#         children,
+#         style={"backgroundColor": "#f8f8f8"}
+#     )
+    
+#     #return apps_list[0]
 
 
 

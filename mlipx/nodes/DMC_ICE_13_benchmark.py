@@ -282,7 +282,7 @@ class DMCICE13Benchmark(zntrack.Node):
 
 
         if not run_interactive:
-            return app, mae_df, rel_poly_dfs
+            return app, mae_df, rel_poly_dfs, lattice_e_all_df
 
         return run_app(app, ui=ui)
 
@@ -329,3 +329,96 @@ class DMCICE13Benchmark(zntrack.Node):
             return px.line(melt_df, x="Polymorph", y="Relative Energy", color="Model", markers=True,
                         title=f"Relative to {selected_poly}",
                         labels={"Polymorph": "Polymorph", "Relative Energy": "Relative Energy (meV)"})
+
+
+
+
+    @staticmethod
+    def benchmark_precompute(
+        node_dict, 
+        cache_dir="app_cache/molecular_crystal_benchmark/DMC_ICE_13_cache", 
+        ui=None, 
+        run_interactive=False, 
+        normalise_to_model=None
+    ):
+        
+        os.makedirs(cache_dir, exist_ok=True)
+        app, mae_df, rel_poly_dfs, lattice_e_all_df = DMCICE13Benchmark.mae_plot_interactive(
+            node_dict=node_dict,
+            run_interactive=run_interactive,
+            ui=ui,
+            normalise_to_model=normalise_to_model,
+        )
+        mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+        lattice_e_all_df.to_pickle(os.path.join(cache_dir, "lattice_e_all_df.pkl"))
+        with open(os.path.join(cache_dir, "rel_poly_dfs.pkl"), "wb") as f:
+            pickle.dump(rel_poly_dfs, f)\
+        
+        return app
+
+
+    @staticmethod
+    def launch_dashboard(
+        cache_dir="app_cache/molecular_crystal_benchmark/DMC_ICE_13_cache", 
+        ui=None
+    ):
+        import pandas as pd
+        from mlipx.dash_utils import run_app
+        app = dash.Dash(__name__)
+        mae_df = pd.read_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+        lattice_e_all_df = pd.read_pickle(os.path.join(cache_dir, "lattice_e_all_df.pkl"))
+        with open(os.path.join(cache_dir, "rel_poly_dfs.pkl"), "rb") as f:
+            rel_poly_dfs = pickle.load(f)
+
+        app.layout = DMCICE13Benchmark.build_layout(mae_df, rel_poly_dfs, lattice_e_all_df)
+        DMCICE13Benchmark.register_callbacks(app, rel_poly_dfs)
+        return run_app(app, ui=ui)
+    
+    
+    
+    
+    @staticmethod
+    def build_layout(mae_df, rel_poly_dfs, lattice_e_all_df):
+        from dash import html, dcc
+        from mlipx.dash_utils import dash_table_interactive
+        import plotly.express as px
+
+        # Absolute plot
+        df_abs_melt = lattice_e_all_df.reset_index().melt(
+            id_vars="Polymorph", var_name="Model", value_name="Absolute Lattice Energy (meV)"
+        )
+        fig_abs_lat = px.line(df_abs_melt, x="Polymorph", y="Absolute Lattice Energy (meV)", color="Model", markers=True)
+
+        # Default relative figure (vs Ih)
+        default_poly = "Ih" if "Ih" in rel_poly_dfs else list(rel_poly_dfs.keys())[0]
+        rel_df = rel_poly_dfs[default_poly].reset_index()
+        df_rel_melt = rel_df.melt(id_vars="Polymorph", var_name="Model", value_name="Relative Energy")
+        fig_rel_lat = px.line(df_rel_melt, x="Polymorph", y="Relative Energy", color="Model", markers=True)
+
+        tabs = dcc.Tabs([
+            dcc.Tab(label="Absolute Lattice Energies", children=[
+                html.H3("Absolute Lattice Energies"),
+                dcc.Graph(figure=fig_abs_lat)
+            ]),
+            dcc.Tab(label="Relative Lattice Energies", children=[
+                html.H3("Relative Lattice Energies"),
+                html.Label("Select reference polymorph:"),
+                dcc.Dropdown(
+                    id="poly-dropdown",
+                    options=[{"label": poly, "value": poly} for poly in rel_poly_dfs],
+                    value=default_poly,
+                    style={"width": "300px", "marginBottom": "20px"}
+                ),
+                dcc.Graph(id="rel-lattice-graph", figure=fig_rel_lat)
+            ])
+        ])
+
+        return html.Div([
+            dash_table_interactive(
+                df=mae_df.round(3),
+                id="dmc-ice-mae-table",
+                info="This table is not interactive.",
+                title="DMC-ICE-13 Dataset: MAE Table (meV)",
+            ),
+            tabs
+        ], style={"backgroundColor": "white", "padding": "20px"})

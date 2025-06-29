@@ -148,6 +148,7 @@ class PhononAllBatch(zntrack.Node):
             phonon_pred_band_structure_path = phonon_pred_path / f"{mp_id}_band_structure.npz"
             phonon_pred_dos_path = phonon_pred_path / f"{mp_id}_dos.npz"
             thermal_path = phonon_pred_path / f"{mp_id}_thermal_properties.json"
+            
             if check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
                 print(f"Skipping {mp_id} as results already exist.")
                 return {
@@ -344,16 +345,17 @@ class PhononAllBatch(zntrack.Node):
 
 
 
+
+
     @staticmethod
     def benchmark_interactive(
-        pred_node_dict: dict[str, "PhononAllBatch"],
+        pred_node_dict,
         ref_phonon_node,
         ui=None,
         run_interactive=True,
         report=False,
         normalise_to_model: t.Optional[str] = None,
         no_plots: bool = False,
-
     ):
         """
         Benchmarking with multiple models (each one is a PhononAllBatch node).
@@ -387,10 +389,10 @@ class PhononAllBatch(zntrack.Node):
             @property
             def formula(self):
                 return self._data["formula"] if "formula" in self._data else None
-            
+        
         
         def convert_batch_to_node_dict(
-            batch_node: PhononAllBatch, model_name: t.Optional[str] = None
+            batch_node, model_name: t.Optional[str] = None
         ) -> dict[str, t.Any]:
             raw_data = batch_node.get_phonon_ref_data
             if model_name is None:
@@ -407,10 +409,7 @@ class PhononAllBatch(zntrack.Node):
                 if mp_id not in pred_node_dict_new:
                     pred_node_dict_new[mp_id] = {}
                 pred_node_dict_new[mp_id].update(model_wrapper_dict)
-                
         
-        
-    
         output = PhononDispersion.benchmark_interactive(
             pred_node_dict=pred_node_dict_new,
             ref_node_dict=ref_node_dict,
@@ -420,7 +419,126 @@ class PhononAllBatch(zntrack.Node):
             normalise_to_model=normalise_to_model,
             no_plots=no_plots,
         )
-        
         return output
+
+
+
+
+
+
+
+    @staticmethod
+    def benchmark_precompute(
+        pred_node_dict,
+        ref_phonon_node,
+        cache_dir: str = "app_cache/bulk_crystal_benchmark/phonons_cache",
+        ui=None,
+        run_interactive: bool = False,
+        report: bool = False,
+        normalise_to_model: t.Optional[str] = None,
+        no_plots: bool = False,
+    ):
+        """
+        Precompute all data for benchmarking and save to cache_dir.
+        """
+        import os
+        os.makedirs(cache_dir, exist_ok=True)
+        import pickle
+        import pandas as pd
+
+        class PhononDataWrapper:
+            def __init__(self, mp_id: str, data: dict[str, t.Any]):
+                self.name = f"phonon_{mp_id}"
+                self._data = data
+
+            @property
+            def band_structure(self):
+                return self._data["band_structure"]
+
+            @property
+            def dos(self):
+                dos_dict = self._data["dos"]
+                return dos_dict["frequency_points"], dos_dict["total_dos"]
+
+            @property
+            def get_thermal_properties(self):
+                return self._data["thermal_properties"]
+
+            @property
+            def labels(self):
+                return self._data["labels"]
+
+            @property
+            def connections(self):
+                return self._data["connections"]
+            
+            @property
+            def formula(self):
+                return self._data["formula"] if "formula" in self._data else None
+
+        def convert_batch_to_node_dict(
+            batch_node, model_name: t.Optional[str] = None
+        ) -> dict[str, t.Any]:
+            raw_data = batch_node.get_phonon_ref_data
+            if model_name is None:
+                return {mp_id: PhononDataWrapper(mp_id, data) for mp_id, data in raw_data.items()}
+            else:
+                return {mp_id: {model_name: PhononDataWrapper(mp_id, data)} for mp_id, data in raw_data.items()}
+
+        ref_node_dict = convert_batch_to_node_dict(ref_phonon_node)
+        pred_node_dict_new = {}
+        for model_name, batch_node in pred_node_dict.items():
+            model_data = convert_batch_to_node_dict(batch_node, model_name)
+            for mp_id, model_wrapper_dict in model_data.items():
+                if mp_id not in pred_node_dict_new:
+                    pred_node_dict_new[mp_id] = {}
+                pred_node_dict_new[mp_id].update(model_wrapper_dict)
+
+        app, mae_summary_df, scatter_to_dispersion_map, model_benchmarks_dict, _ = PhononDispersion.benchmark_interactive(
+            pred_node_dict=pred_node_dict_new,
+            ref_node_dict=ref_node_dict,
+            ui=ui,
+            run_interactive=run_interactive,
+            report=report,
+            normalise_to_model=normalise_to_model,
+            no_plots=no_plots,
+        )
+
+        mae_summary_df.to_pickle(f"{cache_dir}/mae_summary.pkl")
+        with open(f"{cache_dir}/scatter_to_dispersion_map.pkl", "wb") as f:
+            pickle.dump(scatter_to_dispersion_map, f)
+        with open(f"{cache_dir}/model_benchmarks_dict.pkl", "wb") as f:
+            pickle.dump(model_benchmarks_dict, f)
+
+        return
+
+
+    @staticmethod
+    def launch_dashboard(
+        cache_dir: str = "app_cache/bulk_crystal_benchmark/phonons_cache", 
+        ui=None
+        ):
         
+        import pickle
+        import pandas as pd
+        from mlipx.dash_utils import run_app
+        import dash
+
+        with open(f"{cache_dir}/scatter_to_dispersion_map.pkl", "rb") as f:
+            scatter_to_dispersion_map = pickle.load(f)
+        with open(f"{cache_dir}/model_benchmarks_dict.pkl", "rb") as f:
+            model_benchmarks_dict = pickle.load(f)
+        mae_summary_df = pd.read_pickle(f"{cache_dir}/mae_summary.pkl")
         
+        app = dash.Dash(__name__)
+        
+        app.layout = PhononDispersion.build_layout(mae_summary_df)
+
+        PhononDispersion.register_callbacks(
+            app=app,
+            mae_df=mae_summary_df,
+            scatter_to_dispersion_map=scatter_to_dispersion_map,
+            model_benchmarks_dict=model_benchmarks_dict,
+        )
+
+        return run_app(app, ui=ui)
