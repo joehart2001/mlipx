@@ -1491,7 +1491,7 @@ class PhononDispersion(zntrack.Node):
             title=f"{model_name} - {pretty_label}",
         )
         fig.update_traces(
-            hovertemplate="Ref: %{x:.6f}<br>Pred: %{y:.6f}<extra></extra>"
+            hovertemplate="Ref: %{x:.3e}<br>Pred: %{y:.3e}<extra></extra>"
         )
         # y=x
         fig.add_shape(
@@ -1574,7 +1574,7 @@ class PhononDispersion(zntrack.Node):
             line=dict(color="black", dash="dash")
         )
         fig.update_traces(
-            hovertemplate="Ref: %{x:.6f}<br>Pred: %{y:.6f}<extra></extra>"
+            hovertemplate="Ref: %{x:.3e}<br>Pred: %{y:.3e}<extra></extra>"
         )
         fig.update_layout(
             plot_bgcolor="white",
