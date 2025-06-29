@@ -59,6 +59,7 @@ def dash_table_interactive(
                 extra_components: list = None,
                 interactive: bool = True,
                 static_coloured_table: bool = False,
+                tooltip_header: Optional[Dict[str, str]] = None,
                 
 ) -> html.Div:
     
@@ -91,15 +92,17 @@ def dash_table_interactive(
             columns=[{"name": col, "id": col} for col in df.columns],
             data=df.to_dict('records'),
             style_cell={'textAlign': 'center', 'fontSize': '14px'},
-            style_header={'fontWeight': 'bold',"whiteSpace": "normal"},
+            style_header={'fontWeight': 'bold', 'textDecoration': 'underline', 'textDecorationStyle': 'dotted',
+                          'cursor': 'help', "whiteSpace": "normal"},
             cell_selectable=interactive,
-            style_data_conditional=colour_table(df, all_cols=True) if static_coloured_table else None,
+            style_data_conditional=colour_table(df, all_cols=True) if static_coloured_table else None,        
+            tooltip_header=tooltip_header,
+            tooltip_delay=100,
+            tooltip_duration=None,
             # col sorting, doesn't move the selected cell
             # sort_action="native", # enable column header sort
             # sort_mode="single", # allow sorting by one column at a time
             
-            # persistence=True,
-            # persistence_type='memory'
         ),
 
         html.Br(),

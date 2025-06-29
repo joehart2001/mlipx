@@ -233,7 +233,15 @@ class Elasticity(zntrack.Node):
                     dcc.Store(id='elas-mae-table-last-clicked'),
                     html.Div(id='scatter-plot-container'),
                     dash_table.DataTable(id="material-table"),
-                ]
+                ],
+                tooltip_header={
+                    "Model": "Name of the MLIP model",
+                    "K_bulk [GPa]": "Mean Absolute Error of Voigt-Reuss-Hill (VRH) average bulk modulus",
+                    "K_shear [GPa]": "Mean Absolute Error of Voigt-Reuss-Hill (VRH) average shear modulus",
+                    "excluded count": "Number of materials excluded in the MAE calculations due to K > 600 GPa or K < -50 GPa",
+                    "Elasticity Score ↓": "Average MAE (lower is better)",
+                    "Rank": "Ranking based on Elasticity Score (1 = best)",
+                }
             )
         ],
         style={
@@ -562,27 +570,27 @@ class Elasticity(zntrack.Node):
             
         return
 
-    @staticmethod
-    def build_layout(mae_df):
-        return html.Div([
-            dash_table_interactive(
-                df=mae_df,
-                id='elas-mae-table',
-                title="Bulk and Shear Moduli MAEs",
-                extra_components=[
-                    dcc.Store(id="stored-cell-points"),
-                    dcc.Store(id="stored-results-df"),
-                    dcc.Store(id='elas-mae-table-last-clicked'),
-                    html.Div(id='scatter-plot-container'),
-                    dash_table.DataTable(id="material-table"),
-                ]
-            )
-        ],
-        style={'backgroundColor': 'white'})
+    # @staticmethod
+    # def build_layout(mae_df):
+    #     return html.Div([
+    #         dash_table_interactive(
+    #             df=mae_df,
+    #             id='elas-mae-table',
+    #             title="Bulk and Shear Moduli MAEs",
+    #             extra_components=[
+    #                 dcc.Store(id="stored-cell-points"),
+    #                 dcc.Store(id="stored-results-df"),
+    #                 dcc.Store(id='elas-mae-table-last-clicked'),
+    #                 html.Div(id='scatter-plot-container'),
+    #                 dash_table.DataTable(id="material-table"),
+    #             ]
+    #         )
+    #     ],
+    #     style={'backgroundColor': 'white'})
 
 
     @staticmethod
-    def launch_dashboard(cache_dir: str = "app_cache/bulk_crystal_cache/elasticity_cache", ui=None):
+    def launch_dashboard(cache_dir: str = "app_cache/bulk_crystal_benchmark/elasticity_cache", ui=None):
         mae_df = pd.read_pickle(f"{cache_dir}/mae_summary.pkl")
         with open(f"{cache_dir}/results_dict.pkl", "rb") as f:
             results_dict = pickle.load(f)
