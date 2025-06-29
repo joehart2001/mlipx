@@ -56,6 +56,26 @@ warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=ConstantInputWarning)
 
 
+BENCHMARK_STRUCTURE = {
+    "Overall Benchmark": [],
+    "Bulk Crystal Score": ["Phonon Dispersion", "Lattice Constants", "Elasticity"],
+    "Molecular Crystal Score": ["X23 Benchmark", "DMC-ICE13 Benchmark"],
+    "Molecular Score": ["GMTKN55 Benchmark", "Homonuclear Diatomics"],
+    "Further Applications": ["Molecular Dynamics"],
+}
+
+# # Mapping from benchmark label to their dash table id
+# BENCHMARK_TABLE_IDS = {
+#     "Elasticity": "elas-mae-table",
+#     "Lattice Constants": "lat-mae-score-table",
+#     "Phonon Dispersion": "phonon-mae-summary-table",
+#     "X23 Benchmark": "x23-mae-table",
+#     "DMC-ICE13 Benchmark": "dmc-ice-mae-table",
+#     "GMTKN55 Benchmark": "GMTKN55-wtmad-table",
+#     "Homonuclear Diatomics": "diatomics-stats-table",
+#     "Molecular Dynamics": "rdf-mae-score-table-oo",
+# }
+
 class FullBenchmark(zntrack.Node):
     """ Node to combine all bulk crystal benchmarks
     """
@@ -334,6 +354,11 @@ class FullBenchmark(zntrack.Node):
         # Add further applications layout and callback
         further_layout, further_callback_fn = FutherApplications.launch_dashboard(full_benchmark=True)
 
+
+
+
+        # Patch layouts removed
+
         component_layouts = {
             "Bulk Crystal Score": bulk_crystal_layout,
             "Molecular Crystal Score": mol_crystal_layout,
@@ -353,8 +378,25 @@ class FullBenchmark(zntrack.Node):
             dash.Output("tab-content", "children"),
             dash.Input("tabs", "value"),
         )
+        
         def render_tab(tab_name):
             return tab_layouts[tab_name]
+
+        # # --- Scroll to anchor on request (clientside) ---
+        # app_summary.clientside_callback(
+        #     """
+        #     function(targetId) {
+        #         if (!targetId) return;
+        #         const el = document.getElementById(targetId);
+        #         if (el) {
+        #             el.scrollIntoView({ behavior: "smooth" });
+        #         }
+        #         return '';
+        #     }
+        #     """,
+        #     dash.Output("scroll-anchor", "children"),
+        #     dash.Input("scroll-target", "data")
+        # )
 
         # --- Keep overall summary in sync with Bulk‑Crystal weighting (cached version) ---
         @app_summary.callback(
@@ -380,6 +422,46 @@ class FullBenchmark(zntrack.Node):
             style_conditional = colour_table(combined_df, all_cols=True)
             return combined_df.to_dict("records"), style_conditional
 
+        # Add callback for Table of Contents navigation (generalized)
+        inputs = [dash.Input(f"toc-{name.lower().replace(' ', '-')}", "n_clicks") for name in BENCHMARK_STRUCTURE.keys()]
+
+        @app_summary.callback(
+            dash.Output("tabs", "value"),
+            inputs,
+            prevent_initial_call=True
+        )
+        def navigate_from_toc(*clicks):
+            ctx = dash.callback_context
+            if not ctx.triggered:
+                raise dash.exceptions.PreventUpdate
+            btn_id = ctx.triggered[0]["prop_id"].split(".")[0]
+            for name in BENCHMARK_STRUCTURE:
+                if btn_id == f"toc-{name.lower().replace(' ', '-')}":
+                    return name
+            raise dash.exceptions.PreventUpdate
+
+        # # --- Add callbacks for subtest jump buttons to scroll to section ---
+        # jump_inputs = []
+        # jump_id_map = {}
+        # for cat, subtests in BENCHMARK_STRUCTURE.items():
+        #     for sub in subtests:
+        #         btn_id = f"jump-{cat.lower().replace(' ', '-')}-{sub.lower().replace(' ', '-')}"
+        #         target_id = BENCHMARK_TABLE_IDS[sub]
+        #         jump_inputs.append(dash.Input(btn_id, "n_clicks"))
+        #         jump_id_map[btn_id] = target_id
+
+        # @app_summary.callback(
+        #     dash.Output("scroll-target", "data"),
+        #     jump_inputs,
+        #     prevent_initial_call=True
+        # )
+        # def scroll_to_section(*args):
+        #     ctx = dash.callback_context
+        #     if not ctx.triggered:
+        #         raise dash.exceptions.PreventUpdate
+        #     btn_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        #     return jump_id_map.get(btn_id, None)
+
         if return_app == True:
             return app_summary
         else:
@@ -388,7 +470,7 @@ class FullBenchmark(zntrack.Node):
 
     @staticmethod
     def build_layout(
-        scores_all_df, 
+        scores_all_df,
         component_layouts,
         normalise_to_model=None
     ):
@@ -397,6 +479,25 @@ class FullBenchmark(zntrack.Node):
         from dash import dash_table
 
         style_data_conditional = colour_table(scores_all_df, all_cols=True)
+
+        def make_toc_buttons():
+            #BENCHMARK_STRUCTURE_categories = {tab_name: subtests for tab_name, subtests in BENCHMARK_STRUCTURE.items() if tab_name != "Overall Benchmark"}
+            return html.Div([
+                html.H1("Table of Contents"),
+                html.Ul([
+                    html.Li([
+                        html.Button(tab_name, id=f"toc-{tab_name.lower().replace(' ', '-')}", n_clicks=0),
+                        html.Ul([
+                            html.Li(
+                                html.Span(sub)
+                            )
+                            for sub in subtests
+                        ])
+                    ]) for tab_name, subtests in BENCHMARK_STRUCTURE.items()
+                ])
+            ])
+
+        toc_buttons = make_toc_buttons()
 
         summary_layout = html.Div([
             html.H1("Overall Benchmark Scores (avg MAE)"),
@@ -411,7 +512,8 @@ class FullBenchmark(zntrack.Node):
                     style_header={'fontWeight': 'bold'},
                     style_data_conditional=style_data_conditional,
                 )
-            ])
+            ]),
+            toc_buttons,
         ])
 
         tab_layouts = {
@@ -419,23 +521,26 @@ class FullBenchmark(zntrack.Node):
             **{name: layout for name, layout in component_layouts.items()}
         }
 
-        layout = html.Div([
+        full_layout = html.Div([
             dcc.Tabs(
                 id="tabs",
                 value="Overall Benchmark",
+                #persistence=True,
+                #persistence_type="session",
                 children=[
                     dcc.Tab(label=tab, value=tab) for tab in tab_layouts
                 ]
             ),
-            html.Div(id="tab-content")
-        ],
-        style={
+            html.Div(id="tab-content"),
+            #dcc.Store(id="scroll-target"),
+            #html.Div(id="scroll-anchor")
+        ], style={
             "backgroundColor": "white",
             "padding": "20px",
             "border": "2px solid black",
         })
 
-        return layout, tab_layouts
+        return full_layout, tab_layouts
     
     
     
