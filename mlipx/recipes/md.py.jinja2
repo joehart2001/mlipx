@@ -40,6 +40,7 @@ temperature = 300
 
 {% if resume_MD %}
 resume_MD = {{ resume_MD }}
+print(f"Resuming MD from last step")
 {% else %}
 resume_MD = False
 {% endif %}

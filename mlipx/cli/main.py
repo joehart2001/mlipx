@@ -267,7 +267,89 @@ def phonon_compare(
             normalise_to_model=normalise_to_model,
             no_plots=no_plots,
         )
+        
     
+    
+    
+
+@app.command()
+def phonons_precompute(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    batched: Annotated[bool, Option("--batched", help="does one node contain many materials")]=True,
+    no_plots: Annotated[bool, Option("--no_plots", help="Disable plots")] = False,
+
+    ):
+    
+    nodes = [
+        "*Phonon*",
+    ]
+    glob = True
+    
+    """Launch interactive benchmark for phonon dispersion."""
+    import fnmatch
+    import dvc.api
+    import json
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_phonons-dispersion")
+
+    if batched:
+        pred_node_dict, ref_node = load_nodes_phonon_batch(node_objects, models, split_str="_phonons-dispersion")
+    
+    else: 
+        pred_node_dict, ref_node_dict = load_nodes_mpid_model(node_objects, models, split_str="_phonons-dispersion")
+    
+
+    from mlipx import PhononAllBatch
+    PhononAllBatch.benchmark_precompute(
+        pred_node_dict=pred_node_dict,
+        ref_phonon_node=ref_node,
+        normalise_to_model=normalise_to_model,
+        no_plots=no_plots,
+    )
+
+
+
+         
+            
+@app.command()
+def phonons_launch_dashboard(
+    cache_dir="app_cache/",
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import PhononAllBatch
+    PhononAllBatch.launch_dashboard(
+        ui=ui,
+    )
+
+
+
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+
+    print('\n UI = ', ui)
+    
+    
+    
+    
+        
 # ------ helper funcitons -------
 
 

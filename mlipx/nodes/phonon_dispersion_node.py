@@ -730,10 +730,10 @@ class PhononDispersion(zntrack.Node):
                 score = 0
                 effective_cols = mae_cols.copy()
                 for col in mae_cols:
-                    print("col", col)
-                    print("mae_summary_df", mae_summary_df)
-                    print("top",mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0])
-                    print("bottom",mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0])
+                    # print("col", col)
+                    # print("mae_summary_df", mae_summary_df)
+                    # print("top",mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0])
+                    # print("bottom",mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0])
                     score += mae_summary_df.loc[mae_summary_df['Model'] == model, col].values[0] / mae_summary_df.loc[mae_summary_df['Model'] == normalise_to_model, col].values[0]
 
                     #print("score", score)
@@ -960,13 +960,17 @@ class PhononDispersion(zntrack.Node):
             pred_vals = data[selected_property]['pred']
             pretty_label = pretty_benchmark_labels[selected_property]
             mae = mae_df.loc[mae_df["Model"] == model_name, pretty_label].values[0]
+            
+            hover_names = scatter_to_dispersion_map[model_name]["hover"]
+            #print(f"Hover names for {model_name}: {hover_names}")
             scatter_fig = PhononDispersion.create_scatter_plot(
                 ref_vals,
                 pred_vals,
                 model_name,
                 selected_property,
                 mae,
-                pretty_benchmark_labels
+                pretty_benchmark_labels,
+                hover_names=hover_names,
             )
             return html.Div([
                 #html.H4(f"{model_name} - {selected_property.replace('_', ' ').title()}", style={"color": "black"}),
@@ -1024,12 +1028,25 @@ class PhononDispersion(zntrack.Node):
                 return None, None
             threshold = -0.05
             data = model_benchmarks_dict[model_name]
-            ref_vals = np.array(data["min_freq"]['ref'])
-            pred_vals = np.array(data["min_freq"]['pred'])
+
+            # Ensure ordering matches the point_map used for indexing phonon plots
+            # point_map = scatter_to_dispersion_map[model_name]['point_map']
+            # ref_vals = []
+            # pred_vals = []
+            # labels = []
+            
+            
+            hover_names = []
+            ref_vals = model_benchmarks_dict[model_name]["min_freq"]["ref"]
+            pred_vals = model_benchmarks_dict[model_name]["min_freq"]["pred"]
             labels = []
-            for r, p in zip(ref_vals, pred_vals):
+
+            for i, (mp_id, _) in enumerate(scatter_to_dispersion_map[model_name]['point_map']):
+                r = ref_vals[i]
+                p = pred_vals[i]
                 ref_stable = r > threshold
                 pred_stable = p > threshold
+
                 if ref_stable and pred_stable:
                     labels.append("TN")
                 elif not ref_stable and not pred_stable:
@@ -1038,8 +1055,11 @@ class PhononDispersion(zntrack.Node):
                     labels.append("FN")
                 else:
                     labels.append("FP")
-            scatter_fig = PhononDispersion.create_stability_scatter_plot(ref_vals, pred_vals, labels)
+                
+                hover_names.append(mp_id)
             
+            #scatter_to_dispersion_map)
+            scatter_fig = PhononDispersion.create_stability_scatter_plot(ref_vals, pred_vals, labels, hover_names=hover_names)
             
             tn = sum(l == "TN" for l in labels)
             fp = sum(l == "FP" for l in labels)
@@ -1096,7 +1116,8 @@ class PhononDispersion(zntrack.Node):
                 return html.Div("Click on a point to view its phonon dispersion plot.")
             point_index = clickData['points'][0]['pointIndex']
             mp_id, _ = scatter_to_dispersion_map[model_name]['point_map'][point_index]
-            img_path = scatter_to_dispersion_map[model_name]['img_paths'][mp_id]
+            #img_path = scatter_to_dispersion_map[model_name]['img_paths'][mp_id]
+            img_path = scatter_to_dispersion_map[model_name]['img_paths'][(mp_id, model_name)]
             encoded_img = base64.b64encode(open(img_path, 'rb').read()).decode()
             return html.Img(
                 src=f'data:image/png;base64,{encoded_img}',
@@ -1116,12 +1137,42 @@ class PhononDispersion(zntrack.Node):
             prevent_initial_call=True
         )
         def display_stability_phonon_plot(clickData, graph_id):
+            # Debugging print statements to trace click behavior
+            # print("ClickData:", clickData)
             model_name = graph_id['index']
+            # print("Model:", model_name)
+            # print("Scatter map:", scatter_to_dispersion_map[model_name])
             if clickData is None:
                 return html.Div("Click on a point to view its phonon dispersion plot.")
-            point_index = clickData['points'][0]['pointIndex']
-            mp_id, _ = scatter_to_dispersion_map[model_name]['point_map'][point_index]
-            img_path = scatter_to_dispersion_map[model_name]['img_paths'][mp_id]
+            
+            
+            # x_clicked = clickData['points'][0]['x']
+            # y_clicked = clickData['points'][0]['y']
+
+            # ref_vals = np.array(model_benchmarks_dict[model_name]["min_freq"]["ref"])
+            # pred_vals = np.array(model_benchmarks_dict[model_name]["min_freq"]["pred"])
+
+            # # Find the closest point (you can also use np.isclose for better tolerance)
+            # point_index = np.argmin((ref_vals - x_clicked)**2 + (pred_vals - y_clicked)**2)
+
+            x_clicked = clickData['points'][0]['x']
+            y_clicked = clickData['points'][0]['y']
+
+            ref_vals = np.array(model_benchmarks_dict[model_name]["min_freq"]["ref"])
+            pred_vals = np.array(model_benchmarks_dict[model_name]["min_freq"]["pred"])
+
+            # Match closest (x, y) point
+            point_index = np.argmin((ref_vals - x_clicked)**2 + (pred_vals - y_clicked)**2)
+            mp_id, real_model = scatter_to_dispersion_map[model_name]['point_map'][point_index]
+
+
+            #point_index = clickData['points'][0]['pointNumber']
+            #print("Point index clicked:", point_index)
+            #mp_id, real_model = scatter_to_dispersion_map[model_name]['point_map'][point_index]
+            #print("scatter_to_dispersion_map:", scatter_to_dispersion_map[model_name]['point_map'])
+            #print("Clicked mp_id, model:", mp_id, real_model)
+            img_path = scatter_to_dispersion_map[model_name]['img_paths'][(mp_id, real_model)]
+            #print("Path to image:", img_path)
             encoded_img = base64.b64encode(open(img_path, 'rb').read()).decode()
             return html.Img(
                 src=f'data:image/png;base64,{encoded_img}',
@@ -1404,9 +1455,10 @@ class PhononDispersion(zntrack.Node):
 
     def update_plotting_data(mp_id, model_name, phonon_plot_path, scatter_to_dispersion_map):
         """Update visualization data for the current structure and model."""
+        # Add both mp_id and model_name to hover for unique identification
         scatter_to_dispersion_map[model_name]['hover'].append(f"{mp_id} ({model_name})")
         scatter_to_dispersion_map[model_name]['point_map'].append((mp_id, model_name))
-        scatter_to_dispersion_map[model_name]['img_paths'][mp_id] = phonon_plot_path
+        scatter_to_dispersion_map[model_name]['img_paths'][(mp_id, model_name)] = phonon_plot_path
 
 
     def calculate_summary_statistics(plot_stats_dict, pretty_benchmark_labels, benchmarks):
@@ -1474,24 +1526,30 @@ class PhononDispersion(zntrack.Node):
         mae_summary_df.to_csv(results_dir / "mae_phonons.csv", index=False)
 
 
-    def create_scatter_plot(ref_vals, pred_vals, model_name, benchmark, mae, pretty_benchmark_labels):
+    def create_scatter_plot(ref_vals, pred_vals, model_name, benchmark, mae, pretty_benchmark_labels, hover_names = None):
         """Create a scatter plot comparing reference and predicted values."""
         combined_min = min(min(ref_vals), min(pred_vals), 0)
         combined_max = max(max(ref_vals), max(pred_vals))
         
         pretty_label = pretty_benchmark_labels[benchmark]
         
+        
+        
         fig = px.scatter(
             x=ref_vals,
             y=pred_vals,
+            hover_name=hover_names if hover_names else None,
             labels={
                 "x": f"Reference {pretty_label}",
                 "y": f"Predicted {pretty_label}",
             },
             title=f"{model_name} - {pretty_label}",
         )
+        # Set hovertext if hover_names is provided
+        if hover_names is not None:
+            fig.update_traces(hovertext=hover_names)
         fig.update_traces(
-            hovertemplate="Ref: %{x:.3e}<br>Pred: %{y:.3e}<extra></extra>"
+            hovertemplate="mp_id: %{hovertext}<br>Ref: %{x:.3e}<br>Pred: %{y:.3e}<extra></extra>"
         )
         # y=x
         fig.add_shape(
@@ -1539,7 +1597,7 @@ class PhononDispersion(zntrack.Node):
 
 
     @staticmethod
-    def create_stability_scatter_plot(ref_vals, pred_vals, labels):
+    def create_stability_scatter_plot(ref_vals, pred_vals, labels, hover_names=None):
         """Create a scatter plot of predicted vs reference, colored by classification (TP, TN, FP, FN)"""
         import plotly.express as px
         color_map = {
@@ -1548,17 +1606,34 @@ class PhononDispersion(zntrack.Node):
             "FP": "orange",
             "FN": "red"
         }
+
+        
+        
+        df = pd.DataFrame({
+            "Ref": ref_vals,
+            "Pred": pred_vals,
+            "Label": labels,
+            "mp_id": hover_names
+        })
+        
+        #print(hover_names)
+
         fig = px.scatter(
-            x=ref_vals,
-            y=pred_vals,
-            color=labels,
-            color_discrete_map=color_map,
+            df,
+            x="Ref",
+            y="Pred",
+            color="Label",
+            custom_data=["mp_id"],
             labels={
-                "x": "Reference ω_min [THz]",
-                "y": "Predicted ω_min [THz]",
-                "color": "Class"
+                "Ref": "Reference ω_min [THz]",
+                "Pred": "Predicted ω_min [THz]",
+                "Label": "Class"
             },
             title="Stability Classification: Predicted vs Reference",
+        )
+        
+        fig.update_traces(
+            hovertemplate="mp_id: %{customdata[0]}<br>Ref: %{x:.3e}<br>Pred: %{y:.3e}<extra></extra>"
         )
         # y=x
         combined_min = min(min(ref_vals), min(pred_vals), 0)
@@ -1572,9 +1647,6 @@ class PhononDispersion(zntrack.Node):
             xref='x',
             yref='y',
             line=dict(color="black", dash="dash")
-        )
-        fig.update_traces(
-            hovertemplate="Ref: %{x:.3e}<br>Pred: %{y:.3e}<extra></extra>"
         )
         fig.update_layout(
             plot_bgcolor="white",

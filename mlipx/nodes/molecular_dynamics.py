@@ -129,7 +129,11 @@ class MolecularDynamics(zntrack.Node):
         self.observer_metrics = {}
 
         for idx, _ in enumerate(
-            tqdm.tqdm(dyn.irun(steps=self.steps), total=self.steps)
+            tqdm.tqdm(
+                dyn.irun(steps=self.steps),
+                total=self.steps,
+                initial=start_idx if self.resume_MD else 0
+            )
         ):
             if self.resume_MD and idx < start_idx:
                 # Don't write the first frame if already present

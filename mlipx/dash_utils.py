@@ -501,7 +501,7 @@ def create_scatter_plot(
 
     fig.add_annotation(
         xref="paper", yref="paper", x=0.02, y=0.98,
-        text=f"MAE (Å): {mae:.3f}",
+        text=f"MAE ({metric_label[1]}): {mae:.3f}",
         showarrow=False,
         align="left",
         font=dict(size=12, color="black"),
