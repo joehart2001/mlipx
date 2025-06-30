@@ -210,24 +210,40 @@ class FutherApplications(zntrack.Node):
             key_extractor=lambda node: node.name.split("_config-0_MolecularDynamics")[0],
             value_extractor=lambda node: node
         )
-
-        app_MD, (mae_df_oo, mae_df_oh, mae_df_hh), properties_dict = MolecularDynamics.mae_plot_interactive(
+        
+        os.makedirs(cache_dir, exist_ok=True)
+        MolecularDynamics.benchmark_precompute(
             node_dict=MD_dict,
+            ui=ui,
             run_interactive=False,
             normalise_to_model=normalise_to_model,
         )
+
+        # app_MD, (mae_df_oo, mae_df_oh, mae_df_hh), properties_dict = MolecularDynamics.mae_plot_interactive(
+        #     node_dict=MD_dict,
+        #     run_interactive=False,
+        #     normalise_to_model=normalise_to_model,
+        # )
+        
+        mae_df_oo = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oo.pkl")
+        mae_df_oh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oh.pkl")
+        mae_df_hh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_hh.pkl")
+        with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
+            properties_dict = pickle.load(f)
+        with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
+            msd_dict = pickle.load(f)
 
         benchmark_score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh)).round(3)
         benchmark_score_df = benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True).reset_index(drop=True)
         benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
 
-        benchmark_score_df.to_csv(f"{cache_dir}/benchmark_score.csv", index=False)
-        mae_df_oo.to_pickle(f"{cache_dir}/mae_oo.pkl")
-        mae_df_oh.to_pickle(f"{cache_dir}/mae_oh.pkl")
-        mae_df_hh.to_pickle(f"{cache_dir}/mae_hh.pkl")
+        benchmark_score_df.to_csv(f"{cache_dir}/molecular_dynamics_cache/benchmark_score.csv", index=False)
+        # mae_df_oo.to_pickle(f"{cache_dir}/mae_oo.pkl")
+        # mae_df_oh.to_pickle(f"{cache_dir}/mae_oh.pkl")
+        # mae_df_hh.to_pickle(f"{cache_dir}/mae_hh.pkl")
 
-        with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
-            pickle.dump(properties_dict, f)
+        # with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
+        #     pickle.dump(properties_dict, f)
 
 
 
@@ -243,12 +259,14 @@ class FutherApplications(zntrack.Node):
         from mlipx.dash_utils import run_app
         import dash
 
-        benchmark_score_df = pd.read_csv(f"{cache_dir}/benchmark_score.csv")
-        mae_df_oo = pd.read_pickle(f"{cache_dir}/mae_oo.pkl")
-        mae_df_oh = pd.read_pickle(f"{cache_dir}/mae_oh.pkl")
-        mae_df_hh = pd.read_pickle(f"{cache_dir}/mae_hh.pkl")
-        with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
+        benchmark_score_df = pd.read_csv(f"{cache_dir}/molecular_dynamics_cache/benchmark_score.csv")
+        mae_df_oo = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oo.pkl")
+        mae_df_oh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oh.pkl")
+        mae_df_hh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_hh.pkl")
+        with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
             properties_dict = pickle.load(f)
+        with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
+            msd_dict = pickle.load(f)
 
         callback_fn = FutherApplications.callback_fn_from_cache(
             cache_dir=cache_dir,
@@ -262,6 +280,7 @@ class FutherApplications(zntrack.Node):
             mae_df_oo=mae_df_oo,
             mae_df_oh=mae_df_oh,
             mae_df_hh=mae_df_hh,
+            msd_dict=msd_dict,
             properties_dict=properties_dict,
             normalise_to_model=normalise_to_model,
         )
@@ -300,7 +319,7 @@ class FutherApplications(zntrack.Node):
     
     
     @staticmethod
-    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, properties_dict, normalise_to_model=None):
+    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, properties_dict, msd_dict, normalise_to_model=None):
         
         score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh)).round(3)
         score_df["Rank"] = score_df["Avg MAE \u2193"].rank(ascending=True).astype(int)
@@ -311,7 +330,7 @@ class FutherApplications(zntrack.Node):
             benchmark_title="Further Applications",
             benchmark_table_info=f"Scores normalised to: {normalise_to_model}" if normalise_to_model else "",
             apps_or_layouts_list=[
-                MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh)
+                MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict)
             ],
             id="rdf-benchmark-score-table",
         )

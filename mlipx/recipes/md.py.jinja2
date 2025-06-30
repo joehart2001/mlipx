@@ -38,6 +38,12 @@ temperature = {{ temperature }}
 temperature = 300
 {% endif %}
 
+{% if resume_MD %}
+resume_MD = {{ resume_MD }}
+{% else %}
+resume_MD = False
+{% endif %}
+
 thermostat = mlipx.LangevinConfig(timestep=1, temperature=temperature, friction=0.05)
 #force_check = mlipx.MaximumForceObserver(f_max=100)
 #t_ramp = mlipx.TemperatureRampModifier(end_temperature=400, total_steps=100)
@@ -59,6 +65,7 @@ for model_name, model in MODELS.items():
                 #modifiers=[t_ramp],
                 steps=steps,
                 print_energy_every=1000,
+                resume_MD=resume_MD,
             )
             if len(frames) == 1:
                 MD_dict[model_name] = md

@@ -230,6 +230,7 @@ def md(
     models: t.Annotated[str | None, typer.Option()] = None,
     steps: int = 1000,
     temperature: int = 300,
+    resume_MD: bool = False,
 ):
     """Build an MD recipe."""
     if models is not None:
@@ -243,6 +244,7 @@ def md(
         smiles=smiles,
         steps=steps,
         temperature=temperature,
+        resume_MD=resume_MD,
     )
 
 

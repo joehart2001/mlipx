@@ -85,6 +85,7 @@ class MolecularDynamics(zntrack.Node):
     print_energy_every: int = zntrack.params(1000)
     observers: list[DynamicsObserver] = zntrack.deps(None)
     modifiers: list[DynamicsModifier] = zntrack.deps(None)
+    resume_MD: bool = zntrack.params(False)
 
     observer_metrics: dict = zntrack.metrics()
     plots: pd.DataFrame = zntrack.plots(y=["energy", "fmax"], autosave=True)
@@ -93,7 +94,25 @@ class MolecularDynamics(zntrack.Node):
 
     def run(self):
         start_time = time.time()
-        
+
+        # Only check for existing frames and plots if resuming MD
+        if self.resume_MD:
+            existing_frames = []
+            start_idx = 0
+            if self.frames_path.exists():
+                existing_frames = list(ase.io.iread(self.frames_path, format="extxyz"))
+                start_idx = len(existing_frames)
+
+            plots_path = self.frames_path.with_name("plots.csv")
+            if plots_path.exists():
+                self.plots = pd.read_csv(plots_path)
+            else:
+                self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
+        else:
+            start_idx = 0
+            self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
+            plots_path = self.frames_path.with_name("plots.csv")
+
         if self.observers is None:
             self.observers = []
         if self.modifiers is None:
@@ -108,11 +127,13 @@ class MolecularDynamics(zntrack.Node):
             obs.initialize(atoms)
 
         self.observer_metrics = {}
-        self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
 
         for idx, _ in enumerate(
             tqdm.tqdm(dyn.irun(steps=self.steps), total=self.steps)
         ):
+            if self.resume_MD and idx < start_idx:
+                # Don't write the first frame if already present
+                continue
             if idx % 10 == 0:
                 ase.io.write(self.frames_path, atoms, append=True)
                 plots = {
@@ -121,7 +142,9 @@ class MolecularDynamics(zntrack.Node):
                     "fnorm": np.linalg.norm(atoms.get_forces()),
                 }
                 self.plots.loc[len(self.plots)] = plots
-            
+                # Save to CSV after each update
+                self.plots.to_csv(plots_path, index=False)
+
             # print every x steps
             if self.print_energy_every is not None and idx % self.print_energy_every == 0:
                 epot = atoms.get_potential_energy() / len(atoms)
@@ -133,7 +156,7 @@ class MolecularDynamics(zntrack.Node):
                     f"(T = {ekin / (1.5 * ase.units.kB):.0f} K)  "
                     f"Etot = {epot + ekin:.3f} eV  Elapsed: {int(elapsed_min)}m {elapsed_sec:.1f}s"
                 )
-                
+
             for obs in self.observers:
                 if obs.check(atoms):
                     self.observer_metrics[obs.name] = idx
@@ -281,6 +304,7 @@ class MolecularDynamics(zntrack.Node):
             'g_r_oo',
             'g_r_oh',
             'g_r_hh',
+            'msd_O',
         ]
 
         from mlipx.benchmark_download_utils import get_benchmark_data
@@ -334,7 +358,15 @@ class MolecularDynamics(zntrack.Node):
             for prop in properties:
                 if prop not in properties_dict:
                     properties_dict[prop] = {}
-                if prop == 'g_r_oo':
+                if prop == 'msd_O':
+                    time, msd = MolecularDynamics.compute_msd(traj, timestep=1, atom_symbol='O')
+                    properties_dict[prop][model_name] = {
+                        "time": time.tolist(),
+                        "msd": msd.tolist(),
+                    }
+                    print(f"Computed MSD for {model_name} with {len(time)} time points.")
+                    print(properties_dict[prop][model_name])
+                elif prop == 'g_r_oo':
                     # O-O RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
                         traj,
@@ -377,6 +409,9 @@ class MolecularDynamics(zntrack.Node):
                         "rdf": rdf,
                     }
 
+        # Add msd_dict for later use
+        msd_dict = properties_dict["msd_O"]
+
         # --- Helper to compute MAE DataFrame for a property ---
         def compute_mae_table(prop, properties_dict, model_names, normalise_to_model=None):
             # Reference keys are those in properties_dict[prop] but not in model_names and must contain 'rdf'
@@ -416,6 +451,8 @@ class MolecularDynamics(zntrack.Node):
                 ref_col = "pbe_D3_330K_oh"
             elif prop == "g_r_hh":
                 ref_col = "pbe_D3_330K_hh"
+            elif prop == "msd_O":
+                ref_col = None
             if ref_col is not None and ref_col in mae_df.columns:
                 if normalise_to_model is not None and normalise_to_model in mae_df["Model"].values:
                     base_mae = mae_df.loc[mae_df["Model"] == normalise_to_model, ref_col].values[0]
@@ -611,11 +648,16 @@ class MolecularDynamics(zntrack.Node):
     def compute_rdf_optimized_parallel(atoms_list, i_indices, j_indices, r_max=6.0, bins=100, n_jobs=-1):
         i_indices = np.array(i_indices)
         j_indices = np.array(j_indices)
+        
+        atom_a = atoms_list[0][i_indices][0]
+        atom_b = atoms_list[0][j_indices][0]
+        pair = f"{atom_a.symbol}-{atom_b.symbol}"
+
 
         from tqdm import tqdm
         results = Parallel(n_jobs=n_jobs)(
             delayed(MolecularDynamics._compute_partial_rdf)(atoms, i_indices, j_indices, r_max)
-            for atoms in tqdm(atoms_list, desc="Computing RDF per frame")
+            for atoms in tqdm(atoms_list, desc=f"Computing {pair} RDF")
         )
 
         all_distances = []
@@ -668,8 +710,10 @@ class MolecularDynamics(zntrack.Node):
         mae_df_hh.to_pickle(f"{cache_dir}/mae_df_hh.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
             pickle.dump(properties_dict, f)
-            
-            
+        msd_dict = properties_dict["msd_O"]
+        with open(f"{cache_dir}/msd_data.pkl", "wb") as f:
+            pickle.dump(msd_dict, f)
+
         return app
 
 
@@ -685,9 +729,11 @@ class MolecularDynamics(zntrack.Node):
         mae_df_hh = pd.read_pickle(f"{cache_dir}/mae_df_hh.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
             properties_dict = pickle.load(f)
+        with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
+            msd_dict = pickle.load(f)
 
         app = dash.Dash(__name__)
-        app.layout = MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh)
+        app.layout = MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict)
 
         MolecularDynamics.register_callbacks(
             app, [
@@ -704,8 +750,7 @@ class MolecularDynamics(zntrack.Node):
     
     
     @staticmethod
-    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh):
-
+    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict):
         return html.Div([
             html.H1("Water MD Benchmark"),
             html.H3("O-O RDF MAE Table"),
@@ -738,4 +783,54 @@ class MolecularDynamics(zntrack.Node):
                     dcc.Store(id="rdf-table-last-clicked-hh", data=None),
                 ],
             ),
+            html.H3("Mean Squared Displacement (MSD) for Oxygen"),
+            dcc.Graph(
+                figure=go.Figure([
+                    go.Scatter(
+                        x=msd_dict[model]["time"],
+                        y=msd_dict[model]["msd"],
+                        mode="lines",
+                        name=model
+                    )
+                    for model in msd_dict
+                ]).update_layout(
+                    title="MSD vs Time",
+                    xaxis_title="Time (ps)",
+                    yaxis_title="MSD (Å²)"
+                )
+            ),
         ], style={"backgroundColor": "white"})
+        
+        
+    @staticmethod
+    def compute_msd(traj, timestep=1, atom_symbol="O"):
+        """
+        Compute the Mean Squared Displacement (MSD) for atoms of the given symbol.
+
+        Parameters
+        ----------
+        atom_symbol : str
+            Element symbol (e.g., "O" or "H") for which to compute MSD.
+
+        Returns
+        -------
+        time_steps : np.ndarray
+            Time steps in picoseconds.
+        msd_values : np.ndarray
+            MSD values at each time step.
+        """
+        from tqdm import tqdm
+        atom_indices = [atom.index for atom in traj[0] if atom.symbol == atom_symbol]
+        num_frames = len(traj)
+        initial_positions = traj[0].get_positions()[atom_indices]
+        msd_values = np.zeros(num_frames)
+
+        for i, atoms in enumerate(tqdm(traj, desc=f"Computing MSD for {atom_symbol}")):
+            current_positions = atoms.get_positions()[atom_indices]
+            displacements = current_positions - initial_positions
+            squared_displacements = np.sum(displacements**2, axis=1)
+            msd_values[i] = np.mean(squared_displacements)
+
+        timestep_fs = timestep
+        time_steps = np.arange(num_frames) * timestep_fs * 1e-3  # fs to ps
+        return time_steps, msd_values
