@@ -256,6 +256,7 @@ def homonuclear_diatomics(
     material_ids: str | None = None,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
+    het_diatomics: bool = True,
 ):
     """Run homonuclear diatomics calculations."""
     if models is not None:
@@ -281,6 +282,7 @@ def homonuclear_diatomics(
         datapath=datapath,
         material_ids=material_ids,
         smiles=smiles,
+        het_diatomics=het_diatomics,
     )
 
 

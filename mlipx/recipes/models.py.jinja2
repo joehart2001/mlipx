@@ -118,28 +118,28 @@ class FairChemCalc:
     device: Device | str = "cpu"
     overrides: dict = dataclasses.field(default_factory=dict)
 
-def get_calculator(self):
-    from fairchem.core import pretrained_mlip, FAIRChemCalculator
-    import torch
-    from pathlib import Path
+    def get_calculator(self):
+        from fairchem.core import pretrained_mlip, FAIRChemCalculator
+        import torch
+        from pathlib import Path
 
-    model_path = Path(self.model_name)
-    if model_path.exists() and model_path.suffix == ".pt":
-        # Load from checkpoint directly
-        return FAIRChemCalculator.from_model_checkpoint(
-            str(model_path),
-            task_name=self.task_name,
-            device=self.device,
-            overrides=self.overrides,
-        )
-    else:
-        # Load from pretrained registry
-        predictor = pretrained_mlip.get_predict_unit(
-            self.model_name,
-            device=self.device,
-            overrides=self.overrides
-        )
-        return FAIRChemCalculator(predictor, task_name=self.task_name)
+        model_path = Path(self.model_name)
+        if model_path.exists() and model_path.suffix == ".pt":
+            # Load from checkpoint directly
+            return FAIRChemCalculator.from_model_checkpoint(
+                str(model_path),
+                task_name=self.task_name,
+                device=self.device,
+                overrides=self.overrides,
+            )
+        else:
+            # Load from pretrained registry
+            predictor = pretrained_mlip.get_predict_unit(
+                self.model_name,
+                device=self.device,
+                overrides=self.overrides
+            )
+            return FAIRChemCalculator(predictor, task_name=self.task_name)
 
     @property
     def available(self) -> bool:
