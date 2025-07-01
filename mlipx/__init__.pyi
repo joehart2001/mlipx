@@ -17,7 +17,7 @@ from .nodes.io import LoadDataFile
 from .nodes.modifier import TemperatureRampModifier
 from .nodes.molecular_dynamics import LangevinConfig, MolecularDynamics
 from .nodes.mp_api import MPRester
-from .nodes.nebs import NEBinterpolate, NEBs
+from .nodes.nebs import NEBinterpolate, NEBs, NEB2
 from .nodes.observer import MaximumForceObserver
 from .nodes.orca import OrcaSinglePoint
 from .nodes.phase_diagram import PhaseDiagram
@@ -50,8 +50,6 @@ from .nodes.phonon_all_meta import PhononAllBatchMeta
 from .nodes.oc157 import OC157Benchmark
 from .nodes.wiggle150 import Wiggle150
 from .nodes.further_applications import FutherApplications
-from .nodes.phonon_dispersion_node_analysis import PhononDispersion2
-from .nodes.phonon_all_analysis import PhononAllBatch2
 from .project import Project
 from .version import __version__
 
@@ -69,6 +67,7 @@ __all__ = [
     "CompareCalculatorResults",
     "NEBs",
     "NEBinterpolate",
+    "NEB2",
     "Smiles2Conformers",
     "PhaseDiagram",
     "PourbaixDiagram",

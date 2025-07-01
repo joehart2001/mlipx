@@ -9,7 +9,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 import zntrack
 from ase.mep import NEB
-
+#from ase.mep.neb import NEB, NEBTools, NEBOptimizer
+import os
 from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer
 
 
@@ -107,10 +108,12 @@ class NEBs(zntrack.Node):
 
     data: list[ase.Atoms] = zntrack.deps()
     model: NodeWithCalculator = zntrack.deps()
+    k: float = zntrack.params(0.1)
     relax: bool = zntrack.params(True)
-    optimizer: Optimizer = zntrack.params(Optimizer.FIRE.value)
-    fmax: float = zntrack.params(0.09)
-    n_steps: int = zntrack.params(500)
+    optimizer: Optimizer = zntrack.params(Optimizer.NEBOptimizer.value)
+    optimizer_fallback: Optimizer = zntrack.params(Optimizer.FIRE.value)
+    fmax: float = zntrack.params(0.04)
+    n_steps: int = zntrack.params(300)
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
     trajectory_path: pathlib.Path = zntrack.outs_path(
         zntrack.nwd / "neb_trajectory.traj"
@@ -121,7 +124,15 @@ class NEBs(zntrack.Node):
         frames = []
         # neb_trajectory = []
         calc = self.model.get_calculator()
-        optimizer = getattr(ase.optimize, self.optimizer)
+        
+        try:
+            optimizer = getattr(ase.optimize, self.optimizer)
+        except AttributeError:
+            optimizer = getattr(ase.mep.neb, self.optimizer)
+            
+            
+        optimizer_fallback = getattr(ase.optimize, self.optimizer_fallback)
+        
         for atoms in self.data:
             atoms_copy = atoms.copy()
             atoms_copy.calc = copy(calc)
@@ -130,11 +141,29 @@ class NEBs(zntrack.Node):
             ase.io.write(self.frames_path, atoms_copy, format="extxyz", append=True)
         if self.relax is True:
             for i in [0, -1]:
-                dyn = optimizer(frames[0])
+                dyn = optimizer_fallback(frames[0])
                 dyn.run(fmax=self.fmax)
-        neb = NEB(frames, allow_shared_calculator=False)
-        dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix())
+                
+        neb = NEB(frames, k = self.k)
+
+        if optimizer == ase.mep.neb.NEBOptimizer:
+            dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix(), method='ode')
+        else:
+            dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix())
         dyn.run(fmax=self.fmax, steps=self.n_steps)
+        
+        
+        forces = neb.get_forces()
+        max_force = max(np.linalg.norm(f) for f in forces)
+
+        # Run fallback only if not converged
+        if max_force > self.fmax:
+            print(f"NEBOptimizer did not converge (fmax = {max_force:.4f}), triggering fallback: {self.optimizer_fallback}")
+            dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
+            dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
+        else:
+            print(f"NEBOptimizer converged (fmax = {max_force:.4f}), skipping fallback.")
+
 
         row_dicts = []
         for i, frame in enumerate(frames):
@@ -147,6 +176,132 @@ class NEBs(zntrack.Node):
                 },
             )
         self.results = pd.DataFrame(row_dicts)
+        
+        
+        
+        
+
+class NEB2(zntrack.Node):
+    """
+    Runs NEB calculation on a list of images.
+
+    Parameters
+    ----------
+    data : list[ase.Atoms]
+        List of atoms objects.
+    model : NodeWithCalculator
+        Node with a calculator.
+    relax : bool
+        Whether to relax the initial and final images.
+    optimizer : Optimizer
+        ASE optimizer to use.
+    fmax : float
+        Maximum force allowed.
+    n_steps : int
+        Maximum number of steps allowed.
+    frames_path : pathlib.Path
+        Path to save the final frames.
+    trajectory_path : pathlib.Path
+        Path to save the neb trajectory file.
+
+    Attributes
+    ----------
+    results : pd.DataFrame
+        DataFrame with the data_id and potential energy of the NEB calculation
+
+    """
+
+    data_path: str = zntrack.params()
+    model: NodeWithCalculator = zntrack.deps()
+    n_images: int = zntrack.params(5)
+    k: float = zntrack.params(0.1)
+    relax: bool = zntrack.params(True)
+    optimizer: Optimizer = zntrack.params(Optimizer.NEBOptimizer.value)
+    optimizer_fallback: Optimizer = zntrack.params(Optimizer.FIRE.value)
+    fmax: float = zntrack.params(0.04)
+    n_steps: int = zntrack.params(300)
+    frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "images.xyz")
+    trajectory_path: pathlib.Path = zntrack.outs_path(
+        zntrack.nwd / "neb_trajectory.traj"
+    )
+    results: pd.DataFrame = zntrack.plots(y="potential_energy", x="data_id")
+
+    def run(self):
+        frames = []
+        calc = self.model.get_calculator()
+        
+        from ase.io import read, write
+        initial = read(self.data_path, index=0)  # first image
+        final = read(self.data_path, index=-1)  # last image
+        
+        images = [initial] + [initial.copy() for i in range(self.n_images)] + [final]
+        
+        neb = NEB(images, k=self.k)
+        
+        initial.calc = copy(calc)
+        final.calc = copy(calc)
+
+        try:
+            optimizer = getattr(ase.optimize, self.optimizer)
+        except AttributeError:
+            optimizer = getattr(ase.mep.neb, self.optimizer)
+            
+            
+        optimizer_fallback = getattr(ase.optimize, self.optimizer_fallback)
+        
+        dyn_initial = optimizer_fallback(initial)
+        dyn_initial.run(fmax=self.fmax)
+        
+        dyn_final = optimizer_fallback(final)
+        dyn_final.run(fmax=self.fmax)
+        
+        neb.interpolate()
+        for image in images[1:len(images) - 1]:
+            image.calc = copy(calc)
+            image.get_potential_energy()
+
+        
+
+                
+        if optimizer == ase.mep.neb.NEBOptimizer:
+            dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix(), method='ode')
+        else:
+            dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix())
+            
+        dyn.run(fmax=self.fmax, steps=self.n_steps)
+        
+        for image in neb.images:
+            frames += [image]
+        
+        ase.io.write(self.frames_path, images)
+            
+        # forces = neb.get_forces()
+        # max_force = max(np.linalg.norm(f) for f in forces)
+
+        # # Run fallback only if not converged
+        # if max_force > self.fmax:
+        #     print(f"NEBOptimizer did not converge (fmax = {max_force:.4f}), triggering fallback: {self.optimizer_fallback}")
+        #     dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
+        #     dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
+        # else:
+        #     print(f"NEBOptimizer converged (fmax = {max_force:.4f}), skipping fallback.")
+
+
+        row_dicts = []
+        for i, frame in enumerate(frames):
+            row_dicts.append(
+                {
+                    "data_id": i,
+                    "potential_energy": frame.get_potential_energy(),
+                    "neb_adjusted_energy": frame.get_potential_energy()
+                    - frames[0].get_potential_energy(),
+                },
+            )
+        self.results = pd.DataFrame(row_dicts)
+
+
+
+
 
     @property
     def trajectory_frames(self) -> list[ase.Atoms]:
@@ -276,3 +431,20 @@ class NEBs(zntrack.Node):
                 "adjusted_energy_vs_neb_image": fig_adjusted,
             },
         )
+
+
+
+
+
+
+
+    @staticmethod
+    def benchmark_precompute(node_dict, cache_dir="app_cache/nebs/nebs_cache", ui=None, run_interactive=False, report=True, normalise_to_model=None):
+        os.makedirs(cache_dir, exist_ok=True)
+
+    
+
+    @staticmethod
+    def launch_dashboard(cache_dir="app_cache/nebs/nebs_cache", ui=None):
+        import pandas as pd
+        from mlipx.dash_utils import run_app

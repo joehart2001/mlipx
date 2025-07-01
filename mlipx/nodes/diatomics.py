@@ -828,5 +828,13 @@ class HomonuclearDiatomics(zntrack.Node):
                 clearable=False,
                 style={"width": "300px", "marginBottom": "20px"}
             ),
-            dcc.Graph(id="diatom-element-or-ptable-plot", style={"height": "700px", "width": "100%", "marginTop": "20px"}),
+            dcc.Loading(
+                id="loading-graph",
+                type="circle",  # or "default", "dot"
+                children=dcc.Graph(
+                    id="diatom-element-or-ptable-plot",
+                    style={"height": "700px", "width": "100%", "marginTop": "20px"}
+                ),
+            ),
+            #dcc.Graph(id="diatom-element-or-ptable-plot", style={"height": "700px", "width": "100%", "marginTop": "20px"}),
         ], style={"backgroundColor": "white"})

@@ -22,6 +22,7 @@ from dash import dash_table, dcc, html
 import dash
 from mlipx.dash_utils import run_app, dash_table_interactive
 import pickle
+from pathlib import Path
 
 from mlipx.abc import (
     ComparisonResults,
@@ -83,9 +84,12 @@ class MolecularDynamics(zntrack.Node):
     data_id: int = zntrack.params(-1)
     steps: int = zntrack.params(100)
     print_energy_every: int = zntrack.params(1000)
+    write_frames_every: int = zntrack.params(10)
     observers: list[DynamicsObserver] = zntrack.deps(None)
     modifiers: list[DynamicsModifier] = zntrack.deps(None)
+    external_save_path: pathlib.Path = zntrack.params(None)
     resume_MD: bool = zntrack.params(False)
+    resume_trajectory_path: pathlib.Path = zntrack.params(None)
 
     observer_metrics: dict = zntrack.metrics()
     plots: pd.DataFrame = zntrack.plots(y=["energy", "fmax"], autosave=True)
@@ -99,9 +103,9 @@ class MolecularDynamics(zntrack.Node):
         if self.resume_MD:
             existing_frames = []
             start_idx = 0
-            if self.frames_path.exists():
-                existing_frames = list(ase.io.iread(self.frames_path, format="extxyz"))
-                start_idx = len(existing_frames)
+            if Path(self.resume_trajectory_path).exists():
+                existing_frames = list(ase.io.iread(self.resume_trajectory_path, format="extxyz"))
+                start_idx = len(existing_frames) * self.write_frames_every
 
             plots_path = self.frames_path.with_name("plots.csv")
             if plots_path.exists():
@@ -117,10 +121,15 @@ class MolecularDynamics(zntrack.Node):
             self.observers = []
         if self.modifiers is None:
             self.modifiers = []
-        if self.data:
+            
+        if self.resume_trajectory_path:
+            atoms = read(self.resume_trajectory_path, index=-1)
+        elif self.data:
             atoms = self.data[self.data_id]
         elif self.data_path:
             atoms = read(self.data_path, self.data_id)
+
+        
         atoms.calc = self.model.get_calculator()
         dyn = self.thermostat.get_molecular_dynamics(atoms)
         for obs in self.observers:
@@ -138,8 +147,14 @@ class MolecularDynamics(zntrack.Node):
             if self.resume_MD and idx < start_idx:
                 # Don't write the first frame if already present
                 continue
-            if idx % 10 == 0:
+            if idx % self.write_frames_every == 0:
                 ase.io.write(self.frames_path, atoms, append=True)
+                if self.resume_trajectory_path:
+                    ase.io.write(self.resume_trajectory_path, atoms, append=True)
+                if self.external_save_path:
+                    ase.io.write(self.external_save_path, atoms, append=True)
+
+                            
                 plots = {
                     "energy": atoms.get_potential_energy(),
                     "fmax": np.max(np.linalg.norm(atoms.get_forces(), axis=1)),

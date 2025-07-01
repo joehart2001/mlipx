@@ -21,6 +21,7 @@ class Optimizer(str, Enum):
     FIRE = "FIRE"
     BFGS = "BFGS"
     LBFGS = "LBFGS"
+    NEBOptimizer = "NEBOptimizer"
     
 class Filter(str, Enum):
     UnitCellFilter = "UnitCellFilter"
