@@ -70,11 +70,11 @@ threading = False
 {% endif %}
 
 
-with project.group("phonons-dispersion-ref"):
-    phonon_ref_node = mlipx.PhononAllRef(
-            mp_ids=mp_ids,
-            phonopy_yaml_dir=str(local_path),
-    )
+# with project.group("phonons-dispersion-ref"):
+#     phonon_ref_node = mlipx.PhononAllRef(
+#             mp_ids=mp_ids,
+#             phonopy_yaml_dir=str(local_path),
+#     )
 
 
 {% if generate_displacements == True %}
