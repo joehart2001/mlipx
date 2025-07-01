@@ -95,6 +95,7 @@ class MolecularDynamics(zntrack.Node):
     plots: pd.DataFrame = zntrack.plots(y=["energy", "fmax"], autosave=True)
 
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
+    velocities_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "velocities.npy")
 
     def run(self):
         start_time = time.time()
@@ -129,13 +130,19 @@ class MolecularDynamics(zntrack.Node):
         elif self.data_path:
             atoms = read(self.data_path, self.data_id)
 
-        
         atoms.calc = self.model.get_calculator()
         dyn = self.thermostat.get_molecular_dynamics(atoms)
         for obs in self.observers:
             obs.initialize(atoms)
 
         self.observer_metrics = {}
+
+        # --- Collect velocities per frame ---
+        from numpy.lib.format import open_memmap
+        n_atoms = len(atoms)
+        n_frames = self.steps // self.write_frames_every + 1
+        velocities_memmap = open_memmap(self.velocities_path, mode='w+', dtype='float64', shape=(n_frames, n_atoms, 3))
+        frame_idx = 0
 
         for idx, _ in enumerate(
             tqdm.tqdm(
@@ -154,7 +161,10 @@ class MolecularDynamics(zntrack.Node):
                 if self.external_save_path:
                     ase.io.write(self.external_save_path, atoms, append=True)
 
-                            
+                # Collect velocities for this frame directly to disk
+                velocities_memmap[frame_idx] = atoms.get_velocities()
+                frame_idx += 1
+
                 plots = {
                     "energy": atoms.get_potential_energy(),
                     "fmax": np.max(np.linalg.norm(atoms.get_forces(), axis=1)),
@@ -186,6 +196,8 @@ class MolecularDynamics(zntrack.Node):
             for mod in self.modifiers:
                 mod.modify(dyn, idx)
 
+        # velocities_memmap is already written to disk during the run
+
         for obs in self.observers:
             # document all attached observers
             self.observer_metrics[obs.name] = self.observer_metrics.get(obs.name, -1)
@@ -197,7 +209,11 @@ class MolecularDynamics(zntrack.Node):
         with self.state.fs.open(self.frames_path, "r") as f:
             return list(ase.io.iread(f, format="extxyz"))
 
-
+    @property
+    def velocities(self) -> np.ndarray:
+        if not self.velocities_path.exists():
+            raise FileNotFoundError(f"Velocities file {self.velocities_path} does not exist.")
+        return np.load(self.velocities_path)
 
 
 
