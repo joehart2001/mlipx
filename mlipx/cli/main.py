@@ -1171,7 +1171,7 @@ def neb_precompute(
 
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_neb")
 
-    benchmark_node_dict = load_nodes_model(node_objects, models, split_str="_neb")
+    benchmark_node_dict = load_nodes_model_neb_system(node_objects, models, split_str_model = "_neb", split_str_system = "NEB2")
 
 
     from mlipx import NEB2
@@ -1181,7 +1181,23 @@ def neb_precompute(
     )
 
 
-
+def load_nodes_model_neb_system(node_objects, models, split_str_model = "_neb", split_str_system = "NEB2"):
+    """Load nodes which are structured:
+    """
+    benchmark_node_dict = {}
+    
+    for name, node in node_objects.items():
+        model = name.split(split_str_model)[0]
+        benchmark_node_dict[model] = {}
+        # split in between split_str_model and split_str_system
+        system = name.split(split_str_model)[1].split(split_str_system)[0]
+        benchmark_node_dict[model][system] = node
+    if models:
+        # filter to selected models if provided
+        benchmark_node_dict = {
+            m: node for m, node in benchmark_node_dict.items() if m in models
+        }
+    return benchmark_node_dict
          
             
 @app.command()

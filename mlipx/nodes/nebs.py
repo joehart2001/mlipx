@@ -485,7 +485,13 @@ class NEB2(zntrack.Node):
 
 
 
-
+        ref_data = {
+            "Si_64": [],
+            "Si_216": [],
+            "LiFePO4_b": [0.27],
+            #"LiFePO4_c": [2.5],
+            
+        }
 
 
     @staticmethod
@@ -511,9 +517,11 @@ class NEB2(zntrack.Node):
             "Si_64": [],
             "Si_216": [],
             "LiFePO4_b": [0.27],
-            "LiFePO4_c": [2.5],
+            #"LiFePO4_c": [2.5],
             
         }
+        
+        print(node_dict)
                 
         # divide node dict up based on the different nebs it contains
         # structure before: dict = {"model1": [NEB1, ]}
