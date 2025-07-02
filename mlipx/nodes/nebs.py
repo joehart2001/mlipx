@@ -1,3 +1,9 @@
+from ase.io import read, write
+import dash
+from dash import html, dcc, Input, Output
+import plotly.graph_objs as go
+import os
+import dash
 import pathlib
 from copy import copy
 
@@ -13,7 +19,8 @@ from ase.mep import NEB
 #from ase.mep.neb import NEB, NEBTools, NEBOptimizer
 import os
 from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer
-
+import flask
+from janus_core.calculations.neb import NEB
 
 class NEBinterpolate(zntrack.Node):
     """
@@ -221,6 +228,9 @@ class NEB2(zntrack.Node):
     optimizer_fallback: Optimizer = zntrack.params(Optimizer.FIRE.value)
     fmax: float = zntrack.params(0.04)
     n_steps: int = zntrack.params(300)
+    use_janus: bool = zntrack.params(False)
+    
+    
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "images.xyz")
     trajectory_path: pathlib.Path = zntrack.outs_path(
         zntrack.nwd / "neb_trajectory.traj"
@@ -235,46 +245,70 @@ class NEB2(zntrack.Node):
         initial = read(self.data_path, index=0)  # first image
         final = read(self.data_path, index=-1)  # last image
         
-        images = [initial] + [initial.copy() for i in range(self.n_images)] + [final]
-        
-        neb = NEB(images, k=self.k)
-        
         initial.calc = copy(calc)
         final.calc = copy(calc)
+        
+        
+        if self.use_janus:
+            interpolator = "pymatgen"
+            neb = NEB(
+                init_struct=initial,
+                final_struct=final,
+                n_images=self.n_images,
+                interpolator=interpolator,
+                minimize=True,
+                fmax=self.fmax,
+                write_kwargs={
+                    "filename": self.frames_path,}
+            )
+            neb.run()
 
-        try:
-            optimizer = getattr(ase.optimize, self.optimizer)
-        except AttributeError:
-            optimizer = getattr(ase.mep.neb, self.optimizer)
+            ase.io.write(self.frames_path, neb.images)
             
             
-        optimizer_fallback = getattr(ase.optimize, self.optimizer_fallback)
-        
-        dyn_initial = optimizer_fallback(initial)
-        dyn_initial.run(fmax=self.fmax)
-        
-        dyn_final = optimizer_fallback(final)
-        dyn_final.run(fmax=self.fmax)
-        
-        neb.interpolate()
-        for image in images[1:len(images) - 1]:
-            image.calc = copy(calc)
-            image.get_potential_energy()
-
-        
-
-                
-        if optimizer == ase.mep.neb.NEBOptimizer:
-            dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix(), method='ode')
         else:
-            dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix())
+                
+            images = [initial] + [initial.copy() for i in range(self.n_images)] + [final]
             
-        dyn.run(fmax=self.fmax, steps=self.n_steps)
-        
-        for image in neb.images:
-            frames += [image]
-        
-        ase.io.write(self.frames_path, images)
+            neb = NEB(images, k=self.k)
+            
+
+
+            try:
+                optimizer = getattr(ase.optimize, self.optimizer)
+            except AttributeError:
+                optimizer = getattr(ase.mep.neb, self.optimizer)
+                
+                
+            optimizer_fallback = getattr(ase.optimize, self.optimizer_fallback)
+            
+            dyn_initial = optimizer_fallback(initial)
+            dyn_initial.run(fmax=self.fmax)
+            
+            dyn_final = optimizer_fallback(final)
+            dyn_final.run(fmax=self.fmax)
+            
+            neb.interpolate()
+            for image in images[1:len(images) - 1]:
+                image.calc = copy(calc)
+                image.get_potential_energy()
+
+                    
+            if optimizer == ase.mep.neb.NEBOptimizer:
+                print("Using NEBOptimizer with ODE method")
+                dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix(), method='ode')
+            else:
+                dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix())
+                
+            dyn.run(fmax=self.fmax, steps=self.n_steps)
+            
+            dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
+            dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
+            
+            for image in neb.images:
+                frames += [image]
+            
+            ase.io.write(self.frames_path, images)
             
         # forces = neb.get_forces()
         # max_force = max(np.linalg.norm(f) for f in forces)
@@ -465,10 +499,12 @@ class NEB2(zntrack.Node):
             
             # save images for weas viewer
             #save_dir = f"assets/{model_name}/si_interstitials"
-            save_dir = f"assets"
+            save_dir = os.path.abspath(f"assets/{model_name}/si_interstitials")
             os.makedirs(save_dir, exist_ok=True)
-            for i, atoms in enumerate(node.images):
-                write(f"{save_dir}/image_{i}.xyz", atoms, format="xyz")
+            for i, atoms in enumerate(images):
+                fname = f"{save_dir}/image_{i}.xyz"
+                write(fname, atoms, format='xyz')
+            
 
         # Save MAE-style summary table
         mae_df = pd.DataFrame(barrier_dict).sort_values(by="Barrier (eV)", ascending=True).round(3)
@@ -476,127 +512,12 @@ class NEB2(zntrack.Node):
 
         # Save full NEB data
         pd.to_pickle(neb_data_dict, os.path.join(cache_dir, "neb_df.pkl"))
-    
-    
-    
-    
 
-    # @staticmethod
-    # def launch_dashboard(cache_dir="app_cache/nebs/nebs_cache", ui=None):
-    #     import pandas as pd
-    #     from dash import Dash
-    #     from mlipx.dash_utils import run_app, dash_table_interactive
-    #     from dash import html, dcc, Input, Output, State
-    #     import plotly.graph_objects as go
-    #     import dash
-
-    #     # Read cached files
-    #     mae_df = pd.read_pickle(f"{cache_dir}/mae_summary.pkl")
-    #     neb_df = pd.read_pickle(f"{cache_dir}/neb_df.pkl")
-
-    #     app = Dash(__name__, assets_folder='assets')
-    #     app.server.static_folder = "assets"
-    #     app.server.static_url_path = "/assets"
-
-    #     app.layout = dash_table_interactive(
-    #         df=mae_df,
-    #         id="lat-mae-score-table",
-    #         title="NEB Energy Barriers Summary Table",
-    #         extra_components=[
-    #             html.Div(id="lattice-const-table"),
-    #             dcc.Store(id="lattice-table-last-clicked", data=None),
-    #             dcc.Store(id="current-neb-model", data=None),
-    #             html.Div(
-    #                 dcc.Graph(id="neb-plot"),
-    #                 id="neb-plot-container",
-    #                 style={"display": "none"},
-    #             ),
-    #             html.Div(id="weas-viewer", style={"display": "none"}),
-    #         ],
-    #     )
-
-    #     @app.callback(
-    #         Output("neb-plot", "figure"),
-    #         Output("neb-plot-container", "style"),
-    #         Output("lattice-table-last-clicked", "data"),
-    #         Output("current-neb-model", "data"),
-    #         Input("lat-mae-score-table", "active_cell"),
-    #         State("lattice-table-last-clicked", "data")
-    #     )
-    #     def update_neb_plot(active_cell, last_clicked):
-    #         if active_cell is None:
-    #             raise dash.exceptions.PreventUpdate
-
-    #         row = active_cell["row"]
-    #         col = active_cell["column_id"]
-    #         model_name = mae_df.iloc[row]["Model"]
-    #         if col not in mae_df.columns or col == "Model":
-    #             # Hide plot if not a model row
-    #             return dash.no_update, {"display": "none"}, active_cell, model_name
-    #         if last_clicked is not None and (
-    #             active_cell["row"] == last_clicked.get("row") and
-    #             active_cell["column_id"] == last_clicked.get("column_id")
-    #         ):
-    #             # Hide plot if repeated click
-    #             return dash.no_update, {"display": "none"}, None, model_name
-
-    #         neb_data = neb_df[model_name]
-    #         rel_energies = neb_data["rel_energies"]
-    #         reaction_coords = neb_data["reaction_coords"]
-    #         fig = go.Figure(go.Scatter(x=reaction_coords, y=rel_energies, mode="lines+markers", name="NEB Path"))
-    #         fig.update_layout(title=f"{model_name}: NEB Energy Path", xaxis_title="Image Index", yaxis_title="Energy (eV)")
-    #         # Make neb plot visible
-    #         return fig, {"display": "block"}, active_cell, model_name
-
-    #     @app.callback(
-    #         Output("weas-viewer", "children"),
-    #         Output("weas-viewer", "style"),
-    #         Input("neb-plot", "clickData"),
-    #         State("current-neb-model", "data")
-    #     )
-    #     def update_weas_viewer(clickData, model_name):
-    #         if clickData is None or model_name is None:
-    #             # Hide viewer if no click
-    #             return dash.no_update, {"display": "none"}
-
-    #         index = int(clickData["points"][0]["x"])
-    #         filename = f"assets/{model_name}/si_interstitials/image_{index}.xyz"
-
-    #         def generate_weas_html(fname):
-    #             return f"""
-    #             <!doctype html>
-    #             <html lang="en">
-    #             <head>
-    #                 <meta charset="utf-8">
-    #                 <title>WEAS Viewer</title>
-    #             </head>
-    #             <body>
-    #                 <div id="viewer" style="width: 100%; height: 500px;"></div>
-    #                 <script type="module">
-    #                     const {{ WEAS, parseXYZ }} = await import('https://unpkg.com/weas/dist/index.mjs');
-    #                     const viewer = new WEAS({{
-    #                         domElement: document.getElementById('viewer'),
-    #                         viewerConfig: {{ backgroundColor: [1,1,1,1], _modelStyle: 1 }},
-    #                         guiConfig: {{ buttons: {{ enabled: false }} }}
-    #                     }});
-    #                     const response = await fetch("/" + fname);
-    #                     const text = await response.text();
-    #                     const atoms = parseXYZ(text);
-    #                     viewer.avr.atoms = atoms;
-    #                     viewer.render();
-    #                 </script>
-    #             </body>
-    #             </html>
-    #             """
-
-    #         html_content = generate_weas_html(filename)
-    #         return html.Iframe(
-    #             srcDoc=html_content,
-    #             style={"height": "550px", "width": "100%", "border": "1px solid #ddd", "borderRadius": "5px"}
-    #         ), {"display": "block"}
-
+        assets_dir = os.path.abspath("assets")
+        with open(f"{cache_dir}/assets_dir.txt", "w") as f:
+            f.write(assets_dir)
         
-    #     return run_app(app, ui=ui)
+        return
 
 
     @staticmethod
@@ -608,48 +529,51 @@ class NEB2(zntrack.Node):
         import plotly.graph_objects as go
         import dash
         import os
+        
+        print(os.getcwd())
 
         # Read cached files
         mae_df = pd.read_pickle(f"{cache_dir}/mae_summary.pkl")
         neb_df = pd.read_pickle(f"{cache_dir}/neb_df.pkl")
+        with open(f"{cache_dir}/assets_dir.txt", "r") as f:
+            assets_dir = f.read().strip()
+        
 
         # Initialize app with proper static configuration
-        app = Dash(__name__, assets_folder='assets')
+        app = dash.Dash(__name__, assets_folder= assets_dir)
         
-        # Alternative static configuration - try one of these:
-        # Option A: Configure static serving manually
-        app.server.static_folder = os.path.abspath("assets")
-        app.server.static_url_path = "/assets"
+        app.server.static_folder = 'assets'
+        app.server.static_url_path = '/assets'
         
-        # Option B: Use Dash's built-in assets serving (comment out Option A if using this)
-        # app = Dash(__name__, assets_folder=os.path.abspath('assets'))
+
 
         app.layout = dash_table_interactive(
             df=mae_df,
-            id="lat-mae-score-table",
+            id="neb-mae-score-table",
             title="NEB Energy Barriers Summary Table",
             extra_components=[
-                html.Div(id="lattice-const-table"),
-                dcc.Store(id="lattice-table-last-clicked", data=None),
+                html.Div(id="neb-table"),
+                dcc.Store(id="neb-table-last-clicked", data=None),
                 dcc.Store(id="current-neb-model", data=None),
                 html.Div(
                     dcc.Graph(id="neb-plot"),
                     id="neb-plot-container",
-                    style={"display": "none"},
+                    #style={"display": "none"},
                 ),
-                html.Div(id="weas-viewer", style={"display": "none"}),
+                html.Div(id="weas-viewer", style={'marginTop': '20px'}),
             ],
         )
 
         @app.callback(
             Output("neb-plot", "figure"),
             Output("neb-plot-container", "style"),
-            Output("lattice-table-last-clicked", "data"),
+            Output("neb-table-last-clicked", "data"),
             Output("current-neb-model", "data"),
-            Input("lat-mae-score-table", "active_cell"),
-            State("lattice-table-last-clicked", "data")
+            Input("neb-mae-score-table", "active_cell"),
+            State("neb-table-last-clicked", "data")
         )
         def update_neb_plot(active_cell, last_clicked):
+
             if active_cell is None:
                 raise dash.exceptions.PreventUpdate
 
@@ -678,24 +602,21 @@ class NEB2(zntrack.Node):
             State("current-neb-model", "data")
         )
         def update_weas_viewer(clickData, model_name):
+            # print("clickData:", clickData)
+            # print("model_name:", model_name)
+            # print("filename:", filename)
             if clickData is None or model_name is None:
-                return dash.no_update, {"display": "none"}
+                raise dash.exceptions.PreventUpdate
+                #return dash.no_update, {"display": "none"}
 
             index = int(clickData["points"][0]["x"])
             
-            # Fix the file path - use app.get_asset_url() or serve differently
-            # Option 1: Use Dash's asset serving
-            #filename = f"/{model_name}/si_interstitials/image_{index}.xyz"
-            filename = f"/image_{index}.xyz"
-            asset_url = app.get_asset_url(filename)
-            
-            # Option 2: Alternative - check if file exists first
-            #file_path = os.path.join("assets", model_name, "si_interstitials", f"image_{index}.xyz")
-            file_path = os.path.join("assets", f"image_{index}.xyz")
-            if not os.path.exists(file_path):
-                return html.Div(f"File not found: {file_path}"), {"display": "block"}
 
-            def generate_weas_html(fname):
+            filename = f"/assets/{model_name}/si_interstitials/image_{index}.xyz"
+            #asset_url = app.get_asset_url(filename)
+            
+            
+            def generate_weas_html(filename):
                 return f"""
                 <!doctype html>
                 <html lang="en">
@@ -704,36 +625,114 @@ class NEB2(zntrack.Node):
                     <title>WEAS Viewer</title>
                 </head>
                 <body>
-                    <div id="viewer" style="width: 100%; height: 500px;"></div>
+                    <div id="viewer" style="position: relative; width: 100%; height: 500px; border: 1px solid #ccc;"></div>
+                    <div id="debug" style="margin-top: 10px; padding: 10px; background: #f0f0f0; font-family: monospace; display: none;"></div>
                     <script type="module">
+                        async function fetchFile(filename) {{
+                            try {{
+                                const response = await fetch(filename);
+                                if (!response.ok) {{
+                                    throw new Error(`Failed to load file: ${{filename}} - ${{response.status}}`);
+                                }}
+                                const text = await response.text();
+                                
+                                // Debug: show file content
+                                console.log('File content:', text);
+                                document.getElementById("debug").innerHTML = 
+                                    `<strong>File content (first 500 chars):</strong><br><pre>${{text.substring(0, 500)}}</pre>`;
+                                document.getElementById("debug").style.display = 'block';
+                                
+                                return text;
+                            }} catch (error) {{
+                                console.error('Error fetching file:', error);
+                                throw error;
+                            }}
+                        }}
+                        
+                        function validateXYZ(content) {{
+                            const lines = content.trim().split('\\n');
+                            if (lines.length < 2) {{
+                                throw new Error('XYZ file too short');
+                            }}
+                            
+                            const numAtoms = parseInt(lines[0]);
+                            if (isNaN(numAtoms)) {{
+                                throw new Error('First line must be number of atoms');
+                            }}
+                            
+                            if (lines.length < numAtoms + 2) {{
+                                throw new Error(`Expected ${{numAtoms + 2}} lines, got ${{lines.length}}`);
+                            }}
+                            
+                            // Check coordinate lines
+                            for (let i = 2; i < numAtoms + 2; i++) {{
+                                const parts = lines[i].trim().split(/\\s+/);
+                                if (parts.length < 4) {{
+                                    throw new Error(`Line ${{i+1}}: Expected element + 3 coordinates, got ${{parts.length}} parts`);
+                                }}
+                            }}
+                            
+                            return true;
+                        }}
+                        
                         try {{
                             const {{ WEAS, parseXYZ }} = await import('https://unpkg.com/weas/dist/index.mjs');
-                            const viewer = new WEAS({{
-                                domElement: document.getElementById('viewer'),
-                                viewerConfig: {{ backgroundColor: [1,1,1,1], _modelStyle: 1 }},
-                                guiConfig: {{ buttons: {{ enabled: false }} }}
+                            const domElement = document.getElementById("viewer");
+                            
+                            const editor = new WEAS({{
+                                domElement,
+                                viewerConfig: {{ 
+                                    _modelStyle: 2,
+                                    backgroundColor: [1, 1, 1, 1]
+                                }},
+                                guiConfig: {{ 
+                                    buttons: {{ enabled: false }} 
+                                }}
                             }});
-                            const response = await fetch("{fname}");
-                            if (!response.ok) {{
-                                throw new Error(`HTTP error! status: ${{response.status}}`);
-                            }}
-                            const text = await response.text();
-                            const atoms = parseXYZ(text);
-                            viewer.avr.atoms = atoms;
-                            viewer.render();
+                            
+                            const structureData = await fetchFile("{filename}");
+                            
+                            // Validate XYZ format before parsing
+                            validateXYZ(structureData);
+                            
+                            const atoms = parseXYZ(structureData);
+                            editor.avr.atoms = atoms;
+                            editor.render();
+                            
+                            // Hide debug info if successful
+                            document.getElementById("debug").style.display = 'none';
+                            
                         }} catch (error) {{
-                            document.getElementById('viewer').innerHTML = `<p>Error loading file: ${{error.message}}</p>`;
-                            console.error('Error:', error);
+                            console.error('Error initializing WEAS:', error);
+                            document.getElementById("viewer").innerHTML = 
+                                `<div style="padding: 20px; color: red;">
+                                    <strong>Error loading structure:</strong><br>
+                                    ${{error.message}}
+                                    <br><br>
+                                    <small>Check the browser console for more details.</small>
+                                </div>`;
                         }}
                     </script>
                 </body>
                 </html>
                 """
 
-            html_content = generate_weas_html(asset_url)
-            return html.Iframe(
-                srcDoc=html_content,
-                style={"height": "550px", "width": "100%", "border": "1px solid #ddd", "borderRadius": "5px"}
-            ), {"display": "block"}
+            html_content = generate_weas_html(filename)
+            return (
+                html.Div([
+                    html.H4(f"Structure {index}", style={'textAlign': 'center'}),
+                    html.Iframe(
+                        srcDoc=html_content,
+                        style={
+                            "height": "550px",
+                            "width": "100%",
+                            "border": "1px solid #ddd",
+                            "borderRadius": "5px"
+                        }
+                    )
+                ]),
+                {"marginTop": "20px"}
+            )
 
         return run_app(app, ui=ui)
+        
