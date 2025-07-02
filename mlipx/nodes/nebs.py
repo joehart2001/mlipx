@@ -316,8 +316,9 @@ class NEB2(zntrack.Node):
             dyn.run(fmax=self.fmax, steps=self.n_steps)
             
             #dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
-            dyn_fallback = optimizer_fallback(neb)
-            dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
+            if self.optimizer_fallback:
+                dyn_fallback = optimizer_fallback(neb)
+                dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
             
             for image in neb.images:
                 frames += [image]

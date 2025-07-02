@@ -49,7 +49,7 @@ for data_path in DATAPATH:
                 optimizer_fallback="FIRE",
                 n_steps=1000,
                 fmax=0.05,
-                use_janus=True,
+                use_janus=use_janus,
             )
             neb_node_dict[model_name] = node
             neb_node_list.append(node)
