@@ -11,7 +11,12 @@ import os
 project = zntrack.Project()
 {% endif %}
 
-{% if use_janus %}
+{% if use_janus == True %}
+use_janus = True
+{% else %}
+use_janus = False
+{% endif %}
+
 
 DATAPATH = {{ datapath }}[0]
 print(f"Using data path: {DATAPATH}")
