@@ -15,12 +15,11 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import zntrack
-from ase.mep import NEB
 #from ase.mep.neb import NEB, NEBTools, NEBOptimizer
 import os
 from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer
 import flask
-from janus_core.calculations.neb import NEB
+
 
 class NEBinterpolate(zntrack.Node):
     """
@@ -250,6 +249,7 @@ class NEB2(zntrack.Node):
         
         
         if self.use_janus:
+            from janus_core.calculations.neb import NEB
             interpolator = "pymatgen"
             neb = NEB(
                 init_struct=initial,
@@ -263,11 +263,10 @@ class NEB2(zntrack.Node):
             )
             neb.run()
 
-            ase.io.write(self.frames_path, neb.images)
-            
-            
+            ase.io.write(self.frames_path, neb.images)            
         else:
-                
+            from ase.mep import NEB
+
             images = [initial] + [initial.copy() for i in range(self.n_images)] + [final]
             
             neb = NEB(images, k=self.k)
@@ -306,8 +305,8 @@ class NEB2(zntrack.Node):
             dyn.run(fmax=self.fmax, steps=self.n_steps)
             
             #dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
-            dyn_fallback = optimizer_fallback(neb)
-            dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
+            # dyn_fallback = optimizer_fallback(neb)
+            # dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
             
             for image in neb.images:
                 frames += [image]
@@ -505,9 +504,9 @@ class NEB2(zntrack.Node):
             #save_dir = f"assets/{model_name}/si_interstitials"
             save_dir = os.path.abspath(f"assets/{model_name}/si_interstitials")
             os.makedirs(save_dir, exist_ok=True)
-            for i, atoms in enumerate(images):
-                fname = f"{save_dir}/image_{i}.xyz"
-                write(fname, atoms, format='xyz')
+            #for i, atoms in enumerate(images):
+            fname = f"{save_dir}/images.xyz"
+            write(fname, images, format='xyz')
             
 
         # Save MAE-style summary table
@@ -616,11 +615,11 @@ class NEB2(zntrack.Node):
             index = int(clickData["points"][0]["x"])
             
 
-            filename = f"/assets/{model_name}/si_interstitials/image_{index}.xyz"
+            filename = f"/assets/{model_name}/si_interstitials/images.xyz"
             #asset_url = app.get_asset_url(filename)
             
             
-            def generate_weas_html(filename):
+            def generate_weas_html(filename, current_frame):
                 return f"""
                 <!doctype html>
                 <html lang="en">
@@ -701,6 +700,7 @@ class NEB2(zntrack.Node):
                             
                             const atoms = parseXYZ(structureData);
                             editor.avr.atoms = atoms;
+                            editor.avr.currentFrame = {current_frame};
                             editor.render();
                             
                             // Hide debug info if successful
@@ -721,7 +721,7 @@ class NEB2(zntrack.Node):
                 </html>
                 """
 
-            html_content = generate_weas_html(filename)
+            html_content = generate_weas_html(filename, current_frame=index)
             return (
                 html.Div([
                     html.H4(f"Structure {index}", style={'textAlign': 'center'}),

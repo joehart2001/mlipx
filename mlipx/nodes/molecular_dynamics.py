@@ -340,6 +340,8 @@ class MolecularDynamics(zntrack.Node):
             'g_r_oh',
             'g_r_hh',
             'msd_O',
+            'vacf',
+            'vdos',
         ]
 
         from mlipx.benchmark_download_utils import get_benchmark_data
@@ -387,6 +389,7 @@ class MolecularDynamics(zntrack.Node):
         for model_name, node in tqdm.tqdm(node_dict.items(), desc="Computing properties for models"):
             traj = node.frames
             traj = traj[::10]
+            velocities = node.velocities
             print("loaded trajectory for model:", model_name)
             o_indices = [atom.index for atom in traj[0] if atom.symbol == 'O']
             h_indices = [atom.index for atom in traj[0] if atom.symbol == 'H']
@@ -442,6 +445,21 @@ class MolecularDynamics(zntrack.Node):
                     properties_dict[prop][model_name] = {
                         "r": r,
                         "rdf": rdf,
+                    }
+
+                elif prop == 'vacf':
+                    # Velocity autocorrelation function
+                    vaf = MolecularDynamics.compute_vacf(traj, velocities, timestep=1)
+                    properties_dict[prop][model_name] = {
+                        "time": vaf['time'].tolist(),
+                        "vaf": vaf['vaf'].tolist(),
+                    }
+                elif prop == 'vdos':
+                    # Velocity density of states
+                    vdos = MolecularDynamics.compute_vdos(traj, velocities, timestep=1)
+                    properties_dict[prop][model_name] = {
+                        "frequency": vdos['frequency'].tolist(),
+                        "vdos": vdos['vdos'].tolist(),
                     }
 
         # Add msd_dict for later use
@@ -722,6 +740,8 @@ class MolecularDynamics(zntrack.Node):
         return r, rdf
     
     
+    def compute_vacf(traj, velocities, timestep=1):
+        pass
     
     
     @staticmethod
