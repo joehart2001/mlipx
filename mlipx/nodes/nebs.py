@@ -232,9 +232,9 @@ class NEB2(zntrack.Node):
     
     
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "images.xyz")
-    trajectory_path: pathlib.Path = zntrack.outs_path(
-        zntrack.nwd / "neb_trajectory.traj"
-    )
+    # trajectory_path: pathlib.Path = zntrack.outs_path(
+    #     zntrack.nwd / "neb_trajectory.traj"
+    # )
     results: pd.DataFrame = zntrack.plots(y="potential_energy", x="data_id")
 
     def run(self):
@@ -296,13 +296,17 @@ class NEB2(zntrack.Node):
                     
             if optimizer == ase.mep.neb.NEBOptimizer:
                 print("Using NEBOptimizer with ODE method")
-                dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix(), method='ode')
+                #dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix(), method='ode')
+                dyn = optimizer(neb, method='ode')
             else:
-                dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix())
+                #dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix())
+                dyn = optimizer(neb)
+                dyn = optimizer(neb)
                 
             dyn.run(fmax=self.fmax, steps=self.n_steps)
             
-            dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
+            #dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
+            dyn_fallback = optimizer_fallback(neb)
             dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
             
             for image in neb.images:
@@ -338,10 +342,10 @@ class NEB2(zntrack.Node):
 
 
 
-    @property
-    def trajectory_frames(self) -> list[ase.Atoms]:
-        with self.state.fs.open(self.trajectory_path, "rb") as f:
-            return list(ase.io.iread(f, format="traj"))
+    # @property
+    # def trajectory_frames(self) -> list[ase.Atoms]:
+    #     with self.state.fs.open(self.trajectory_path, "rb") as f:
+    #         return list(ase.io.iread(f, format="traj"))
 
     @property
     def images(self) -> list[ase.Atoms]:

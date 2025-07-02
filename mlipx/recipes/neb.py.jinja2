@@ -11,6 +11,8 @@ import os
 project = zntrack.Project()
 {% endif %}
 
+{% if use_janus %}
+
 DATAPATH = {{ datapath }}[0]
 print(f"Using data path: {DATAPATH}")
 filename = os.path.basename(DATAPATH)       # '64.xyz'
@@ -30,6 +32,7 @@ for model_name, model in MODELS.items():
             optimizer_fallback="FIRE",
             n_steps=300,
             fmax=0.05,
+            use_janus=use_janus,
         )
         neb_node_dict[model_name] = nebs
 
