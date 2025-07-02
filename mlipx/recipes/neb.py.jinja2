@@ -25,29 +25,35 @@ all_images = False
 
 
 
-DATAPATH = {{ datapath }}[0]
+DATAPATH = {{ datapath }}
 print(f"Using data path: {DATAPATH}")
-filename = os.path.basename(DATAPATH)       # '64.xyz'
-stem = os.path.splitext(filename)[0]        # '64'
+
 
 neb_node_dict = {}
 neb_node_list = []
-for model_name, model in MODELS.items():
-    with project.group(model_name, "neb", stem):
-        nebs = mlipx.NEB2(
-            data_path=DATAPATH,
-            all_images=all_images,
-            model=model,
-            n_images=30,
-            k=1,
-            relax=True,
-            optimizer="NEBOptimizer",
-            optimizer_fallback="FIRE",
-            n_steps=1000,
-            fmax=0.05,
-            use_janus=use_janus,
-        )
-        neb_node_dict[model_name] = nebs
+
+for data_path in DATAPATHS:
+    filename = os.path.basename(data_path) # e.g. '64.xyz'
+    stem = os.path.splitext(filename)[0]  # e.g. '64'
+
+    for model_name, model in MODELS_subset.items():
+        # Use a unique group to avoid overwriting
+        with project.group(model_name, "neb", stem):
+            node = mlipx.NEB2(
+                data_path=data_path,
+                model=model,
+                n_images=30,
+                k=1,
+                relax=True,
+                optimizer="NEBOptimizer",
+                optimizer_fallback="FIRE",
+                n_steps=1000,
+                fmax=0.05,
+                use_janus=True,
+            )
+            neb_node_dict[model_name] = node
+            neb_node_list.append(node)
+
 
 {% if standalone %}
 project.build()

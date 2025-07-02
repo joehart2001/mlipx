@@ -505,8 +505,17 @@ class NEB2(zntrack.Node):
         import pandas as pd
         import os
         os.makedirs(cache_dir, exist_ok=True)
-        
+
+        ref_data = {
+            "Si_64": [],
+            "Si_216": [],
+            "LiFePO4_b": [0.27],
+            "LiFePO4_c": [2.5],
+            
+        }
+                
         # divide node dict up based on the different nebs it contains
+        # structure before: dict = {"model1": [NEB1, ]}
 
         barrier_dict = []
         neb_data_dict = {}
@@ -529,13 +538,7 @@ class NEB2(zntrack.Node):
             fname = f"{save_dir}/images.xyz"
             write(fname, images, format='xyz')
             
-        ref_data = {
-            "Si_64": [],
-            "Si_216": [],
-            "LiFePO4_b": [0.27],
-            "LiFePO4_c": [2.5],
-            
-        }
+
 
         # Save MAE-style summary table
         mae_df = pd.DataFrame(barrier_dict).sort_values(by="Barrier (eV)", ascending=True).round(3)
