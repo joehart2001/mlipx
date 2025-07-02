@@ -32,7 +32,7 @@ print(f"Using data path: {DATAPATH}")
 neb_node_dict = {}
 neb_node_list = []
 
-for data_path in DATAPATHS:
+for data_path in DATAPATH:
     filename = os.path.basename(data_path) # e.g. '64.xyz'
     stem = os.path.splitext(filename)[0]  # e.g. '64'
 
