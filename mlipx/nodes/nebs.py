@@ -488,7 +488,15 @@ class NEB2(zntrack.Node):
 
 
     @staticmethod
-    def benchmark_precompute(node_dict, cache_dir="app_cache/nebs/nebs_cache", ui=None, run_interactive=False, report=False, normalise_to_model=None):
+    def benchmark_precompute(
+        node_dict, 
+        cache_dir="app_cache/nebs/nebs_cache",
+        ui=None, 
+        run_interactive=False, 
+        report=False, 
+        normalise_to_model=None
+    ):
+        
         """
         Processes NEB nodes, saves summary and full NEB data as pickles.
         - mae_summary.pkl: DataFrame with model names and energy barriers.
@@ -497,6 +505,8 @@ class NEB2(zntrack.Node):
         import pandas as pd
         import os
         os.makedirs(cache_dir, exist_ok=True)
+        
+        # divide node dict up based on the different nebs it contains
 
         barrier_dict = []
         neb_data_dict = {}
@@ -519,6 +529,13 @@ class NEB2(zntrack.Node):
             fname = f"{save_dir}/images.xyz"
             write(fname, images, format='xyz')
             
+        ref_data = {
+            "Si_64": [],
+            "Si_216": [],
+            "LiFePO4_b": [0.27],
+            "LiFePO4_c": [2.5],
+            
+        }
 
         # Save MAE-style summary table
         mae_df = pd.DataFrame(barrier_dict).sort_values(by="Barrier (eV)", ascending=True).round(3)

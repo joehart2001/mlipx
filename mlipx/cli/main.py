@@ -1137,3 +1137,75 @@ def md_compare(
         normalise_to_model=normalise_to_model,
     )
     
+    
+    
+    
+
+
+
+
+@app.command()
+def neb_precompute(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+
+    ):
+    
+    nodes = [
+        "*NEB*",
+    ]
+    glob = True
+    
+    """Launch interactive benchmark for phonon dispersion."""
+    import fnmatch
+    import dvc.api
+    import json
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_neb")
+
+    benchmark_node_dict = load_nodes_model(node_objects, models, split_str="_neb")
+
+
+    from mlipx import NEB2
+    NEB2.benchmark_precompute(
+        node_dict=benchmark_node_dict,
+        normalise_to_model=normalise_to_model,
+    )
+
+
+
+         
+            
+@app.command()
+def neb_launch_dashboard(
+    cache_dir="app_cache/",
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import NEB2
+    NEB2.launch_dashboard(
+        ui=ui,
+    )
+
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+
+    print('\n UI = ', ui)
+    
+    
+    
