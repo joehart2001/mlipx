@@ -36,7 +36,7 @@ for data_path in DATAPATH:
     filename = os.path.basename(data_path) # e.g. '64.xyz'
     stem = os.path.splitext(filename)[0]  # e.g. '64'
 
-    for model_name, model in MODELS_subset.items():
+    for model_name, model in MODELS.items():
         # Use a unique group to avoid overwriting
         with project.group(model_name, "neb", stem):
             node = mlipx.NEB2(
