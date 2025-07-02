@@ -137,23 +137,49 @@ def relax(
     )
 
 
+# @app.command()
+# def neb(
+#     initialize: bool = False,
+#     datapath: str = "...",
+#     repro: bool = False,
+#     models: str | None = None,
+# ):
+#     """Build a NEB recipe."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     if initialize:
+#         initialize_directory()
+#     template = jinja2.Template((CWD / "neb.py").read_text())
+#     with open("main.py", "w") as f:
+#         f.write(template.render(datapath=datapath))
+#     repro_if_requested(repro)
+
+
 @app.command()
 def neb(
     initialize: bool = False,
-    datapath: str = "...",
     repro: bool = False,
-    models: str | None = None,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
 ):
-    """Build a NEB recipe."""
+
     if models is not None:
         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    if initialize:
-        initialize_directory()
-    template = jinja2.Template((CWD / "neb.py").read_text())
-    with open("main.py", "w") as f:
-        f.write(template.render(datapath=datapath))
-    repro_if_requested(repro)
+    handle_recipe(
+        "neb.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+    )
+    
 
+
+    
+    
 
 @app.command()
 def vibrational_analysis(

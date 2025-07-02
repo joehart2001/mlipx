@@ -22,11 +22,11 @@ ref_path_const_dft = lat_const_dir / 'lattice_constants_ref.json'
 ref_path_type = lat_const_dir / 'lattice_constants_ref_types.json'
 
 with project.group("ref", "lattice-constant"):
-    ref_lat_const_node = mlipx.RefToNode(
+    ref_lat_const_node_exp = mlipx.RefToNode(
         ref_path=str(ref_path_const_exp),
         name="LatticeConst-ref-exp")
 with project.group("ref", "lattice-constant"):
-    ref_lat_const_node = mlipx.RefToNode(
+    ref_lat_const_node_dft = mlipx.RefToNode(
         ref_path=str(ref_path_const_dft),
         name="LatticeConst-ref-dft")
     ref_lat_type_node = mlipx.RefToNode(

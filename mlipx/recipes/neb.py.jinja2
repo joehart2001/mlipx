@@ -1,0 +1,38 @@
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+import os
+
+project = zntrack.Project()
+{% endif %}
+
+DATAPATH = {{ datapath }}[0]
+print(f"Using data path: {DATAPATH}")
+filename = os.path.basename(DATAPATH)       # '64.xyz'
+stem = os.path.splitext(filename)[0]        # '64'
+
+neb_node_dict = {}
+neb_node_list = []
+for model_name, model in MODELS.items():
+    with project.group(model_name, stem):
+        nebs = mlipx.NEB2(
+            data_path=DATAPATH,
+            model=model,
+            n_images=30,
+            k=1,
+            relax=True,
+            optimizer="NEBOptimizer",
+            optimizer_fallback="FIRE",
+            n_steps=300,
+            fmax=0.05,
+        )
+        neb_node_dict[model_name] = nebs
+
+{% if standalone %}
+project.build()
+{% endif %}
