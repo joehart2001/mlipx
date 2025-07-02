@@ -35,7 +35,7 @@ for model_name, model in MODELS.items():
             relax=True,
             optimizer="NEBOptimizer",
             optimizer_fallback="FIRE",
-            n_steps=300,
+            n_steps=1000,
             fmax=0.05,
             use_janus=use_janus,
         )
