@@ -164,6 +164,7 @@ def neb(
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
     use_janus: bool = False,
+    all_images: bool = False,
 ):
 
     if models is not None:
@@ -176,6 +177,7 @@ def neb(
         material_ids=material_ids,
         smiles=smiles,
         use_janus=use_janus,
+        all_images=all_images,
     )
     
 

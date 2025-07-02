@@ -19,6 +19,7 @@ import zntrack
 import os
 from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer
 import flask
+from ase.io import read, write
 
 
 class NEBinterpolate(zntrack.Node):
@@ -219,6 +220,7 @@ class NEB2(zntrack.Node):
     """
 
     data_path: str = zntrack.params()
+    all_images: bool = zntrack.params(True)
     model: NodeWithCalculator = zntrack.deps()
     n_images: int = zntrack.params(5)
     k: float = zntrack.params(0.1)
@@ -240,12 +242,19 @@ class NEB2(zntrack.Node):
         frames = []
         calc = self.model.get_calculator()
         
-        from ase.io import read, write
-        initial = read(self.data_path, index=0)  # first image
-        final = read(self.data_path, index=-1)  # last image
         
-        initial.calc = copy(calc)
-        final.calc = copy(calc)
+        if self.all_images:
+            images = read(self.data_path, index=":")
+            initial = images[0]
+            final = images[-1]
+        else:
+            initial = read(self.data_path, index=0)
+            final = read(self.data_path, index=-1)
+            images = [initial] + [initial.copy() for _ in range(self.n_images)] + [final]
+            
+        
+        for image in images:
+            image.calc = copy(calc)
         
         
         if self.use_janus:
@@ -267,7 +276,7 @@ class NEB2(zntrack.Node):
         else:
             from ase.mep import NEB
 
-            images = [initial] + [initial.copy() for i in range(self.n_images)] + [final]
+            #images = [initial] + [initial.copy() for i in range(self.n_images)] + [final]
             
             neb = NEB(images, k=self.k)
             
@@ -287,10 +296,12 @@ class NEB2(zntrack.Node):
             dyn_final = optimizer_fallback(final)
             dyn_final.run(fmax=self.fmax)
             
-            neb.interpolate()
-            for image in images[1:len(images) - 1]:
-                image.calc = copy(calc)
-                image.get_potential_energy()
+            if self.all_images:
+                neb.interpolate()
+                
+            # for image in images[1:len(images) - 1]:
+            #     image.calc = copy(calc)
+            #     image.get_potential_energy()
 
                     
             if optimizer == ase.mep.neb.NEBOptimizer:
