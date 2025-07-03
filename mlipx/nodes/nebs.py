@@ -365,9 +365,17 @@ class NEB2(zntrack.Node):
 
     @property
     def figures(self) -> dict[str, go.Figure]:
+        # Use Plotly Express to create the scatter plot
+        x_values = self.results["data_id"] if "data_id" in self.results else list(range(len(self.results)))
+        y_values = self.results["potential_energy"] if "potential_energy" in self.results else [0]*len(x_values)
+        system_name = getattr(self, 'name', 'system')
         fig = px.scatter(self.results, x="data_id", y="potential_energy")
         fig.update_layout(title="NEB_path")
-        fig.update_traces(customdata=np.stack([np.arange(len(self.results))], axis=1))
+        # Add customdata and hovertemplate
+        fig.update_traces(
+            customdata=[system_name] * len(x_values),
+            hovertemplate="Image %{x}, Energy %{y} eV<br>%{customdata}<extra></extra>"
+        )
         return {"NEB_path": fig}
 
     @property
@@ -376,6 +384,7 @@ class NEB2(zntrack.Node):
         total_iterations = len(trajectory_frames) // len(self.frames)
         neb_length = len(self.frames)
         figure = go.Figure()
+        system_name = getattr(self, 'name', 'system')
         for iteration in range(total_iterations):
             images = trajectory_frames[
                 iteration * neb_length : (iteration + 1) * neb_length
@@ -388,7 +397,7 @@ class NEB2(zntrack.Node):
                     y=energies,
                     mode="lines+markers",
                     name=f"{iteration}",
-                    customdata=np.stack([np.arange(len(energies)) + offset], axis=1),
+                    customdata=[system_name] * len(energies),
                 )
             )
         figure.update_layout(
@@ -405,13 +414,14 @@ class NEB2(zntrack.Node):
         fig = go.Figure()
         for idx, node in enumerate(nodes):
             energies = [atoms.get_potential_energy() for atoms in node.frames]
+            system_name = getattr(node, 'name', 'system')
             fig.add_trace(
                 go.Scatter(
                     x=list(range(len(energies))),
                     y=energies,
                     mode="lines+markers",
                     name=node.name.replace(f"_{node.__class__.__name__}", ""),
-                    customdata=np.stack([np.arange(len(energies)) + offset], axis=1),
+                    customdata=[system_name] * len(energies),
                 )
             )
             offset += len(energies)
@@ -443,13 +453,14 @@ class NEB2(zntrack.Node):
         for _, node in enumerate(nodes):
             energies = np.array([atoms.get_potential_energy() for atoms in node.frames])
             energies -= energies[0]
+            system_name = getattr(node, 'name', 'system')
             fig_adjusted.add_trace(
                 go.Scatter(
                     x=list(range(len(energies))),
                     y=energies,
                     mode="lines+markers",
                     name=node.name.replace(f"_{node.__class__.__name__}", ""),
-                    customdata=np.stack([np.arange(len(energies)) + offset], axis=1),
+                    customdata=[system_name] * len(energies),
                 )
             )
             offset += len(energies)
@@ -494,16 +505,28 @@ class NEB2(zntrack.Node):
         }
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
     @staticmethod
     def benchmark_precompute(
         node_dict, 
-        cache_dir="app_cache/nebs/nebs_cache",
+        cache_dir="app_cache/nebs_further_apps/nebs_cache",
         ui=None, 
-        run_interactive=False, 
+        run_interactive=True, 
         report=False, 
         normalise_to_model=None
     ):
-        
         """
         Processes NEB nodes, saves summary and full NEB data as pickles.
         - mae_summary.pkl: DataFrame with model names and energy barriers.
@@ -511,272 +534,379 @@ class NEB2(zntrack.Node):
         """
         import pandas as pd
         import os
+        from collections import defaultdict
         os.makedirs(cache_dir, exist_ok=True)
 
         ref_data = {
-            "Si_64": [],
-            "Si_216": [],
-            "LiFePO4_b": [0.27],
-            #"LiFePO4_c": [2.5],
-            
+            "Si_64": None,
+            "Si_216": None,
+            "LiFePO4_start_end_b": 0.27,
+            "LiFePO4_start_end_c": 2.5,
         }
+
+        # Define custom column labels for barrier error
+        custom_col_names = {
+            "Si_64": "Si_64 ΔE (eV)",
+            "Si_216": "Si_216 ΔE (eV)",
+            "_LiFePO4_start_end_b_": "LiFePO4_b ΔE (eV)",
+            "_LiFePO4_start_end_c_": "LiFePO4_c ΔE (eV)",
+        }
+
+        #for model, system_dict in node_dict.items():
+            #print(f"\nProcessing model: {model}")
+            #print(f"Systems: {list(system_dict.keys())}")
+
+        # === Define system groups manually ===
+        system_groups = {
+            "Si_64": "Si",
+            "Si_216": "Si",
+            #"LiFePO4_b": "LiFePO4",
+            "_LiFePO4_start_end_b_": "LiFePO4",
+            "_LiFePO4_start_end_c_": "LiFePO4",
+        }
+
+        # === Group nodes by system group ===
+        grouped_nodes = defaultdict(lambda: defaultdict(dict))  # group -> model -> system -> node
+        for model, system_dict in node_dict.items():
+            for system, node in system_dict.items():
+                #system = system.strip("_")
+                # Always use stripped keys for consistency
+                clean_system = system.strip("_")
+                normalized_system_groups = {k.strip("_"): v for k, v in system_groups.items()}
+                group = normalized_system_groups.get(clean_system, clean_system)
+
+                # Store using clean system name (stripped version)
+                grouped_nodes[group][model][clean_system] = node
+
+        # --- Add: all_group_data dict ---
+        all_group_data = {}
         
-        print(node_dict)
-                
-        # divide node dict up based on the different nebs it contains
-        # structure before: dict = {"model1": [NEB1, ]}
+        print(grouped_nodes)
 
-        barrier_dict = []
-        neb_data_dict = {}
+        for group_name, models in grouped_nodes.items():
 
-        for model_name, node in node_dict.items():
-            images = node.images
-            rel_energies = [atoms.get_potential_energy() - images[0].get_potential_energy() for atoms in images]
-            barrier = max(rel_energies) - min(rel_energies)
-            barrier_dict.append({"Model": model_name, "Barrier (eV)": barrier})
-            neb_data_dict[model_name] = {
-                "rel_energies": rel_energies,
-                "reaction_coords": list(range(len(rel_energies))),
-            }
+            from collections import defaultdict
+            barrier_dict = defaultdict(dict)
+            neb_data_dict = {}
+
+            for model_name, system_nodes in models.items():
+                for system_name, node in system_nodes.items():
+                    images = node.images
+                    rel_energies = [atoms.get_potential_energy() - images[0].get_potential_energy() for atoms in images]
+                    barrier = max(rel_energies) - min(rel_energies)
+                    barrier_dict[model_name]["Model"] = model_name
+                    barrier_dict[model_name][f"{system_name} Barrier (eV)"] = barrier
+                    key = f"{model_name}::{system_name}"
+                    neb_data_dict[key] = {
+                        "rel_energies": rel_energies,
+                        "reaction_coords": list(range(len(rel_energies))),
+                    }
+
+                    # save images for WEAS viewer
+                    save_dir = os.path.abspath(f"assets/{model_name}/{group_name}/{system_name}")
+                    os.makedirs(save_dir, exist_ok=True)
+                    write(os.path.join(save_dir, "images.xyz"), images, format='extxyz')
+
+            # Save group summary
+            df = pd.DataFrame(list(barrier_dict.values()))
+
+            barrier_cols = [col for col in df.columns if "Barrier" in col and col.endswith("(eV)")]
+            if barrier_cols:
+                mae_df = df.sort_values(by=barrier_cols[0], ascending=True)
+            else:
+                mae_df = df
+
+            # Add error columns for all barrier columns, supporting multiple barriers per system,
+            # and drop the original "Barrier (eV)" columns, keeping only error columns and Model.
+            for col in list(mae_df.columns):
+                if "Barrier" in col and col.endswith("(eV)"):
+                    base_label = col.split(" Barrier")[0].strip()
+                    if base_label in ref_data and ref_data[base_label] is not None:
+                        ref_val = ref_data[base_label]
+                        error_col = f"{col} Error"
+                        mae_df[error_col] = mae_df[col].apply(lambda x: abs(x - ref_val) if pd.notna(x) else None)
+                        mae_df.drop(columns=[col], inplace=True)
+
+            # Add score column as average of error columns
+            error_cols = [col for col in mae_df.columns if col.endswith("Error")]
+            if error_cols:
+                mae_df[f"{group_name} Score \u2193"] = mae_df[error_cols].mean(axis=1)
+                print(f"Group {group_name} Score: {mae_df[f'{group_name} Score \u2193'].mean():.3f}")
+
+            # Instead of saving individual files, store in all_group_data:
+            all_group_data[group_name] = (mae_df.round(3), neb_data_dict, os.path.abspath("assets"))
+
+
             
-            # save images for weas viewer
-            #save_dir = f"assets/{model_name}/si_interstitials"
-            save_dir = os.path.abspath(f"assets/{model_name}/si_interstitials")
-            os.makedirs(save_dir, exist_ok=True)
-            #for i, atoms in enumerate(images):
-            fname = f"{save_dir}/images.xyz"
-            write(fname, images, format='xyz')
             
-
-
-        # Save MAE-style summary table
-        mae_df = pd.DataFrame(barrier_dict).sort_values(by="Barrier (eV)", ascending=True).round(3)
-        mae_df.to_pickle(os.path.join(cache_dir, "mae_summary.pkl"))
-
-        # Save full NEB data
-        pd.to_pickle(neb_data_dict, os.path.join(cache_dir, "neb_df.pkl"))
-
-        assets_dir = os.path.abspath("assets")
-        with open(f"{cache_dir}/assets_dir.txt", "w") as f:
-            f.write(assets_dir)
-        
+        # After all groups, save all_group_data as one pickle
+        import pickle
+            
+        with open(os.path.join(cache_dir, "all_group_data.pkl"), "wb") as f:
+            pickle.dump(all_group_data, f)
+        with open(os.path.join(cache_dir, "all_group_data.pkl"), "rb") as f:
+            all_group_data = pickle.load(f)
         return
+    
+
+
+
+
 
 
     @staticmethod
-    def launch_dashboard(cache_dir="app_cache/nebs/nebs_cache", ui=None):
+    def launch_dashboard(cache_dir="app_cache/nebs_further_apps/nebs_cache", ui=None):
         import pandas as pd
         from dash import Dash
-        from mlipx.dash_utils import run_app, dash_table_interactive
-        from dash import html, dcc, Input, Output, State
-        import plotly.graph_objects as go
+        from mlipx.dash_utils import run_app
         import dash
         import os
-        
+        import pickle
+
         print(os.getcwd())
 
-        # Read cached files
-        mae_df = pd.read_pickle(f"{cache_dir}/mae_summary.pkl")
-        neb_df = pd.read_pickle(f"{cache_dir}/neb_df.pkl")
-        with open(f"{cache_dir}/assets_dir.txt", "r") as f:
-            assets_dir = f.read().strip()
-        
+        # Load all groups from single pickle file
+        with open(os.path.join(cache_dir, "all_group_data.pkl"), "rb") as f:
+            all_group_data = pickle.load(f)
 
-        # Initialize app with proper static configuration
-        app = dash.Dash(__name__, assets_folder= assets_dir)
-        
+        for group_name, (mae_df, _, _) in all_group_data.items():
+            print(f"\nGroup: {group_name}")
+            print(mae_df)
+            
+            
+        # Use assets_dir from the first group for Dash assets
+        first_assets_dir = next(iter(all_group_data.values()))[2]
+        app = dash.Dash(__name__, assets_folder=first_assets_dir)
         app.server.static_folder = 'assets'
         app.server.static_url_path = '/assets'
-        
 
-
-        app.layout = dash_table_interactive(
-            df=mae_df,
-            id="neb-mae-score-table",
-            title="NEB Energy Barriers Summary Table",
-            extra_components=[
-                html.Div(id="neb-table"),
-                dcc.Store(id="neb-table-last-clicked", data=None),
-                dcc.Store(id="current-neb-model", data=None),
-                html.Div(
-                    dcc.Graph(id="neb-plot"),
-                    id="neb-plot-container",
-                    #style={"display": "none"},
-                ),
-                html.Div(id="weas-viewer", style={'marginTop': '20px'}),
-            ],
-        )
-
-        @app.callback(
-            Output("neb-plot", "figure"),
-            Output("neb-plot-container", "style"),
-            Output("neb-table-last-clicked", "data"),
-            Output("current-neb-model", "data"),
-            Input("neb-mae-score-table", "active_cell"),
-            State("neb-table-last-clicked", "data")
-        )
-        def update_neb_plot(active_cell, last_clicked):
-
-            if active_cell is None:
-                raise dash.exceptions.PreventUpdate
-
-            row = active_cell["row"]
-            col = active_cell["column_id"]
-            model_name = mae_df.iloc[row]["Model"]
-            if col not in mae_df.columns or col == "Model":
-                return dash.no_update, {"display": "none"}, active_cell, model_name
-            if last_clicked is not None and (
-                active_cell["row"] == last_clicked.get("row") and
-                active_cell["column_id"] == last_clicked.get("column_id")
-            ):
-                return dash.no_update, {"display": "none"}, None, model_name
-
-            neb_data = neb_df[model_name]
-            rel_energies = neb_data["rel_energies"]
-            reaction_coords = neb_data["reaction_coords"]
-            fig = go.Figure(go.Scatter(x=reaction_coords, y=rel_energies, mode="lines+markers", name="NEB Path"))
-            fig.update_layout(title=f"{model_name}: NEB Energy Path", xaxis_title="Image Index", yaxis_title="Energy (eV)")
-            return fig, {"display": "block"}, active_cell, model_name
-
-        @app.callback(
-            Output("weas-viewer", "children"),
-            Output("weas-viewer", "style"),
-            Input("neb-plot", "clickData"),
-            State("current-neb-model", "data")
-        )
-        def update_weas_viewer(clickData, model_name):
-            # print("clickData:", clickData)
-            # print("model_name:", model_name)
-            # print("filename:", filename)
-            if clickData is None or model_name is None:
-                raise dash.exceptions.PreventUpdate
-                #return dash.no_update, {"display": "none"}
-
-            index = int(clickData["points"][0]["x"])
-            
-
-            filename = f"/assets/{model_name}/si_interstitials/images.xyz"
-            #asset_url = app.get_asset_url(filename)
-            
-            
-            def generate_weas_html(filename, current_frame):
-                return f"""
-                <!doctype html>
-                <html lang="en">
-                <head>
-                    <meta charset="utf-8">
-                    <title>WEAS Viewer</title>
-                </head>
-                <body>
-                    <div id="viewer" style="position: relative; width: 100%; height: 500px; border: 1px solid #ccc;"></div>
-                    <div id="debug" style="margin-top: 10px; padding: 10px; background: #f0f0f0; font-family: monospace; display: none;"></div>
-                    <script type="module">
-                        async function fetchFile(filename) {{
-                            try {{
-                                const response = await fetch(filename);
-                                if (!response.ok) {{
-                                    throw new Error(`Failed to load file: ${{filename}} - ${{response.status}}`);
-                                }}
-                                const text = await response.text();
-                                
-                                // Debug: show file content
-                                console.log('File content:', text);
-                                document.getElementById("debug").innerHTML = 
-                                    `<strong>File content (first 500 chars):</strong><br><pre>${{text.substring(0, 500)}}</pre>`;
-                                document.getElementById("debug").style.display = 'block';
-                                
-                                return text;
-                            }} catch (error) {{
-                                console.error('Error fetching file:', error);
-                                throw error;
-                            }}
-                        }}
-                        
-                        function validateXYZ(content) {{
-                            const lines = content.trim().split('\\n');
-                            if (lines.length < 2) {{
-                                throw new Error('XYZ file too short');
-                            }}
-                            
-                            const numAtoms = parseInt(lines[0]);
-                            if (isNaN(numAtoms)) {{
-                                throw new Error('First line must be number of atoms');
-                            }}
-                            
-                            if (lines.length < numAtoms + 2) {{
-                                throw new Error(`Expected ${{numAtoms + 2}} lines, got ${{lines.length}}`);
-                            }}
-                            
-                            // Check coordinate lines
-                            for (let i = 2; i < numAtoms + 2; i++) {{
-                                const parts = lines[i].trim().split(/\\s+/);
-                                if (parts.length < 4) {{
-                                    throw new Error(`Line ${{i+1}}: Expected element + 3 coordinates, got ${{parts.length}} parts`);
-                                }}
-                            }}
-                            
-                            return true;
-                        }}
-                        
-                        try {{
-                            const {{ WEAS, parseXYZ }} = await import('https://unpkg.com/weas/dist/index.mjs');
-                            const domElement = document.getElementById("viewer");
-                            
-                            const editor = new WEAS({{
-                                domElement,
-                                viewerConfig: {{ 
-                                    _modelStyle: 2,
-                                    backgroundColor: [1, 1, 1, 1]
-                                }},
-                                guiConfig: {{ 
-                                    buttons: {{ enabled: false }} 
-                                }}
-                            }});
-                            
-                            const structureData = await fetchFile("{filename}");
-                            
-                            // Validate XYZ format before parsing
-                            validateXYZ(structureData);
-                            
-                            const atoms = parseXYZ(structureData);
-                            editor.avr.atoms = atoms;
-                            editor.avr.currentFrame = {current_frame};
-                            editor.render();
-                            
-                            // Hide debug info if successful
-                            document.getElementById("debug").style.display = 'none';
-                            
-                        }} catch (error) {{
-                            console.error('Error initializing WEAS:', error);
-                            document.getElementById("viewer").innerHTML = 
-                                `<div style="padding: 20px; color: red;">
-                                    <strong>Error loading structure:</strong><br>
-                                    ${{error.message}}
-                                    <br><br>
-                                    <small>Check the browser console for more details.</small>
-                                </div>`;
-                        }}
-                    </script>
-                </body>
-                </html>
-                """
-
-            html_content = generate_weas_html(filename, current_frame=index)
-            return (
-                html.Div([
-                    html.H4(f"Structure {index}", style={'textAlign': 'center'}),
-                    html.Iframe(
-                        srcDoc=html_content,
-                        style={
-                            "height": "550px",
-                            "width": "100%",
-                            "border": "1px solid #ddd",
-                            "borderRadius": "5px"
-                        }
-                    )
-                ]),
-                {"marginTop": "20px"}
-            )
+        # Set layout using the static method
+        app.layout = NEB2.build_layout(all_group_data)
+        # Register callbacks using the static method
+        NEB2.register_callbacks(app, all_group_data)
 
         return run_app(app, ui=ui)
-        
+
+
+
+
+    @staticmethod
+    def build_layout(all_group_data):
+        from dash import html, dcc
+        from mlipx.dash_utils import dash_table_interactive
+        return html.Div([
+            dcc.Tabs([
+                dcc.Tab(label=group_name, children=[
+                    dash_table_interactive(
+                        df=mae_df,
+                        id=f"neb-mae-score-table-{group_name}",
+                        title=f"{group_name} Energy Barriers Summary Table",
+                        extra_components=[
+                            html.Div(id=f"neb-table-{group_name}"),
+                            dcc.Store(id=f"neb-table-last-clicked-{group_name}", data=None),
+                            dcc.Store(id=f"current-neb-model-{group_name}", data=None),
+                            html.Div(
+                                dcc.Graph(id=f"neb-plot-{group_name}"),
+                                id=f"neb-plot-container-{group_name}",
+                                style={"display": "none"}
+                            ),
+                            html.Div(id=f"weas-viewer-{group_name}", style={'marginTop': '20px'}),
+                        ],
+                    )
+                ]) for group_name, (mae_df, _, _) in all_group_data.items()
+            ])
+        ])
+
+
+
+
+
+
+
+
+
+
+    @staticmethod
+    def register_callbacks(app, all_group_data):
+        from dash import Output, Input, State, exceptions
+        import plotly.graph_objects as go
+        for group_name, (mae_df, neb_df, assets_dir) in all_group_data.items():
+            # Prepare custom_col_names mapping for this group
+            # Try to infer from mae_df columns if available
+            custom_col_names = {}
+            for col in mae_df.columns:
+                if col == "Model":
+                    continue
+                # Try to match to system names in neb_df keys
+                # neb_df keys are of the form "model_name::system_name"
+                for key in neb_df.keys():
+                    # key = "model_name::system_name"
+                    _model, _system = key.split("::", 1)
+                    if col.startswith(_system) or _system in col:
+                        custom_col_names[_system] = col
+            @app.callback(
+                Output(f"neb-plot-{group_name}", "figure"),
+                Output(f"neb-plot-container-{group_name}", "style"),
+                Output(f"neb-table-last-clicked-{group_name}", "data"),
+                Output(f"current-neb-model-{group_name}", "data"),
+                Input(f"neb-mae-score-table-{group_name}", "active_cell"),
+                State(f"neb-table-last-clicked-{group_name}", "data"),
+            )
+            def update_neb_plot(active_cell, last_clicked, group_name=group_name, mae_df=mae_df, neb_df=neb_df, custom_col_names=custom_col_names):
+                import dash
+                if active_cell is None:
+                    raise dash.exceptions.PreventUpdate
+                row = active_cell["row"]
+                col = active_cell["column_id"]
+                model_name = mae_df.iloc[row]["Model"]
+                if col not in mae_df.columns or col == "Model":
+                    return dash.no_update, {"display": "none"}, active_cell, model_name
+                if last_clicked is not None and (
+                    active_cell["row"] == last_clicked.get("row") and
+                    active_cell["column_id"] == last_clicked.get("column_id")
+                ):
+                    return dash.no_update, {"display": "none"}, None, model_name
+                # Reverse-map from custom column names
+                reverse_map = {v: k for k, v in custom_col_names.items()}
+                system_name = reverse_map.get(col, col)
+                key = f"{model_name}::{system_name}"
+                neb_data = neb_df[key]
+                rel_energies = neb_data["rel_energies"]
+                reaction_coords = neb_data["reaction_coords"]
+                fig = go.Figure(go.Scatter(
+                    x=reaction_coords,
+                    y=rel_energies,
+                    mode="lines+markers",
+                    name="NEB Path",
+                    customdata=[system_name] * len(reaction_coords),
+                    hovertemplate="Image %{x}, Energy %{y} eV<br>%{customdata}<extra></extra>"
+                ))
+                fig.update_layout(title=f"{model_name}: NEB Energy Path", xaxis_title="Image Index", yaxis_title="Energy (eV)")
+                return fig, {"display": "block"}, active_cell, model_name
+
+            # WEAS viewer callback
+            @app.callback(
+                Output(f"weas-viewer-{group_name}", "children"),
+                Output(f"weas-viewer-{group_name}", "style"),
+                Input(f"neb-plot-{group_name}", "clickData"),
+                State(f"current-neb-model-{group_name}", "data"),
+            )
+            def update_weas_viewer(clickData, model_name, group_name=group_name):
+                import dash
+                if clickData is None or model_name is None:
+                    raise dash.exceptions.PreventUpdate
+                index = int(clickData["points"][0]["x"])
+                point_data = clickData["points"][0]
+                system_name = point_data.get("customdata", "unknown")
+                system_names = [system_name]
+                children = []
+                for system_name in system_names:
+                    filename = f"/assets/{model_name}/{group_name}/{system_name}/images.xyz"
+                    def generate_weas_html(filename, current_frame):
+                        return f"""
+                        <!doctype html>
+                        <html lang="en">
+                        <head>
+                            <meta charset="utf-8">
+                            <title>WEAS Viewer</title>
+                        </head>
+                        <body>
+                            <div id="viewer" style="position: relative; width: 100%; height: 500px; border: 1px solid #ccc;"></div>
+                            <div id="debug" style="margin-top: 10px; padding: 10px; background: #f0f0f0; font-family: monospace; display: none;"></div>
+                            <script type="module">
+                                async function fetchFile(filename) {{
+                                    try {{
+                                        const response = await fetch(filename);
+                                        if (!response.ok) {{
+                                            throw new Error(`Failed to load file: ${{filename}} - ${{response.status}}`);
+                                        }}
+                                        const text = await response.text();
+                                        // Debug: show file content
+                                        console.log('File content:', text);
+                                        document.getElementById("debug").innerHTML = 
+                                            `<strong>File content (first 500 chars):</strong><br><pre>${{text.substring(0, 500)}}</pre>`;
+                                        document.getElementById("debug").style.display = 'block';
+                                        return text;
+                                    }} catch (error) {{
+                                        console.error('Error fetching file:', error);
+                                        throw error;
+                                    }}
+                                }}
+                                function validateXYZ(content) {{
+                                    const lines = content.trim().split('\\n');
+                                    if (lines.length < 2) {{
+                                        throw new Error('XYZ file too short');
+                                    }}
+                                    const numAtoms = parseInt(lines[0]);
+                                    if (isNaN(numAtoms)) {{
+                                        throw new Error('First line must be number of atoms');
+                                    }}
+                                    if (lines.length < numAtoms + 2) {{
+                                        throw new Error(`Expected ${{numAtoms + 2}} lines, got ${{lines.length}}`);
+                                    }}
+                                    // Check coordinate lines
+                                    for (let i = 2; i < numAtoms + 2; i++) {{
+                                        const parts = lines[i].trim().split(/\\s+/);
+                                        if (parts.length < 4) {{
+                                            throw new Error(`Line ${{i+1}}: Expected element + 3 coordinates, got ${{parts.length}} parts`);
+                                        }}
+                                    }}
+                                    return true;
+                                }}
+                                try {{
+                                    const {{ WEAS, parseXYZ }} = await import('https://unpkg.com/weas/dist/index.mjs');
+                                    const domElement = document.getElementById("viewer");
+                                    const editor = new WEAS({{
+                                        domElement,
+                                        viewerConfig: {{ 
+                                            _modelStyle: 2,
+                                            backgroundColor: [1, 1, 1, 1]
+                                        }},
+                                        guiConfig: {{ 
+                                            buttons: {{ enabled: false }} 
+                                        }}
+                                    }});
+                                    const structureData = await fetchFile("{filename}");
+                                    // Validate XYZ format before parsing
+                                    validateXYZ(structureData);
+                                    const atoms = parseXYZ(structureData);
+                                    editor.avr.atoms = atoms;
+                                    editor.avr.modelStyle = 1;
+                                    editor.avr.currentFrame = {index};
+                                    editor.render();
+                                    // Hide debug info if successful
+                                    document.getElementById("debug").style.display = 'none';
+                                }} catch (error) {{
+                                    console.error('Error initializing WEAS:', error);
+                                    document.getElementById("viewer").innerHTML = 
+                                        `<div style="padding: 20px; color: red;">
+                                            <strong>Error loading structure:</strong><br>
+                                            ${{error.message}}
+                                            <br><br>
+                                            <small>Check the browser console for more details.</small>
+                                        </div>`;
+                                }}
+                            </script>
+                        </body>
+                        </html>
+                        """
+                    html_content = generate_weas_html(filename, current_frame=index)
+                    from dash import html as dash_html
+                    children.append(
+                        dash_html.Div([
+                            dash_html.H4(f"Structure {index}", style={'textAlign': 'center'}),
+                            dash_html.Iframe(
+                                srcDoc=html_content,
+                                style={
+                                    "height": "550px",
+                                    "width": "100%",
+                                    "border": "1px solid #ddd",
+                                    "borderRadius": "5px"
+                                }
+                            )
+                        ])
+                    )
+                return (
+                    children if len(children) > 1 else children[0],
+                    {"marginTop": "20px"}
+                )

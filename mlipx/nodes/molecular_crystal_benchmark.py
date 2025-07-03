@@ -265,7 +265,7 @@ class MolecularCrystalBenchmark(zntrack.Node):
         )
         
 
-        
+        # load tables to calculate benchmark score and then define the callback function
         mae_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/mae_df.pkl")
         abs_error_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/abs_error_df.pkl")
         lattice_e_df_X23 = pd.read_pickle(f"{cache_dir}/X23_cache/lattice_e_df.pkl")

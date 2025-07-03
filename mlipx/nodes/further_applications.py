@@ -260,17 +260,28 @@ class FutherApplications(zntrack.Node):
         import dash
 
         benchmark_score_df = pd.read_csv(f"{cache_dir}/molecular_dynamics_cache/benchmark_score.csv")
-        mae_df_oo = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oo.pkl")
-        mae_df_oh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oh.pkl")
-        mae_df_hh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_hh.pkl")
-        with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
+        mae_df_oo = pd.read_pickle(f"{cache_dir}/mae_df_oo.pkl")
+        mae_df_oh = pd.read_pickle(f"{cache_dir}/mae_df_oh.pkl")
+        mae_df_hh = pd.read_pickle(f"{cache_dir}/mae_df_hh.pkl")
+        with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
             properties_dict = pickle.load(f)
-        with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
+        with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
+        with open(f"{cache_dir}/vacf_data.pkl", "rb") as f:
+            vacf_dict = pickle.load(f)
+        with open(f"{cache_dir}/vdos_data.pkl", "rb") as f:
+            vdos_dict = pickle.load(f)
+        # Add to properties_dict
+        properties_dict["msd_O"] = msd_dict
+        properties_dict["vacf"] = vacf_dict
+        properties_dict["vdos"] = vdos_dict
+        # dummy dfs
+        vacf_df = pd.DataFrame([{"Model": k} for k in vacf_dict.keys()])
+        vdos_df = pd.DataFrame([{"Model": k} for k in vdos_dict.keys()])
 
         callback_fn = FutherApplications.callback_fn_from_cache(
             cache_dir=cache_dir,
-            mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh],
+            mae_df_list = [mae_df_oo, mae_df_oh, mae_df_hh, vacf_df, vdos_df],
             properties_dict=properties_dict,
         )
 
@@ -281,11 +292,13 @@ class FutherApplications(zntrack.Node):
             mae_df_oh=mae_df_oh,
             mae_df_hh=mae_df_hh,
             msd_dict=msd_dict,
+            vacf_df=vacf_df,
+            vdos_df=vdos_df,
             properties_dict=properties_dict,
             normalise_to_model=normalise_to_model,
         )
         
-        mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh]
+        
         
         if full_benchmark:
             return layout, callback_fn
@@ -312,6 +325,8 @@ class FutherApplications(zntrack.Node):
                     ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
                     ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
                     ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
+                    ("vacf-score-table", "vacf-table-details", "vacf-table-last-clicked", "vacf"),
+                    ("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
                 ], mae_df_list=mae_df_list, properties_dict=properties_dict
             )
             
@@ -319,7 +334,7 @@ class FutherApplications(zntrack.Node):
     
     
     @staticmethod
-    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, properties_dict, msd_dict, normalise_to_model=None):
+    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, properties_dict, msd_dict, vacf_df, vdos_df, normalise_to_model=None):
         
         score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh)).round(3)
         score_df["Rank"] = score_df["Avg MAE \u2193"].rank(ascending=True).astype(int)
@@ -327,10 +342,10 @@ class FutherApplications(zntrack.Node):
 
         layout = combine_apps(
             benchmark_score_df=score_df,
-            benchmark_title="Further Applications",
+            benchmark_title="Water MD",
             benchmark_table_info=f"Scores normalised to: {normalise_to_model}" if normalise_to_model else "",
             apps_or_layouts_list=[
-                MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict)
+                MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, vacf_df, vdos_df)
             ],
             id="rdf-benchmark-score-table",
         )

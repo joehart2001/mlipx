@@ -861,6 +861,7 @@ def full_benchmark_precompute(
         "*GMTKN55Benchmark*",
         "*HomonuclearDiatomics*",
         "*MolecularDynamics*",
+        "*NEB2*"
     ]
     glob = True
     
@@ -908,6 +909,12 @@ def full_benchmark_precompute(
         split_str_MD="_config-0_MolecularDynamicss",
     )
     
+    neb_dict = get_neb_further_apps_dict(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+    )
 
     
     
@@ -930,45 +937,12 @@ def full_benchmark_precompute(
         GMTKN55_data=GMTKN55_dict,
         HD_data=HD_dict,
         MD_data=MD_dict,
+        NEB_data=neb_dict,
         #ui=ui,
         #return_app = return_app,
         #report=report,
         normalise_to_model=normalise_to_model,
     )
-    
-    # if return_app:
-    #     return FullBenchmark.benchmark_interactive(
-    #         phonon_ref_data=phonon_ref_node,
-    #         phonon_pred_data=phonon_pred_node_dict,
-    #         elasticity_data=elasticity_dict,
-    #         lattice_const_data=lattice_const_dict,
-    #         lattice_const_ref_node_dict=lattice_const_ref_node_dict,
-    #         X23_data=X23_dict,
-    #         DMC_ICE_data=ICE_DMC_dict,
-    #         GMTKN55_data=GMTKN55_dict,
-    #         HD_data=HD_dict,
-    #         MD_data=MD_dict,
-    #         ui=ui,
-    #         return_app = return_app,
-    #         report=report,
-    #         normalise_to_model=normalise_to_model,
-    #     )
-    # else:
-    #     FullBenchmark.benchmark_interactive(
-    #         phonon_ref_data=phonon_ref_node,
-    #         phonon_pred_data=phonon_pred_node_dict,
-    #         elasticity_data=elasticity_dict,
-    #         lattice_const_data=lattice_const_dict,
-    #         lattice_const_ref_node_dict=lattice_const_ref_node_dict,
-    #         X23_data=X23_dict,
-    #         DMC_ICE_data=ICE_DMC_dict,
-    #         GMTKN55_data=GMTKN55_dict,
-    #         HD_data=HD_dict,
-    #         MD_data=MD_dict,
-    #         ui=ui,
-    #         report=report,
-    #         normalise_to_model=normalise_to_model,
-    #     )
     
     
     
@@ -1155,7 +1129,7 @@ def neb_precompute(
     ):
     
     nodes = [
-        "*NEB*",
+        "*NEB2*",
     ]
     glob = True
     
@@ -1172,7 +1146,7 @@ def neb_precompute(
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_neb")
 
     benchmark_node_dict = load_nodes_model_neb_system(node_objects, models, split_str_model = "_neb", split_str_system = "NEB2")
-
+    print(benchmark_node_dict)
 
     from mlipx import NEB2
     NEB2.benchmark_precompute(
@@ -1188,7 +1162,8 @@ def load_nodes_model_neb_system(node_objects, models, split_str_model = "_neb", 
     
     for name, node in node_objects.items():
         model = name.split(split_str_model)[0]
-        benchmark_node_dict[model] = {}
+        if model not in benchmark_node_dict:
+            benchmark_node_dict[model] = {}
         # split in between split_str_model and split_str_system
         system = name.split(split_str_model)[1].split(split_str_system)[0]
         benchmark_node_dict[model][system] = node
@@ -1225,3 +1200,21 @@ def neb_launch_dashboard(
     
     
     
+    
+def get_neb_further_apps_dict(
+    nodes: list[str],
+    glob: bool,
+    models: list[str] | None,
+    all_nodes: list[str],
+) -> dict[str, zntrack.Node]:
+    
+    neb_nodes = [node for node in all_nodes if "NEB2" in node]
+    
+    node_objects = load_node_objects(nodes, glob, models, neb_nodes, split_str="_neb")
+
+    benchmark_node_dict = load_nodes_model_neb_system(node_objects, models, split_str_model = "_neb", split_str_system = "NEB2")
+    
+    return benchmark_node_dict
+
+
+

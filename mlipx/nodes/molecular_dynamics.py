@@ -24,6 +24,8 @@ from mlipx.dash_utils import run_app, dash_table_interactive
 import pickle
 from pathlib import Path
 
+
+
 from mlipx.abc import (
     ComparisonResults,
     DynamicsModifier,
@@ -451,19 +453,22 @@ class MolecularDynamics(zntrack.Node):
                     # Velocity autocorrelation function
                     vaf = MolecularDynamics.compute_vacf(traj, velocities, timestep=1)
                     properties_dict[prop][model_name] = {
-                        "time": vaf['time'].tolist(),
-                        "vaf": vaf['vaf'].tolist(),
+                        "time": vaf[0].tolist(),
+                        "vaf": vaf[1][0].tolist(),
                     }
                 elif prop == 'vdos':
                     # Velocity density of states
-                    vdos = MolecularDynamics.compute_vdos(traj, velocities, timestep=1)
+                    vdos = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True)
                     properties_dict[prop][model_name] = {
-                        "frequency": vdos['frequency'].tolist(),
-                        "vdos": vdos['vdos'].tolist(),
+                        "frequency": vdos[0].tolist(),
+                        "vdos": vdos[1][0].tolist(),
                     }
 
         # Add msd_dict for later use
         msd_dict = properties_dict["msd_O"]
+
+        # Compute VACF and VDOS MAE tables (dummy placeholders since no ref currently)
+
 
         # --- Helper to compute MAE DataFrame for a property ---
         def compute_mae_table(prop, properties_dict, model_names, normalise_to_model=None):
@@ -525,6 +530,9 @@ class MolecularDynamics(zntrack.Node):
         mae_df_oo = compute_mae_table('g_r_oo', properties_dict, model_names, normalise_to_model)
         mae_df_oh = compute_mae_table('g_r_oh', properties_dict, model_names, normalise_to_model)
         mae_df_hh = compute_mae_table('g_r_hh', properties_dict, model_names, normalise_to_model)
+        
+        vacf_mae_df = pd.DataFrame([{"Model": model_name} for model_name in model_names])
+        vdos_mae_df = pd.DataFrame([{"Model": model_name} for model_name in model_names])
 
         if ui is None and run_interactive:
             return mae_df_oo, mae_df_oh, mae_df_hh
@@ -563,6 +571,26 @@ class MolecularDynamics(zntrack.Node):
                     dcc.Store(id="rdf-table-last-clicked-hh", data=None),
                 ],
             ),
+            html.H3("VACF Curves"),
+            dash_table_interactive(
+                df=vacf_mae_df,
+                id="vacf-score-table",
+                title=None,
+                extra_components=[
+                    html.Div(id="vacf-table-details"),
+                    dcc.Store(id="vacf-table-last-clicked", data=None),
+                ],
+            ),
+            html.H3("VDOS Curves"),
+            dash_table_interactive(
+                df=vdos_mae_df,
+                id="vdos-score-table",
+                title=None,
+                extra_components=[
+                    html.Div(id="vdos-table-details"),
+                    dcc.Store(id="vdos-table-last-clicked", data=None),
+                ],
+            ),
         ],
         style={"backgroundColor": "white"})
 
@@ -572,7 +600,11 @@ class MolecularDynamics(zntrack.Node):
                 ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
                 ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
                 ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
-            ], mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh], properties_dict=properties_dict
+                ("vacf-score-table", "vacf-table-details", "vacf-table-last-clicked", "vacf"),
+                ("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
+            ],
+            mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh, vacf_mae_df, vdos_mae_df],
+            properties_dict=properties_dict
         )
 
         if not run_interactive:
@@ -596,6 +628,36 @@ class MolecularDynamics(zntrack.Node):
 
             def make_callback(selected_property=selected_property, mae_df=mae_df, model_names=model_names):
                 def update_rdf_plot(active_cell, last_clicked):
+                    # Special handling for VACF and VDOS
+                    if selected_property in ["vacf", "vdos"]:
+                        if active_cell is None:
+                            raise PreventUpdate
+                        row = active_cell["row"]
+                        model_name = mae_df.loc[row, "Model"]
+                        if last_clicked is not None and active_cell == last_clicked:
+                            return None, None
+
+                        fig = go.Figure()
+                        time_or_freq = "time" if selected_property == "vacf" else "frequency"
+                        y_label = "vaf" if selected_property == "vacf" else "vdos"
+
+                        for model in model_names:
+                            data = properties_dict[selected_property].get(model)
+                            if data:
+                                fig.add_trace(go.Scatter(
+                                    x=data[time_or_freq],
+                                    y=data[y_label],
+                                    mode='lines',
+                                    name=model,
+                                    opacity=1.0 if model == model_name else 0.2
+                                ))
+                        fig.update_layout(
+                            title=f"{selected_property.upper()} curves",
+                            xaxis_title=time_or_freq,
+                            yaxis_title=y_label
+                        )
+                        return dcc.Graph(figure=fig), active_cell
+
                     # Reference keys are those in properties_dict[selected_property] but not in model_names and must contain 'rdf'
                     reference_keys = [
                         k for k in properties_dict[selected_property]
@@ -740,8 +802,79 @@ class MolecularDynamics(zntrack.Node):
         return r, rdf
     
     
-    def compute_vacf(traj, velocities, timestep=1):
-        pass
+    def compute_vacf(
+        traj, 
+        velocities, 
+        atoms_filter = ((None,),),
+        start_index=0, 
+        timestep=1, 
+        fft=False
+    ):
+        
+        n_steps = len(velocities)
+        n_atoms = len(velocities[0])
+    
+        filtered_atoms = []
+        atom_symbols = traj[0].get_chemical_symbols()
+        symbols = set(atom_symbols)
+        for atoms in atoms_filter:
+            if any(atom is None for atom in atoms):
+                # If atoms_filter not specified use all atoms.
+                filtered_atoms.append(range(n_atoms))
+            elif all(isinstance(a, str) for a in atoms):
+                # If all symbols, get the matching indices.
+                atoms = set(atoms)
+                if atoms.difference(symbols):
+                    raise ValueError(
+                        f"{atoms.difference(symbols)} not allowed in VAF"
+                        f", allowed symbols are {symbols}"
+                    )
+                filtered_atoms.append(
+                    [i for i in range(len(atom_symbols)) if atom_symbols[i] in list(atoms)]
+                )
+            elif all(isinstance(a, int) for a in atoms):
+                filtered_atoms.append(atoms)
+            else:
+                raise ValueError(
+                    "Cannot mix element symbols and indices in vaf atoms_filter"
+                )
+
+        used_atoms = {atom for atoms in filtered_atoms for atom in atoms}
+        used_atoms = {j: i for i, j in enumerate(used_atoms)}
+        
+        
+        vafs = np.sum(
+            np.asarray(
+                [
+                    [
+                        np.correlate(velocities[:, j, i], velocities[:, j, i], "full")[
+                            n_steps - 1 :
+                        ]
+                        for i in range(3)
+                    ]
+                    for j in used_atoms
+                ]
+            ),
+            axis=1,
+        )
+
+        vafs /= n_steps - np.arange(n_steps)
+
+        lags = np.arange(n_steps) * timestep
+
+        if fft:
+            vafs = np.fft.fft(vafs, axis=0)
+            lags = np.fft.fftfreq(n_steps, timestep)
+
+        vafs = (
+            lags,
+            [
+                np.average([vafs[used_atoms[i]] for i in atoms], axis=0)
+                for atoms in filtered_atoms
+            ],
+        )
+        
+        return lags, vafs, used_atoms
     
     
     @staticmethod
@@ -768,7 +901,12 @@ class MolecularDynamics(zntrack.Node):
         msd_dict = properties_dict["msd_O"]
         with open(f"{cache_dir}/msd_data.pkl", "wb") as f:
             pickle.dump(msd_dict, f)
-
+        vacf_dict = properties_dict["vacf"]
+        vdos_dict = properties_dict["vdos"]
+        with open(f"{cache_dir}/vacf_data.pkl", "wb") as f:
+            pickle.dump(vacf_dict, f)
+        with open(f"{cache_dir}/vdos_data.pkl", "wb") as f:
+            pickle.dump(vdos_dict, f)
         return app
 
 
@@ -786,16 +924,32 @@ class MolecularDynamics(zntrack.Node):
             properties_dict = pickle.load(f)
         with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
+        with open(f"{cache_dir}/vacf_data.pkl", "rb") as f:
+            vacf_dict = pickle.load(f)
+        with open(f"{cache_dir}/vdos_data.pkl", "rb") as f:
+            vdos_dict = pickle.load(f)
+        # Add to properties_dict
+        properties_dict["msd_O"] = msd_dict
+        properties_dict["vacf"] = vacf_dict
+        properties_dict["vdos"] = vdos_dict
+
+        # Dummy MAE DataFrames for VACF/VDOS
+        vacf_df = pd.DataFrame([{"Model": k} for k in vacf_dict.keys()])
+        vdos_df = pd.DataFrame([{"Model": k} for k in vdos_dict.keys()])
 
         app = dash.Dash(__name__)
-        app.layout = MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict)
+        app.layout = MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, vacf_df, vdos_df)
 
+        table_configs = [
+            ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
+            ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
+            ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
+            ("vacf-score-table", "vacf-table-details", "vacf-table-last-clicked", "vacf"),
+            ("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
+        ]
+        mae_df_list = [mae_df_oo, mae_df_oh, mae_df_hh, vacf_df, vdos_df]
         MolecularDynamics.register_callbacks(
-            app, [
-                ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
-                ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
-                ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
-            ], mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh], properties_dict=properties_dict
+            app, table_configs, mae_df_list=mae_df_list, properties_dict=properties_dict
         )
 
         return run_app(app, ui=ui)
@@ -805,7 +959,7 @@ class MolecularDynamics(zntrack.Node):
     
     
     @staticmethod
-    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict):
+    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, vacf_df, vdos_df):
         return html.Div([
             html.H1("Water MD Benchmark"),
             html.H3("O-O RDF MAE Table"),
@@ -853,6 +1007,26 @@ class MolecularDynamics(zntrack.Node):
                     xaxis_title="Time (ps)",
                     yaxis_title="MSD (Å²)"
                 )
+            ),
+            html.H3("VACF Curves"),
+            dash_table_interactive(
+                df=vacf_df,
+                id="vacf-score-table",
+                title=None,
+                extra_components=[
+                    html.Div(id="vacf-table-details"),
+                    dcc.Store(id="vacf-table-last-clicked", data=None),
+                ],
+            ),
+            html.H3("VDOS Curves"),
+            dash_table_interactive(
+                df=vdos_df,
+                id="vdos-score-table",
+                title=None,
+                extra_components=[
+                    html.Div(id="vdos-table-details"),
+                    dcc.Store(id="vdos-table-last-clicked", data=None),
+                ],
             ),
         ], style={"backgroundColor": "white"})
         

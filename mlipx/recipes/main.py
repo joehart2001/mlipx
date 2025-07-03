@@ -261,6 +261,7 @@ def md(
     steps: int = 1000,
     temperature: int = 300,
     resume_MD: bool = False,
+    resume_trajectory_path: str | None = None,
 ):
     """Build an MD recipe."""
     if models is not None:
