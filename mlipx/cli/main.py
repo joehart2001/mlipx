@@ -207,7 +207,7 @@ def phonon_compare(
     #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
-    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
     batched: Annotated[bool, Option("--batched", help="does one node contain many materials")]=True,
     no_plots: Annotated[bool, Option("--no_plots", help="Disable plots")] = False,
 
@@ -278,7 +278,7 @@ def phonons_precompute(
     #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
-    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
     batched: Annotated[bool, Option("--batched", help="does one node contain many materials")]=True,
     no_plots: Annotated[bool, Option("--no_plots", help="Disable plots")] = False,
 
@@ -587,7 +587,7 @@ def bulk_crystal_benchmark(
     #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
-    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
 
     ):
     
@@ -849,7 +849,7 @@ def full_benchmark_precompute(
     #ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     #return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
     report: Annotated[bool, Option("--report", help="Generate a report")] = True,
-    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
     ):
     
     nodes = [
@@ -980,7 +980,7 @@ def molecular_benchmark(
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
-    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
     ):
     
     # Load all node names from zntrack.json
@@ -1033,21 +1033,8 @@ def get_mol_benchmark_node_dicts(
 
 
 
-def get_further_apps_benchmark_node_dicts(
-    nodes: list[str],
-    glob: bool,
-    models: list[str] | None,
-    all_nodes: list[str],
-    split_str_MD: str = "_config-0_MolecularDynamics",
-) -> dict[str, zntrack.Node]:
-    
-    MD_nodes = [node for node in all_nodes if "MolecularDynamics" in node]
-    
-    MD_node_objects = load_node_objects(nodes, glob, models, MD_nodes, split_str="_config-0_MolecularDynamics")
-    
-    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
-    
-    return MD_dict
+
+
 
 
 
@@ -1057,7 +1044,7 @@ def diatomics_compare(
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
-    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
 ):
     """Compare diatomic molecules using zntrack nodes."""
     # Load all node names from zntrack.json
@@ -1088,7 +1075,7 @@ def md_compare(
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
-    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = "mace_mp_0a_D3",
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
 ):
     
     # Load all node names from zntrack.json
@@ -1111,11 +1098,81 @@ def md_compare(
         normalise_to_model=normalise_to_model,
     )
     
-    
-    
-    
 
 
+    
+def get_further_apps_benchmark_node_dicts(
+    nodes: list[str],
+    glob: bool,
+    models: list[str] | None,
+    all_nodes: list[str],
+    split_str_MD: str = "_config-0_MolecularDynamics",
+) -> dict[str, zntrack.Node]:
+    
+    MD_nodes = [node for node in all_nodes if "MolecularDynamics" in node]
+    
+    MD_node_objects = load_node_objects(nodes, glob, models, MD_nodes, split_str="_config-0_MolecularDynamics")
+    
+    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
+    
+    return MD_dict
+
+
+
+@app.command()
+def md_precompute(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+
+    ):
+    
+    nodes = [
+        "*MolecularDynamics*",
+    ]
+    glob = True
+    
+    """Launch interactive benchmark for phonon dispersion."""
+    import fnmatch
+    import dvc.api
+    import json
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    MD_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_config-0_MolecularDynamics")
+    
+    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
+    
+
+    from mlipx import MolecularDynamics
+    MolecularDynamics.benchmark_precompute(
+        node_dict=MD_dict,
+        normalise_to_model=normalise_to_model,
+    )
+    
+
+@app.command()
+def md_launch_dashboard(
+    cache_dir="app_cache/",
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import MolecularDynamics
+    MolecularDynamics.launch_dashboard(
+        ui=ui,
+    )
+
+    
 
 
 @app.command()
@@ -1146,7 +1203,6 @@ def neb_precompute(
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_neb")
 
     benchmark_node_dict = load_nodes_model_neb_system(node_objects, models, split_str_model = "_neb", split_str_system = "NEB2")
-    print(benchmark_node_dict)
 
     from mlipx import NEB2
     NEB2.benchmark_precompute(
@@ -1192,11 +1248,6 @@ def neb_launch_dashboard(
     )
 
 
-    if ui not in {None, "browser"}:
-        typer.echo("Invalid UI mode. Choose from: none or browser.")
-        raise typer.Exit(1)
-
-    print('\n UI = ', ui)
     
     
     

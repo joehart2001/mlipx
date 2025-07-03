@@ -503,6 +503,9 @@ class PhononAllBatch(zntrack.Node):
             normalise_to_model=normalise_to_model,
             no_plots=no_plots,
         )
+        
+        # create cache directory if it doesn't exist
+        os.makedirs(cache_dir, exist_ok=True)
 
         mae_summary_df.to_pickle(f"{cache_dir}/mae_summary.pkl")
         with open(f"{cache_dir}/scatter_to_dispersion_map.pkl", "wb") as f:

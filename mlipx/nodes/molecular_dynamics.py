@@ -390,8 +390,12 @@ class MolecularDynamics(zntrack.Node):
         # Compute properties for each model
         for model_name, node in tqdm.tqdm(node_dict.items(), desc="Computing properties for models"):
             traj = node.frames
-            traj = traj[::10]
+            #traj = traj[::10]
+            traj = traj[1000:]
+            
+            print(f"Processing model: {model_name} with {len(traj)} frames")
             velocities = node.velocities
+            velocities = velocities[2000:]
             print("loaded trajectory for model:", model_name)
             o_indices = [atom.index for atom in traj[0] if atom.symbol == 'O']
             h_indices = [atom.index for atom in traj[0] if atom.symbol == 'H']
@@ -405,11 +409,11 @@ class MolecularDynamics(zntrack.Node):
                         "msd": msd.tolist(),
                     }
                     print(f"Computed MSD for {model_name} with {len(time)} time points.")
-                    print(properties_dict[prop][model_name])
+                    #print(properties_dict[prop][model_name])
                 elif prop == 'g_r_oo':
                     # O-O RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj,
+                        traj[::1000],
                         i_indices=o_indices,
                         j_indices=o_indices,
                         r_max=6.0,
@@ -423,7 +427,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_oh':
                     # O-H RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj,
+                        traj[::1000],
                         i_indices=o_indices,
                         j_indices=h_indices,
                         r_max=6.0,
@@ -437,7 +441,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_hh':
                     # H-H RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj,
+                        traj[::1000],
                         i_indices=h_indices,
                         j_indices=h_indices,
                         r_max=6.0,
@@ -451,17 +455,18 @@ class MolecularDynamics(zntrack.Node):
 
                 elif prop == 'vacf':
                     # Velocity autocorrelation function
-                    vaf = MolecularDynamics.compute_vacf(traj, velocities, timestep=1)
+                    vaf = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, atoms_filter=(('O',),))
+                    print(vaf)
                     properties_dict[prop][model_name] = {
-                        "time": vaf[0].tolist(),
-                        "vaf": vaf[1][0].tolist(),
+                        "time": vaf[0],
+                        "vaf": vaf[1],
                     }
                 elif prop == 'vdos':
                     # Velocity density of states
-                    vdos = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True)
+                    vdos = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True, atoms_filter=(('O',),))
                     properties_dict[prop][model_name] = {
-                        "frequency": vdos[0].tolist(),
-                        "vdos": vdos[1][0].tolist(),
+                        "frequency": vdos[0],
+                        "vdos": vdos[1],
                     }
 
         # Add msd_dict for later use
@@ -541,6 +546,7 @@ class MolecularDynamics(zntrack.Node):
         app = dash.Dash(__name__)
         app.layout = html.Div([
             html.H1("Water MD Benchmark"),
+            html.P("Simulation details: NVT 330K, 64 water molecules, 50,000 steps, 1 fs timestep, initial 10,000 steps discarded."),
             html.H3("O-O RDF MAE Table"),
             dash_table_interactive(
                 df=mae_df_oo,
@@ -638,23 +644,34 @@ class MolecularDynamics(zntrack.Node):
                             return None, None
 
                         fig = go.Figure()
-                        time_or_freq = "time" if selected_property == "vacf" else "frequency"
-                        y_label = "vaf" if selected_property == "vacf" else "vdos"
-
+                        # Use explicit keys and labels for clarity
+                        x_data_key = "time" if selected_property == "vacf" else "frequency"
+                        y_data_key = "vaf" if selected_property == "vacf" else "vdos"
+                        x_label = "Time (ps)" if selected_property == "vacf" else "Frequency (ps^-1)"
+                        y_label = "VACF" if selected_property == "vacf" else "VDOS"
                         for model in model_names:
                             data = properties_dict[selected_property].get(model)
                             if data:
+                                import numpy as np
+                                if selected_property == "vacf":
+                                    x_vals = np.array(data[x_data_key]) / 100  # fs → ps
+                                    y_vals = np.array(data[y_data_key])
+                                else:
+                                    x_vals = np.array(data[x_data_key]) * 1000
+                                    y_vals = np.array(data[y_data_key]) / 1000
                                 fig.add_trace(go.Scatter(
-                                    x=data[time_or_freq],
-                                    y=data[y_label],
+                                    x=x_vals,
+                                    y=y_vals,
                                     mode='lines',
                                     name=model,
                                     opacity=1.0 if model == model_name else 0.2
                                 ))
+                        # Set layout, including xaxis range for VACF
                         fig.update_layout(
                             title=f"{selected_property.upper()} curves",
-                            xaxis_title=time_or_freq,
-                            yaxis_title=y_label
+                            xaxis_title=x_label,
+                            yaxis_title=y_label,
+                            xaxis=dict(range=[0, 1]) if selected_property == "vacf" else dict(range=[0, 150])
                         )
                         return dcc.Graph(figure=fig), active_cell
 
@@ -802,80 +819,7 @@ class MolecularDynamics(zntrack.Node):
         return r, rdf
     
     
-    def compute_vacf(
-        traj, 
-        velocities, 
-        atoms_filter = ((None,),),
-        start_index=0, 
-        timestep=1, 
-        fft=False
-    ):
-        
-        n_steps = len(velocities)
-        n_atoms = len(velocities[0])
-    
-        filtered_atoms = []
-        atom_symbols = traj[0].get_chemical_symbols()
-        symbols = set(atom_symbols)
-        for atoms in atoms_filter:
-            if any(atom is None for atom in atoms):
-                # If atoms_filter not specified use all atoms.
-                filtered_atoms.append(range(n_atoms))
-            elif all(isinstance(a, str) for a in atoms):
-                # If all symbols, get the matching indices.
-                atoms = set(atoms)
-                if atoms.difference(symbols):
-                    raise ValueError(
-                        f"{atoms.difference(symbols)} not allowed in VAF"
-                        f", allowed symbols are {symbols}"
-                    )
-                filtered_atoms.append(
-                    [i for i in range(len(atom_symbols)) if atom_symbols[i] in list(atoms)]
-                )
-            elif all(isinstance(a, int) for a in atoms):
-                filtered_atoms.append(atoms)
-            else:
-                raise ValueError(
-                    "Cannot mix element symbols and indices in vaf atoms_filter"
-                )
 
-        used_atoms = {atom for atoms in filtered_atoms for atom in atoms}
-        used_atoms = {j: i for i, j in enumerate(used_atoms)}
-        
-        
-        vafs = np.sum(
-            np.asarray(
-                [
-                    [
-                        np.correlate(velocities[:, j, i], velocities[:, j, i], "full")[
-                            n_steps - 1 :
-                        ]
-                        for i in range(3)
-                    ]
-                    for j in used_atoms
-                ]
-            ),
-            axis=1,
-        )
-
-        vafs /= n_steps - np.arange(n_steps)
-
-        lags = np.arange(n_steps) * timestep
-
-        if fft:
-            vafs = np.fft.fft(vafs, axis=0)
-            lags = np.fft.fftfreq(n_steps, timestep)
-
-        vafs = (
-            lags,
-            [
-                np.average([vafs[used_atoms[i]] for i in atoms], axis=0)
-                for atoms in filtered_atoms
-            ],
-        )
-        
-        return lags, vafs, used_atoms
-    
     
     @staticmethod
     def benchmark_precompute(
@@ -1008,7 +952,7 @@ class MolecularDynamics(zntrack.Node):
                     yaxis_title="MSD (Å²)"
                 )
             ),
-            html.H3("VACF Curves"),
+            html.H3("Oxygen Velocity Autocorrelation Function (VACF)"),
             dash_table_interactive(
                 df=vacf_df,
                 id="vacf-score-table",
@@ -1018,7 +962,7 @@ class MolecularDynamics(zntrack.Node):
                     dcc.Store(id="vacf-table-last-clicked", data=None),
                 ],
             ),
-            html.H3("VDOS Curves"),
+            html.H3("Oxygen VDOS (FT of VACF)"),
             dash_table_interactive(
                 df=vdos_df,
                 id="vdos-score-table",
@@ -1061,5 +1005,195 @@ class MolecularDynamics(zntrack.Node):
             msd_values[i] = np.mean(squared_displacements)
 
         timestep_fs = timestep
-        time_steps = np.arange(num_frames) * timestep_fs * 1e-3  # fs to ps
+        time_steps = np.arange(num_frames) * timestep_fs / 100
         return time_steps, msd_values
+    
+    
+    
+    
+    
+    
+    # def compute_vacf(
+    #     traj, 
+    #     velocities, 
+    #     atoms_filter = ((None,),),
+    #     start_index=0, 
+    #     timestep=1, 
+    #     fft=False
+    # ):
+        
+    #     n_steps = len(velocities)
+    #     n_atoms = len(velocities[0])
+    
+    #     filtered_atoms = []
+    #     atom_symbols = traj[0].get_chemical_symbols()
+    #     symbols = set(atom_symbols)
+    #     for atoms in atoms_filter:
+    #         if any(atom is None for atom in atoms):
+    #             # If atoms_filter not specified use all atoms.
+    #             filtered_atoms.append(range(n_atoms))
+    #         elif all(isinstance(a, str) for a in atoms):
+    #             # If all symbols, get the matching indices.
+    #             atoms = set(atoms)
+    #             if atoms.difference(symbols):
+    #                 raise ValueError(
+    #                     f"{atoms.difference(symbols)} not allowed in VAF"
+    #                     f", allowed symbols are {symbols}"
+    #                 )
+    #             filtered_atoms.append(
+    #                 [i for i in range(len(atom_symbols)) if atom_symbols[i] in list(atoms)]
+    #             )
+    #         elif all(isinstance(a, int) for a in atoms):
+    #             filtered_atoms.append(atoms)
+    #         else:
+    #             raise ValueError(
+    #                 "Cannot mix element symbols and indices in vaf atoms_filter"
+    #             )
+
+    #     used_atoms = {atom for atoms in filtered_atoms for atom in atoms}
+    #     used_atoms = {j: i for i, j in enumerate(used_atoms)}
+        
+        
+    #     vafs = np.sum(
+    #         np.asarray(
+    #             [
+    #                 [
+    #                     np.correlate(velocities[:, j, i], velocities[:, j, i], "full")[
+    #                         n_steps - 1 :
+    #                     ]
+    #                     for i in range(3)
+    #                 ]
+    #                 for j in used_atoms
+    #             ]
+    #         ),
+    #         axis=1,
+    #     )
+
+    #     vafs /= n_steps - np.arange(n_steps)
+
+    #     lags = np.arange(n_steps) * timestep
+
+    #     if fft:
+    #         vafs = np.fft.fft(vafs, axis=0)
+    #         lags = np.fft.fftfreq(n_steps, timestep)
+
+    #     # vafs = (
+    #     #     lags,
+    #     #     [
+    #     #         np.average([vafs[used_atoms[i]] for i in atoms], axis=0)
+    #     #         for atoms in filtered_atoms
+    #     #     ],
+    #     # )
+    #     vafs = [
+    #             np.average([vafs[used_atoms[i]] for i in atoms], axis=0)
+    #             for atoms in filtered_atoms
+    #         ]
+    #     print(f"Computed VACF for {len(filtered_atoms)} atom groups with {len(lags)} lags.")
+    #     print(f"VACF shape: {vafs[0].shape} for {len(vafs)} groups")
+        
+    #     total_vacf = np.mean(np.stack(vafs), axis=0)
+        
+    #     return lags, total_vacf
+    
+    
+
+    def compute_vacf(
+        traj,
+        velocities,
+        atoms_filter=((None,),),
+        start_index=0,
+        timestep=1,
+        fft=False
+    ):
+        n_steps = len(velocities)
+        n_atoms = len(velocities[0])
+        filtered_atoms = []
+        atom_symbols = traj[0].get_chemical_symbols()
+        symbols = set(atom_symbols)
+        
+        for atoms in atoms_filter:
+            if any(atom is None for atom in atoms):
+                # If atoms_filter not specified use all atoms.
+                filtered_atoms.append(range(n_atoms))
+            elif all(isinstance(a, str) for a in atoms):
+                # If all symbols, get the matching indices.
+                atoms = set(atoms)
+                if atoms.difference(symbols):
+                    raise ValueError(
+                        f"{atoms.difference(symbols)} not allowed in VAF"
+                        f", allowed symbols are {symbols}"
+                    )
+                filtered_atoms.append(
+                    [i for i in range(len(atom_symbols)) if atom_symbols[i] in list(atoms)]
+                )
+            elif all(isinstance(a, int) for a in atoms):
+                filtered_atoms.append(atoms)
+            else:
+                raise ValueError(
+                    "Cannot mix element symbols and indices in vaf atoms_filter"
+                )
+        
+        used_atoms = {atom for atoms in filtered_atoms for atom in atoms}
+        used_atoms = {j: i for i, j in enumerate(used_atoms)}
+        
+        # Corrected VACF calculation
+        vafs = []
+        for j in used_atoms:
+            atom_vacf = np.zeros(n_steps)
+            for i in range(3):  # x, y, z components
+                v = velocities[:, j, i]
+                # Proper autocorrelation calculation
+                autocorr = np.correlate(v, v, mode='full')
+                # Take the second half (positive lags) and normalize
+                autocorr = autocorr[len(autocorr)//2:]
+                atom_vacf += autocorr
+            vafs.append(atom_vacf)
+        
+        vafs = np.array(vafs)
+        
+        # Proper normalization: divide by number of overlapping points
+        normalization = np.arange(n_steps, 0, -1)
+        vafs = vafs / normalization[np.newaxis, :]
+        
+        lags = np.arange(n_steps) * timestep
+        
+        if fft:
+            # Calculate power spectral density for VDOS
+            # Apply window function to reduce spectral leakage
+            window = np.hanning(n_steps)
+            vafs_windowed = vafs * window[np.newaxis, :]
+            
+            # Zero-pad for better frequency resolution (optional)
+            n_fft = 2 * n_steps
+            vafs_fft = np.fft.fft(vafs_windowed, n=n_fft, axis=1)
+            
+            # Power spectral density (VDOS)
+            vafs = np.abs(vafs_fft)**2
+            
+            # Only take positive frequencies (real signal)
+            # For real signals, we only need frequencies from 0 to Nyquist
+            vafs = vafs[:, :n_fft//2 + 1]  # Include DC and Nyquist
+            lags = np.fft.fftfreq(n_fft, timestep)[:n_fft//2 + 1]
+            
+            # Convert to proper units (frequencies in Hz or cm^-1)
+            # If timestep is in femtoseconds, frequencies will be in THz
+            # To convert to cm^-1: freq_cm = freq_THz * 33.356
+        
+        # Average over atom groups
+        vafs_grouped = [
+            np.average([vafs[used_atoms[i]] for i in atoms], axis=0)
+            for atoms in filtered_atoms
+        ]
+        
+        print(f"Computed VACF for {len(filtered_atoms)} atom groups with {len(lags)} lags.")
+        print(f"VACF shape: {vafs_grouped[0].shape} for {len(vafs_grouped)} groups")
+        
+        # Calculate total VACF
+        total_vacf = np.mean(np.stack(vafs_grouped), axis=0)
+        if fft:
+            auc = np.trapezoid(total_vacf, lags)
+            total_vacf = total_vacf / auc  # Normalize to max value
+        else:
+            total_vacf = total_vacf / np.max(total_vacf)  # Normalize to max value
+        
+        return lags, total_vacf
