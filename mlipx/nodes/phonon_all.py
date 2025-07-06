@@ -64,46 +64,24 @@ import ray
 
 # Batched Ray remote function for processing multiple mp_ids at once
 @ray.remote(num_gpus=1)
-def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
-    results = []
-    for mp_id in mp_ids:
+def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, n_jobs):
+    from joblib import Parallel, delayed
+
+    # Make model accessible without pickling
+    global global_model
+    global_model = model
+
+    def handle_mp_id(mp_id):
         try:
-            res = PhononAllBatch._process_mp_id_static(
-                mp_id, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed
+            return PhononAllBatch._process_mp_id_static(
+                mp_id, global_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed
             )
-            results.append(res)
         except Exception as e:
             print(f"Skipping {mp_id} due to error: {e}")
-    return results
+            return None
 
-# def get_remote_function(use_cpu=False):
-#     """Return appropriate remote function based on CPU/GPU preference"""
-#     if use_cpu:
-#         return ray.remote(num_cpus=1)(process_mp_ids_batch_base)
-#     else:
-#         return ray.remote(num_gpus=1)(process_mp_ids_batch_base)
-
-# def process_mp_ids_batch_base(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
-#     """Base processing function that works for both CPU and GPU"""
-#     results = []
-#     for mp_id in mp_ids:
-#         try:
-#             res = PhononAllBatch._process_mp_id_static(
-#                 mp_id, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed
-#             )
-#             results.append(res)
-#         except Exception as e:
-#             print(f"Skipping {mp_id} due to error: {e}")
-#     return results
-
-# # Create separate remote functions for CPU and GPU (simpler approach)
-# @ray.remote(num_cpus=1)
-# def process_mp_ids_batch_ray_cpu(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
-#     return process_mp_ids_batch_base(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed)
-
-# @ray.remote(num_gpus=1)
-# def process_mp_ids_batch_ray_gpu(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
-#     return process_mp_ids_batch_base(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed)
+    results = Parallel(n_jobs=n_jobs)(delayed(handle_mp_id)(mp_id) for mp_id in mp_ids)
+    return [res for res in results if res is not None]
 
 
 
@@ -235,7 +213,7 @@ class PhononAllBatch(zntrack.Node):
         # Split mp_ids into chunks (1 mp_id per job since we have 1 GPU)
         futures = [
             process_mp_ids_batch_ray.remote(
-                [mp_id], calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
+                [mp_id], calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed, self.n_jobs
             )
             for mp_id in self.mp_ids
         ]
