@@ -107,7 +107,8 @@ class PhononAllBatch(zntrack.Node):
     thermal_properties_temperatures: list[float] = zntrack.params(
         default_factory=lambda: [0, 75, 150, 300, 600]
     )
-    
+
+    use_ray: bool = zntrack.params(True)
 
     phonon_band_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_band_paths.json")
     phonon_dos_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_dos_paths.json")
@@ -201,6 +202,7 @@ class PhononAllBatch(zntrack.Node):
 
     def run(self):
         from pathlib import Path
+        from joblib import Parallel, delayed, parallel_backend
         import ray
 
         yaml_dir = Path(self.phonopy_yaml_dir)
@@ -209,37 +211,43 @@ class PhononAllBatch(zntrack.Node):
         q_mesh = self.N_q_mesh
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
+        calc_model = self.model  # Materialize model before parallel loops
 
-        ray.init(ignore_reinit_error=True, num_gpus=1)
+        if self.use_ray:
+            ray.init(ignore_reinit_error=True, num_gpus=1)
+            futures = [
+                process_mp_ids_batch_ray.remote(
+                    [mp_id], calc_model, nwd, yaml_dir, fmax,
+                    q_mesh, q_mesh_thermal, temperatures,
+                    self.check_completed, self.threading, self.n_jobs
+                )
+                for mp_id in self.mp_ids
+            ]
+            results_nested = ray.get(futures)
+            ray.shutdown()
+            results = [res for sublist in results_nested for res in sublist if res is not None]
+        else:
+            def handle(mp_id):
+                return self._process_mp_id_static(
+                    mp_id, calc_model, nwd, yaml_dir, fmax,
+                    q_mesh, q_mesh_thermal, temperatures,
+                    self.check_completed
+                )
 
-        calc_model = self.model  # Materialize to avoid lazy ZnTrack object
+            if self.threading:
+                with parallel_backend("threading", n_jobs=self.n_jobs):
+                    results = Parallel()(delayed(handle)(mp_id) for mp_id in self.mp_ids)
+            else:
+                results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in self.mp_ids)
 
-        # Split mp_ids into chunks (1 mp_id per job since we have 1 GPU)
-        futures = [
-            process_mp_ids_batch_ray.remote(
-                [mp_id], calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed, self.threading, self.n_jobs
-            )
-            for mp_id in self.mp_ids
-        ]
+            results = [res for res in results if res is not None]
 
-        results_nested = ray.get(futures)
-        ray.shutdown()
-
-        results = [res for sublist in results_nested for res in sublist if res is not None]
         print(f"\nFinished with {len(results)} successful results.")
 
-        phonon_band_path_dict = {
-            res["mp_id"]: str(res["phonon_band_path_dict"]) for res in results
-        }
-        phonon_dos_path_dict = {
-            res["mp_id"]: str(res["phonon_dos_dict"]) for res in results
-        }
-        thermal_properties_path_dict = {
-            res["mp_id"]: str(res["thermal_properties_dict"]) for res in results
-        }
-        chemical_formula_dict = {
-            res["mp_id"]: res["formula"] for res in results
-        }
+        phonon_band_path_dict = {res["mp_id"]: str(res["phonon_band_path_dict"]) for res in results}
+        phonon_dos_path_dict = {res["mp_id"]: str(res["phonon_dos_dict"]) for res in results}
+        thermal_properties_path_dict = {res["mp_id"]: str(res["thermal_properties_dict"]) for res in results}
+        chemical_formula_dict = {res["mp_id"]: res["formula"] for res in results}
 
         with open(self.phonon_band_paths, "w") as f:
             json.dump(phonon_band_path_dict, f, indent=4)
