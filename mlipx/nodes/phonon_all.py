@@ -36,7 +36,7 @@ from ase.constraints import FixSymmetry
 from mlipx.phonons_utils import *
 from phonopy import load as load_phonopy
 
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, parallel_backend
 import traceback
 from joblib import parallel_backend
 from mlipx import PhononDispersion
@@ -80,7 +80,9 @@ def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_
             print(f"Skipping {mp_id} due to error: {e}")
             return None
 
-    results = Parallel(n_jobs=n_jobs)(delayed(handle_mp_id)(mp_id) for mp_id in mp_ids)
+    #results = Parallel(n_jobs=n_jobs)(delayed(handle_mp_id)(mp_id) for mp_id in mp_ids)
+    with parallel_backend("threading", n_jobs=n_jobs):
+        results = Parallel()(delayed(handle_mp_id)(mp_id) for mp_id in mp_ids)
     return [res for res in results if res is not None]
 
 
