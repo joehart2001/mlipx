@@ -359,7 +359,17 @@ class MolecularDynamics(zntrack.Node):
             pbe_D3_330K_oh = json.load(f)
         with open(ref_data_path / "exp-300k-g-r_oo.json", "r") as f:
             exp_300K = json.load(f)
-
+        # Load VACF reference data (just vacf key)
+        with open(ref_data_path / "vcaf_300K_NPT_SPE_water_clean.json", "r") as f:
+            vacf_ref_data = json.load(f)
+            
+        # Insert VACF reference into properties_dict["vacf"] following RDF pattern
+        properties_dict["vacf"] = {
+            "SPC/E_300K": {
+                "time": np.array(vacf_ref_data["x"]) / 10,
+                "vaf": vacf_ref_data["y"]
+            }
+        }
 
         properties_dict['g_r_oo'] = {
             'pbe_D3_330K_oo': {
@@ -395,7 +405,7 @@ class MolecularDynamics(zntrack.Node):
             
             print(f"Processing model: {model_name} with {len(traj)} frames")
             velocities = node.velocities
-            velocities = velocities[2000:]
+            velocities = velocities[1000:]
             print("loaded trajectory for model:", model_name)
             o_indices = [atom.index for atom in traj[0] if atom.symbol == 'O']
             h_indices = [atom.index for atom in traj[0] if atom.symbol == 'H']
@@ -413,7 +423,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_oo':
                     # O-O RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj[::1000],
+                        traj,
                         i_indices=o_indices,
                         j_indices=o_indices,
                         r_max=6.0,
@@ -427,7 +437,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_oh':
                     # O-H RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj[::1000],
+                        traj,
                         i_indices=o_indices,
                         j_indices=h_indices,
                         r_max=6.0,
@@ -441,7 +451,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_hh':
                     # H-H RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj[::1000],
+                        traj,
                         i_indices=h_indices,
                         j_indices=h_indices,
                         r_max=6.0,
@@ -477,13 +487,19 @@ class MolecularDynamics(zntrack.Node):
 
         # --- Helper to compute MAE DataFrame for a property ---
         def compute_mae_table(prop, properties_dict, model_names, normalise_to_model=None):
-            # Reference keys are those in properties_dict[prop] but not in model_names and must contain 'rdf'
-            reference_keys = [
-                k for k in properties_dict[prop].keys()
-                if k not in model_names and 'rdf' in properties_dict[prop][k]
-            ]
+            # Build reference_keys and valid_model_names as per new logic
+            reference_keys = []
+            valid_model_names = []
+
+            for k in properties_dict[prop].keys():
+                data = properties_dict[prop][k]
+                if k in model_names:
+                    valid_model_names.append(k)
+                elif 'rdf' in data or 'vaf' in data:
+                    reference_keys.append(k)
+
             mae_data = []
-            for model_name in model_names:
+            for model_name in valid_model_names:
                 row = {"Model": model_name}
                 # For each reference, compute MAE if both model and reference data are available
                 for ref_key in reference_keys:
@@ -496,17 +512,28 @@ class MolecularDynamics(zntrack.Node):
                         ref_key in properties_dict[prop]
                         and model_rdf_data is not None
                     ):
-                        # Interpolate both to common r grid (use reference's r grid)
-                        r_common = properties_dict[prop][ref_key]['r']
-                        rdf_ref = np.interp(r_common, properties_dict[prop][ref_key]['r'], properties_dict[prop][ref_key]['rdf'])
-                        rdf_model = np.interp(r_common, model_rdf_data['r'], model_rdf_data['rdf'])
-                        mae = np.mean(np.abs(rdf_model - rdf_ref))
-                        row[ref_key] = round(mae, 4)
+                        # Interpolate both to common grid depending on property
+                        if 'rdf' in properties_dict[prop][ref_key] and 'rdf' in model_rdf_data:
+                            # RDF case
+                            r_common = properties_dict[prop][ref_key]['r']
+                            rdf_ref = np.interp(r_common, properties_dict[prop][ref_key]['r'], properties_dict[prop][ref_key]['rdf'])
+                            rdf_model = np.interp(r_common, model_rdf_data['r'], model_rdf_data['rdf'])
+                            mae = np.mean(np.abs(rdf_model - rdf_ref))
+                            row[ref_key] = round(mae, 4)
+                        elif 'vaf' in properties_dict[prop][ref_key] and 'vaf' in model_rdf_data:
+                            # VACF case
+                            model_x = np.array(model_rdf_data['time']) / 100
+                            model_y = np.array(model_rdf_data['vaf'])
+                            ref_x = np.array(properties_dict[prop][ref_key]['time']) / 100
+                            ref_y = np.array(properties_dict[prop][ref_key]['vaf'])
+                            ref_interp = np.interp(model_x, ref_x, ref_y)
+                            mae = np.mean(np.abs(model_y - ref_interp))
+                            row[ref_key] = round(mae, 4)
                 mae_data.append(row)
             # Construct the dataframe with 'Model' as the first column and one column per reference
             columns = ['Model'] + reference_keys
             mae_df = pd.DataFrame(mae_data, columns=columns)
-            # Score and rank logic using PBE reference if present
+            # Score and rank logic using reference if present
             ref_col = None
             if prop == "g_r_oo":
                 ref_col = "pbe_D3_330K_oo"
@@ -516,18 +543,20 @@ class MolecularDynamics(zntrack.Node):
                 ref_col = "pbe_D3_330K_hh"
             elif prop == "msd_O":
                 ref_col = None
+            elif prop == "vacf":
+                ref_col = "SPC/E_300K"
+            elif prop == "vdos":
+                ref_col = None
+            # Adjust score_col/rank_col for VACF
             if ref_col is not None and ref_col in mae_df.columns:
+                score_col = "Score ↓ (PBE)" if prop.startswith("g_r_") else "Score ↓ (SPC/E)"
+                rank_col = "Rank (PBE)" if prop.startswith("g_r_") else "Rank (SPC/E)"
                 if normalise_to_model is not None and normalise_to_model in mae_df["Model"].values:
                     base_mae = mae_df.loc[mae_df["Model"] == normalise_to_model, ref_col].values[0]
                 else:
                     base_mae = mae_df[ref_col].min()
-                mae_df[f"Score ↓ (PBE)"] = mae_df[ref_col] / base_mae
-                rank_col = f"Rank (PBE)"
-                score_col = f"Score ↓ (PBE)"
-                valid_scores = mae_df[score_col].notna()
-                mae_df.loc[valid_scores, rank_col] = (
-                    mae_df.loc[valid_scores, score_col].rank(method="min").astype(int)
-                )
+                mae_df[score_col] = mae_df[ref_col] / base_mae
+                mae_df[rank_col] = mae_df[score_col].rank(method="min").astype(int)
             return mae_df.round(3)
 
         model_names = list(node_dict.keys())
@@ -535,12 +564,10 @@ class MolecularDynamics(zntrack.Node):
         mae_df_oo = compute_mae_table('g_r_oo', properties_dict, model_names, normalise_to_model)
         mae_df_oh = compute_mae_table('g_r_oh', properties_dict, model_names, normalise_to_model)
         mae_df_hh = compute_mae_table('g_r_hh', properties_dict, model_names, normalise_to_model)
-        
-        vacf_mae_df = pd.DataFrame([{"Model": model_name} for model_name in model_names])
-        vdos_mae_df = pd.DataFrame([{"Model": model_name} for model_name in model_names])
+        vacf_mae_df = compute_mae_table('vacf', properties_dict, model_names, normalise_to_model)
 
         if ui is None and run_interactive:
-            return mae_df_oo, mae_df_oh, mae_df_hh
+            return mae_df_oo, mae_df_oh, mae_df_hh, vacf_mae_df
 
         # --- Dash Layout ---
         app = dash.Dash(__name__)
@@ -587,16 +614,16 @@ class MolecularDynamics(zntrack.Node):
                     dcc.Store(id="vacf-table-last-clicked", data=None),
                 ],
             ),
-            html.H3("VDOS Curves"),
-            dash_table_interactive(
-                df=vdos_mae_df,
-                id="vdos-score-table",
-                title=None,
-                extra_components=[
-                    html.Div(id="vdos-table-details"),
-                    dcc.Store(id="vdos-table-last-clicked", data=None),
-                ],
-            ),
+            # html.H3("VDOS Curves"),
+            # dash_table_interactive(
+            #     df=vdos_mae_df,
+            #     id="vdos-score-table",
+            #     title=None,
+            #     extra_components=[
+            #         html.Div(id="vdos-table-details"),
+            #         dcc.Store(id="vdos-table-last-clicked", data=None),
+            #     ],
+            # ),
         ],
         style={"backgroundColor": "white"})
 
@@ -607,14 +634,14 @@ class MolecularDynamics(zntrack.Node):
                 ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
                 ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
                 ("vacf-score-table", "vacf-table-details", "vacf-table-last-clicked", "vacf"),
-                ("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
+                #("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
             ],
-            mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh, vacf_mae_df, vdos_mae_df],
+            mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh, vacf_mae_df], #, vdos_mae_df],
             properties_dict=properties_dict
         )
 
         if not run_interactive:
-            return app, (mae_df_oo, mae_df_oh, mae_df_hh), properties_dict
+            return app, (mae_df_oo, mae_df_oh, mae_df_hh, vacf_mae_df), properties_dict
         return run_app(app, ui=ui)
 
 
@@ -630,6 +657,8 @@ class MolecularDynamics(zntrack.Node):
         for config in zip(table_configs, mae_df_list):
             table_id, details_id, last_clicked_id, selected_property = config[0]
             mae_df = config[1]
+            print(f"Registering callbacks for {table_id} with property {selected_property}")
+            print(mae_df)
             model_names = list(mae_df["Model"].values)
 
             def make_callback(selected_property=selected_property, mae_df=mae_df, model_names=model_names):
@@ -666,6 +695,18 @@ class MolecularDynamics(zntrack.Node):
                                     name=model,
                                     opacity=1.0 if model == model_name else 0.2
                                 ))
+                        # Add reference VACF trace if plotting VACF
+                        if selected_property == "vacf":
+                            ref_x = np.array(properties_dict["vacf"]["SPC/E_300K"]["time"]) / 100
+                            ref_y = np.array(properties_dict["vacf"]["SPC/E_300K"]["vaf"])
+                            fig.add_trace(go.Scatter(
+                                x=ref_x,
+                                y=ref_y,
+                                mode='lines',
+                                name="Reference",
+                                line=dict(dash='dash', color='black'),
+                                opacity=1.0
+                            ))
                         # Set layout, including xaxis range for VACF
                         fig.update_layout(
                             title=f"{selected_property.upper()} curves",
@@ -831,7 +872,7 @@ class MolecularDynamics(zntrack.Node):
     ):
         import os
         os.makedirs(cache_dir, exist_ok=True)
-        app, (mae_df_oo, mae_df_oh, mae_df_hh), properties_dict = MolecularDynamics.mae_plot_interactive(
+        app, (mae_df_oo, mae_df_oh, mae_df_hh, mae_df_vacf), properties_dict = MolecularDynamics.mae_plot_interactive(
             node_dict=node_dict,
             run_interactive=run_interactive,
             ui=ui,
@@ -840,15 +881,13 @@ class MolecularDynamics(zntrack.Node):
         mae_df_oo.to_pickle(f"{cache_dir}/mae_df_oo.pkl")
         mae_df_oh.to_pickle(f"{cache_dir}/mae_df_oh.pkl")
         mae_df_hh.to_pickle(f"{cache_dir}/mae_df_hh.pkl")
+        mae_df_vacf.to_pickle(f"{cache_dir}/vacf_df.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
             pickle.dump(properties_dict, f)
         msd_dict = properties_dict["msd_O"]
         with open(f"{cache_dir}/msd_data.pkl", "wb") as f:
             pickle.dump(msd_dict, f)
-        vacf_dict = properties_dict["vacf"]
         vdos_dict = properties_dict["vdos"]
-        with open(f"{cache_dir}/vacf_data.pkl", "wb") as f:
-            pickle.dump(vacf_dict, f)
         with open(f"{cache_dir}/vdos_data.pkl", "wb") as f:
             pickle.dump(vdos_dict, f)
         return app
@@ -864,34 +903,31 @@ class MolecularDynamics(zntrack.Node):
         mae_df_oo = pd.read_pickle(f"{cache_dir}/mae_df_oo.pkl")
         mae_df_oh = pd.read_pickle(f"{cache_dir}/mae_df_oh.pkl")
         mae_df_hh = pd.read_pickle(f"{cache_dir}/mae_df_hh.pkl")
+        mae_df_vacf = pd.read_pickle(f"{cache_dir}/vacf_df.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
             properties_dict = pickle.load(f)
         with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
-        with open(f"{cache_dir}/vacf_data.pkl", "rb") as f:
-            vacf_dict = pickle.load(f)
         with open(f"{cache_dir}/vdos_data.pkl", "rb") as f:
             vdos_dict = pickle.load(f)
         # Add to properties_dict
         properties_dict["msd_O"] = msd_dict
-        properties_dict["vacf"] = vacf_dict
         properties_dict["vdos"] = vdos_dict
 
         # Dummy MAE DataFrames for VACF/VDOS
-        vacf_df = pd.DataFrame([{"Model": k} for k in vacf_dict.keys()])
         vdos_df = pd.DataFrame([{"Model": k} for k in vdos_dict.keys()])
 
         app = dash.Dash(__name__)
-        app.layout = MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, vacf_df, vdos_df)
+        app.layout = MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, mae_df_vacf, vdos_df)
 
         table_configs = [
             ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
             ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
             ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
             ("vacf-score-table", "vacf-table-details", "vacf-table-last-clicked", "vacf"),
-            ("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
+            #("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
         ]
-        mae_df_list = [mae_df_oo, mae_df_oh, mae_df_hh, vacf_df, vdos_df]
+        mae_df_list = [mae_df_oo, mae_df_oh, mae_df_hh, mae_df_vacf]
         MolecularDynamics.register_callbacks(
             app, table_configs, mae_df_list=mae_df_list, properties_dict=properties_dict
         )
@@ -936,22 +972,22 @@ class MolecularDynamics(zntrack.Node):
                     dcc.Store(id="rdf-table-last-clicked-hh", data=None),
                 ],
             ),
-            html.H3("Mean Squared Displacement (MSD) for Oxygen"),
-            dcc.Graph(
-                figure=go.Figure([
-                    go.Scatter(
-                        x=msd_dict[model]["time"],
-                        y=msd_dict[model]["msd"],
-                        mode="lines",
-                        name=model
-                    )
-                    for model in msd_dict
-                ]).update_layout(
-                    title="MSD vs Time",
-                    xaxis_title="Time (ps)",
-                    yaxis_title="MSD (Å²)"
-                )
-            ),
+            # html.H3("Mean Squared Displacement (MSD) for Oxygen"),
+            # dcc.Graph(
+            #     figure=go.Figure([
+            #         go.Scatter(
+            #             x=msd_dict[model]["time"],
+            #             y=msd_dict[model]["msd"],
+            #             mode="lines",
+            #             name=model
+            #         )
+            #         for model in msd_dict
+            #     ]).update_layout(
+            #         title="MSD vs Time",
+            #         xaxis_title="Time (ps)",
+            #         yaxis_title="MSD (Å²)"
+            #     )
+            # ),
             html.H3("Oxygen Velocity Autocorrelation Function (VACF)"),
             dash_table_interactive(
                 df=vacf_df,
@@ -962,16 +998,16 @@ class MolecularDynamics(zntrack.Node):
                     dcc.Store(id="vacf-table-last-clicked", data=None),
                 ],
             ),
-            html.H3("Oxygen VDOS (FT of VACF)"),
-            dash_table_interactive(
-                df=vdos_df,
-                id="vdos-score-table",
-                title=None,
-                extra_components=[
-                    html.Div(id="vdos-table-details"),
-                    dcc.Store(id="vdos-table-last-clicked", data=None),
-                ],
-            ),
+        #     html.H3("Oxygen VDOS (FT of VACF)"),
+        #     dash_table_interactive(
+        #         df=vdos_df,
+        #         id="vdos-score-table",
+        #         title=None,
+        #         extra_components=[
+        #             html.Div(id="vdos-table-details"),
+        #             dcc.Store(id="vdos-table-last-clicked", data=None),
+        #         ],
+        #     ),
         ], style={"backgroundColor": "white"})
         
         
@@ -1186,7 +1222,7 @@ class MolecularDynamics(zntrack.Node):
         ]
         
         print(f"Computed VACF for {len(filtered_atoms)} atom groups with {len(lags)} lags.")
-        print(f"VACF shape: {vafs_grouped[0].shape} for {len(vafs_grouped)} groups")
+        #print(f"VACF shape: {vafs_grouped[0].shape} for {len(vafs_grouped)} groups")
         
         # Calculate total VACF
         total_vacf = np.mean(np.stack(vafs_grouped), axis=0)

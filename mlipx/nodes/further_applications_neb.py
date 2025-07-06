@@ -221,9 +221,11 @@ class NEBFutherApplications(zntrack.Node):
 
         if score_table is not None:
             score_cols = [col for col in score_table.columns if col.endswith("Score \u2193")]
+
+            if normalise_to_model:
+                normalised_scores = score_table[score_cols].loc[score_table["Model"] == normalise_to_model].values.flatten()
+                score_table[score_cols] = score_table[score_cols].div(normalised_scores, axis=1)
+
             score_table["Avg MAE \u2193"] = score_table[score_cols].mean(axis=1)
 
-        print("NEB Score Table:")
-        print(score_table)
-        
         return score_table

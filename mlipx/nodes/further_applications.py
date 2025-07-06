@@ -64,98 +64,98 @@ class FutherApplications(zntrack.Node):
     
     
 
-    @staticmethod
-    def benchmark_interactive(
-        MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
-        ui: str = "browser",
-        full_benchmark: bool = False,
-        normalise_to_model: t.Optional[str] = None,
-    ):
+    # @staticmethod
+    # def benchmark_interactive(
+    #     MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
+    #     ui: str = "browser",
+    #     full_benchmark: bool = False,
+    #     normalise_to_model: t.Optional[str] = None,
+    # ):
         
         
-        """ Interactive dashboard + saving plots and data for all molecular benchmarks
-        """
+    #     """ Interactive dashboard + saving plots and data for all molecular benchmarks
+    #     """
 
-        from mlipx.dash_utils import process_data
+    #     from mlipx.dash_utils import process_data
         
-        # MD water
-        MD_dict = process_data(
-            MD_data,
-            key_extractor=lambda node: node.name.split("_config-0_MolecularDynamics")[0],
-            value_extractor=lambda node: node
-        )
+    #     # MD water
+    #     MD_dict = process_data(
+    #         MD_data,
+    #         key_extractor=lambda node: node.name.split("_config-0_MolecularDynamics")[0],
+    #         value_extractor=lambda node: node
+    #     )
     
-        app_MD, (mae_df_oo_MD, mae_df_oh_MD, mae_df_hh_MD), properties_dict_MD = mlipx.MolecularDynamics.mae_plot_interactive(
-            node_dict=MD_dict,
-            run_interactive=False,
-            normalise_to_model=normalise_to_model,
-        )
+    #     app_MD, (mae_df_oo_MD, mae_df_oh_MD, mae_df_hh_MD), properties_dict_MD = mlipx.MolecularDynamics.mae_plot_interactive(
+    #         node_dict=MD_dict,
+    #         run_interactive=False,
+    #         normalise_to_model=normalise_to_model,
+    #     )
 
-        benchmark_score_df = FutherApplications.benchmark_score((mae_df_oo_MD, mae_df_oh_MD, mae_df_hh_MD)).round(3)
-        benchmark_score_df = benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True)
-        benchmark_score_df = benchmark_score_df.reset_index(drop=True)
-        benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
+    #     benchmark_score_df = FutherApplications.benchmark_score((mae_df_oo_MD, mae_df_oh_MD, mae_df_hh_MD, )).round(3)
+    #     benchmark_score_df = benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True)
+    #     benchmark_score_df = benchmark_score_df.reset_index(drop=True)
+    #     benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
         
-        os.makedirs("benchmark_stats/further_applications", exist_ok=True)
-        benchmark_score_df.to_csv("benchmark_stats/further_applications/benchmark_score.csv", index=False)
+    #     os.makedirs("benchmark_stats/further_applications", exist_ok=True)
+    #     benchmark_score_df.to_csv("benchmark_stats/further_applications/benchmark_score.csv", index=False)
 
 
-        from mlipx.dash_utils import colour_table
-        # Viridis-style colormap for Dash DataTable
-        style_data_conditional = colour_table(benchmark_score_df, all_cols=True)
+    #     from mlipx.dash_utils import colour_table
+    #     # Viridis-style colormap for Dash DataTable
+    #     style_data_conditional = colour_table(benchmark_score_df, all_cols=True)
         
         
-        # md_path_list = [elas_md_path, lattice_const_md_path, phonon_md_path]
+    #     # md_path_list = [elas_md_path, lattice_const_md_path, phonon_md_path]
     
-        # BulkCrystalBenchmark.generate_report(
-        #     bulk_crystal_benchmark_score_df=bulk_crystal_benchmark_score_df,
-        #     md_report_paths=md_path_list,
-        #     markdown_path="benchmark_stats/bulk_crystal_benchmark_report.md",
-        #     combined_mae_table=combined_mae_table,
-        # )
+    #     # BulkCrystalBenchmark.generate_report(
+    #     #     bulk_crystal_benchmark_score_df=bulk_crystal_benchmark_score_df,
+    #     #     md_report_paths=md_path_list,
+    #     #     markdown_path="benchmark_stats/bulk_crystal_benchmark_report.md",
+    #     #     combined_mae_table=combined_mae_table,
+    #     # )
         
     
         
-        if ui is None and not full_benchmark:
-            return
+    #     if ui is None and not full_benchmark:
+    #         return
         
-        app = dash.Dash(__name__, suppress_callback_exceptions=True)
+    #     app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
-        from mlipx.dash_utils import combine_apps
-        apps_list = [app_MD]
-        benchmark_table_info = f"Scores normalised to: {normalise_to_model}" if normalise_to_model else ""
-        layout = combine_apps(
-            benchmark_score_df=benchmark_score_df,
-            benchmark_title="Further Applications",
-            apps_list=apps_list,
-            benchmark_table_info=benchmark_table_info,
-            #style_data_conditional=style_data_conditional,
-        )
-        app.layout = layout
+    #     from mlipx.dash_utils import combine_apps
+    #     apps_list = [app_MD]
+    #     benchmark_table_info = f"Scores normalised to: {normalise_to_model}" if normalise_to_model else ""
+    #     layout = combine_apps(
+    #         benchmark_score_df=benchmark_score_df,
+    #         benchmark_title="Further Applications",
+    #         apps_list=apps_list,
+    #         benchmark_table_info=benchmark_table_info,
+    #         #style_data_conditional=style_data_conditional,
+    #     )
+    #     app.layout = layout
         
-        # app_list[0] is the main app now
-        mlipx.MolecularDynamics.register_callbacks(
-            app, [
-                ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
-                ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
-                ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
-            ], mae_df_list=[mae_df_oo_MD, mae_df_oh_MD, mae_df_hh_MD], properties_dict=properties_dict_MD
-        )
+    #     # app_list[0] is the main app now
+    #     mlipx.MolecularDynamics.register_callbacks(
+    #         app, [
+    #             ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
+    #             ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
+    #             ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
+    #         ], mae_df_list=[mae_df_oo_MD, mae_df_oh_MD, mae_df_hh_MD], properties_dict=properties_dict_MD
+    #     )
         
-        from mlipx.dash_utils import run_app
+    #     from mlipx.dash_utils import run_app
 
-        if full_benchmark:
-            return app, benchmark_score_df, lambda app: (
-                mlipx.MolecularDynamics.register_callbacks(
-                    app, [
-                        ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
-                        ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
-                        ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
-                    ], mae_df_list=[mae_df_oo_MD, mae_df_oh_MD, mae_df_hh_MD], properties_dict=properties_dict_MD
-                ),
-            )
+    #     if full_benchmark:
+    #         return app, benchmark_score_df, lambda app: (
+    #             mlipx.MolecularDynamics.register_callbacks(
+    #                 app, [
+    #                     ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
+    #                     ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
+    #                     ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
+    #                 ], mae_df_list=[mae_df_oo_MD, mae_df_oh_MD, mae_df_hh_MD], properties_dict=properties_dict_MD
+    #             ),
+    #         )
         
-        return run_app(app, ui=ui)      
+    #     return run_app(app, ui=ui)      
     
     
     
@@ -166,31 +166,65 @@ class FutherApplications(zntrack.Node):
 
     def benchmark_score(
         mae_df_MD,
+        normalise_to_model: Optional[str] = None,
+        weights: Dict[str, float] = None,
     ):
         """Average MAE over all RDF properties."""
-
+        
+        if weights is None:
+            weights = {
+                'g_r_oo': 1.0,
+                'g_r_oh': 1.0,
+                'g_r_hh': 1.0,
+                'vacf': 1.0,
+            }
+        
         # Unpack the tuple of MAE DataFrames
-        mae_df_oo, mae_df_oh, mae_df_hh = mae_df_MD
+        mae_df_oo, mae_df_oh, mae_df_hh, mae_df_vacf = mae_df_MD
 
         # Ensure all DataFrames have the same set of models
         models = mae_df_oo['Model'].tolist()
 
         # Initialize dictionary to collect MAEs per model
-        scores = {model: [] for model in models}
+        scores = {}
 
         # Loop through each model and collect PBE scores from each MAE DataFrame
         for model in models:
-            for df in [mae_df_oo, mae_df_oh, mae_df_hh]:
-                value = df.loc[df['Model'] == model, 'Score ↓ (PBE)'].values
-                if len(value) > 0:
-                    scores[model].append(value[0])
+            for df in [mae_df_oo, mae_df_oh, mae_df_hh, mae_df_vacf]:
+                g_r_oo_score = mae_df_oo.loc[mae_df_oo['Model'] == model, 'Score ↓ (PBE)'].values[0]
+                g_r_oh_score = mae_df_oh.loc[mae_df_oh['Model'] == model, 'Score ↓ (PBE)'].values[0]
+                g_r_hh_score = mae_df_hh.loc[mae_df_hh['Model'] == model, 'Score ↓ (PBE)'].values[0]
+                vacf_score = mae_df_vacf.loc[mae_df_vacf['Model'] == model, 'Score ↓ (SPC/E)'].values[0]
+                # try:
+                #     value = df.loc[df['Model'] == model, 'Score ↓ (PBE)'].values
+                # except KeyError:
+                #     value = df.loc[df['Model'] == model, 'Score ↓ (SPC/E)'].values
+                # if len(value) > 0:
+                #     scores[model].append(value[0])
+                
+                weighted_avg = (
+                    weights['g_r_oo'] * g_r_oo_score +
+                    weights['g_r_oh'] * g_r_oh_score +
+                    weights['g_r_hh'] * g_r_hh_score +
+                    weights['vacf'] * vacf_score
+                ) / sum(weights.values())
+                
+                
+                scores[model] = {
+                    'g_r_oo Score \u2193': g_r_oo_score,
+                    'g_r_oh Score \u2193': g_r_oh_score,
+                    'g_r_hh Score \u2193': g_r_hh_score,
+                    'VACF Score \u2193': vacf_score,
+                    "Avg MAE \u2193": weighted_avg,
+                }
 
-        # Compute average
-        avg_scores = {model: np.mean(vals) for model, vals in scores.items()}
+        df = pd.DataFrame.from_dict(scores, orient='index').reset_index().rename(columns={'index': 'Model'})
 
-        return pd.DataFrame.from_dict(avg_scores, orient='index', columns=['Avg MAE \u2193']).reset_index().rename(columns={'index': 'Model'})
+        if normalise_to_model:
+            norm_val = df.loc[df["Model"] == normalise_to_model, "Avg MAE \u2193"].values[0]
+            df["Avg MAE \u2193"] = df["Avg MAE \u2193"] / norm_val
 
-
+        return df
 
 
 
@@ -228,12 +262,13 @@ class FutherApplications(zntrack.Node):
         mae_df_oo = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oo.pkl")
         mae_df_oh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oh.pkl")
         mae_df_hh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_hh.pkl")
+        mae_df_vacf = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/vacf_df.pkl")
         with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
             properties_dict = pickle.load(f)
         with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
 
-        benchmark_score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh)).round(3)
+        benchmark_score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh, mae_df_vacf), normalise_to_model=normalise_to_model).round(3)
         benchmark_score_df = benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True).reset_index(drop=True)
         benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
 
@@ -260,28 +295,25 @@ class FutherApplications(zntrack.Node):
         import dash
 
         benchmark_score_df = pd.read_csv(f"{cache_dir}/molecular_dynamics_cache/benchmark_score.csv")
-        mae_df_oo = pd.read_pickle(f"{cache_dir}/mae_df_oo.pkl")
-        mae_df_oh = pd.read_pickle(f"{cache_dir}/mae_df_oh.pkl")
-        mae_df_hh = pd.read_pickle(f"{cache_dir}/mae_df_hh.pkl")
-        with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
+        mae_df_oo = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oo.pkl")
+        mae_df_oh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_oh.pkl")
+        mae_df_hh = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_hh.pkl")
+        mae_df_vacf = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/vacf_df.pkl")
+        with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
             properties_dict = pickle.load(f)
-        with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
+        with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
-        with open(f"{cache_dir}/vacf_data.pkl", "rb") as f:
-            vacf_dict = pickle.load(f)
-        with open(f"{cache_dir}/vdos_data.pkl", "rb") as f:
+        with open(f"{cache_dir}/molecular_dynamics_cache/vdos_data.pkl", "rb") as f:
             vdos_dict = pickle.load(f)
         # Add to properties_dict
         properties_dict["msd_O"] = msd_dict
-        properties_dict["vacf"] = vacf_dict
         properties_dict["vdos"] = vdos_dict
         # dummy dfs
-        vacf_df = pd.DataFrame([{"Model": k} for k in vacf_dict.keys()])
         vdos_df = pd.DataFrame([{"Model": k} for k in vdos_dict.keys()])
 
         callback_fn = FutherApplications.callback_fn_from_cache(
             cache_dir=cache_dir,
-            mae_df_list = [mae_df_oo, mae_df_oh, mae_df_hh, vacf_df, vdos_df],
+            mae_df_list = [mae_df_oo, mae_df_oh, mae_df_hh, mae_df_vacf],
             properties_dict=properties_dict,
         )
 
@@ -292,7 +324,7 @@ class FutherApplications(zntrack.Node):
             mae_df_oh=mae_df_oh,
             mae_df_hh=mae_df_hh,
             msd_dict=msd_dict,
-            vacf_df=vacf_df,
+            vacf_df=mae_df_vacf,
             vdos_df=vdos_df,
             properties_dict=properties_dict,
             normalise_to_model=normalise_to_model,
@@ -326,7 +358,7 @@ class FutherApplications(zntrack.Node):
                     ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
                     ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
                     ("vacf-score-table", "vacf-table-details", "vacf-table-last-clicked", "vacf"),
-                    ("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
+                    #("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
                 ], mae_df_list=mae_df_list, properties_dict=properties_dict
             )
             
@@ -336,7 +368,7 @@ class FutherApplications(zntrack.Node):
     @staticmethod
     def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, properties_dict, msd_dict, vacf_df, vdos_df, normalise_to_model=None):
         
-        score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh)).round(3)
+        score_df = FutherApplications.benchmark_score((mae_df_oo, mae_df_oh, mae_df_hh, vacf_df), normalise_to_model=normalise_to_model).round(3)
         score_df["Rank"] = score_df["Avg MAE \u2193"].rank(ascending=True).astype(int)
         score_df = score_df.sort_values(by="Avg MAE \u2193", ascending=True).reset_index(drop=True)
 
@@ -348,6 +380,7 @@ class FutherApplications(zntrack.Node):
                 MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, vacf_df, vdos_df)
             ],
             id="rdf-benchmark-score-table",
+            static_coloured_table=True,
         )
 
         return layout

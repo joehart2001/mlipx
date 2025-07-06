@@ -1156,6 +1156,7 @@ def md_precompute(
     )
     
 
+
 @app.command()
 def md_launch_dashboard(
     cache_dir="app_cache/",
@@ -1172,7 +1173,45 @@ def md_launch_dashboard(
         ui=ui,
     )
 
+
+@app.command()
+def further_apps_precompute(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+
+    ):
     
+    nodes = [
+        "*MolecularDynamics*",
+    ]
+    glob = True
+    
+    """Launch interactive benchmark for phonon dispersion."""
+    import fnmatch
+    import dvc.api
+    import json
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    MD_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_config-0_MolecularDynamics")
+    
+    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
+    
+
+    from mlipx import FutherApplications
+    FutherApplications.benchmark_precompute(
+        MD_data=MD_dict,
+        normalise_to_model=normalise_to_model,
+    )
+    
+
+
 
 
 @app.command()
@@ -1248,7 +1287,42 @@ def neb_launch_dashboard(
     )
 
 
+
+@app.command()
+def neb_further_apps_precompute(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+
+    ):
     
+    nodes = [
+        "*NEB2*",
+    ]
+    glob = True
+    
+    """Launch interactive benchmark for phonon dispersion."""
+    import fnmatch
+    import dvc.api
+    import json
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_neb")
+
+    benchmark_node_dict = load_nodes_model_neb_system(node_objects, models, split_str_model = "_neb", split_str_system = "NEB2")
+
+    from mlipx import NEBFutherApplications
+    NEBFutherApplications.benchmark_precompute(
+        neb_data=benchmark_node_dict,
+        normalise_to_model=normalise_to_model,
+    )
+
     
     
     

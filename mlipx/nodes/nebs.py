@@ -581,7 +581,7 @@ class NEB2(zntrack.Node):
         # --- Add: all_group_data dict ---
         all_group_data = {}
         
-        print(grouped_nodes)
+        #print(grouped_nodes)
 
         for group_name, models in grouped_nodes.items():
 
@@ -633,6 +633,13 @@ class NEB2(zntrack.Node):
                 mae_df[f"{group_name} Score \u2193"] = mae_df[error_cols].mean(axis=1)
                 print(f"Group {group_name} Score: {mae_df[f'{group_name} Score \u2193'].mean():.3f}")
 
+                # Normalize group score if a reference model is provided
+                if normalise_to_model and f"{group_name} Score \u2193" in mae_df.columns:
+                    ref_val = mae_df.loc[mae_df["Model"] == normalise_to_model, f"{group_name} Score \u2193"]
+                    if not ref_val.empty and ref_val.iloc[0] != 0:
+                        mae_df[f"{group_name} Score \u2193"] /= ref_val.iloc[0]
+                        
+                    
             # Instead of saving individual files, store in all_group_data:
             all_group_data[group_name] = (mae_df.round(3), neb_data_dict, os.path.abspath("assets"))
 
@@ -663,15 +670,15 @@ class NEB2(zntrack.Node):
         import os
         import pickle
 
-        print(os.getcwd())
+        #print(os.getcwd())
 
         # Load all groups from single pickle file
         with open(os.path.join(cache_dir, "all_group_data.pkl"), "rb") as f:
             all_group_data = pickle.load(f)
 
-        for group_name, (mae_df, _, _) in all_group_data.items():
-            print(f"\nGroup: {group_name}")
-            print(mae_df)
+        #for group_name, (mae_df, _, _) in all_group_data.items():
+            #print(f"\nGroup: {group_name}")
+            #print(mae_df)
             
             
         # Use assets_dir from the first group for Dash assets
@@ -700,7 +707,7 @@ class NEB2(zntrack.Node):
                     dash_table_interactive(
                         df=mae_df,
                         id=f"neb-mae-score-table-{group_name}",
-                        title=f"{group_name} Energy Barriers Summary Table",
+                        title=f"{group_name} Path b and c Energy Barriers Error Table",
                         extra_components=[
                             html.Div(id=f"neb-table-{group_name}"),
                             dcc.Store(id=f"neb-table-last-clicked-{group_name}", data=None),

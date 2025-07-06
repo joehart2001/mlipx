@@ -62,7 +62,7 @@ BENCHMARK_STRUCTURE = {
     "Molecular Crystal Score": ["X23 Benchmark", "DMC-ICE13 Benchmark"],
     "Molecular Score": ["GMTKN55 Benchmark", "Homonuclear Diatomics"],
     "Water MD": ["Water RDFs"],
-    "NEBs": ["LiFePO4 b and c paths", "Si 64 and 216"],
+    "NEBs": ["LiFePO4 b and c paths"]#, "Si 64 and 216"],
 }
 
 # # Mapping from benchmark label to their dash table id
