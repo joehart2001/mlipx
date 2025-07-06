@@ -213,7 +213,7 @@ class PhononAllBatch(zntrack.Node):
         temperatures = self.thermal_properties_temperatures
         calc_model = self.model  # Materialize model before parallel loops
 
-        if self.use_ray:
+        if self.ray:
             ray.init(ignore_reinit_error=True, num_gpus=1)
             futures = [
                 process_mp_ids_batch_ray.remote(
