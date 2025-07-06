@@ -150,6 +150,7 @@ class HomonuclearDiatomics(zntrack.Node):
 
                 
             except Exception as e:
+                print(f"Skipping element {element}: {e}")
                 skipped_elements.append(element)
                 continue
 
