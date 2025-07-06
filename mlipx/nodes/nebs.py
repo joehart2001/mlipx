@@ -631,7 +631,7 @@ class NEB2(zntrack.Node):
             error_cols = [col for col in mae_df.columns if col.endswith("Error")]
             if error_cols:
                 mae_df[f"{group_name} Score \u2193"] = mae_df[error_cols].mean(axis=1)
-                print(f"Group {group_name} Score: {mae_df[f'{group_name} Score \u2193'].mean():.3f}")
+                #print(f"Group {group_name} Score: {mae_df[f'{group_name} Score \u2193'].mean():.3f}")
 
                 # Normalize group score if a reference model is provided
                 if normalise_to_model and f"{group_name} Score \u2193" in mae_df.columns:

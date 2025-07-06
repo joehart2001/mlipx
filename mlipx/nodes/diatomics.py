@@ -96,7 +96,7 @@ class HomonuclearDiatomics(zntrack.Node):
         if self.data is not None:
             for atoms in self.data:
                 elements.update(set(atoms.symbols))
-
+                
         # Track skipped elements
         skipped_elements = []
 
