@@ -466,7 +466,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'vacf':
                     # Velocity autocorrelation function
                     vaf = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, atoms_filter=(('O',),))
-                    print(vaf)
+                    #print(vaf)
                     properties_dict[prop][model_name] = {
                         "time": vaf[0],
                         "vaf": vaf[1],
@@ -657,8 +657,8 @@ class MolecularDynamics(zntrack.Node):
         for config in zip(table_configs, mae_df_list):
             table_id, details_id, last_clicked_id, selected_property = config[0]
             mae_df = config[1]
-            print(f"Registering callbacks for {table_id} with property {selected_property}")
-            print(mae_df)
+            #print(f"Registering callbacks for {table_id} with property {selected_property}")
+            #print(mae_df)
             model_names = list(mae_df["Model"].values)
 
             def make_callback(selected_property=selected_property, mae_df=mae_df, model_names=model_names):

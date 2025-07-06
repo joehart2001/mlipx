@@ -98,9 +98,9 @@ class NEBFutherApplications(zntrack.Node):
         with open(f"{cache_dir}/nebs_cache/all_group_data.pkl", "rb") as f:
             all_group_data = pickle.load(f)
 
-        for group_name, (mae_df, neb_data_dict, assets_dir) in all_group_data.items():
-            print(f"\nGroup: {group_name}")
-            print(mae_df)
+        #for group_name, (mae_df, neb_data_dict, assets_dir) in all_group_data.items():
+            #print(f"\nGroup: {group_name}")
+            #print(mae_df)
 
 
         benchmark_score_df = NEBFutherApplications.benchmark_score(
@@ -209,7 +209,7 @@ class NEBFutherApplications(zntrack.Node):
         score_table = None
 
         for group_name, (mae_df, _, _) in all_group_data.items():
-            print(mae_df)
+            #print(mae_df)
             group_score_col = f"{group_name} Score \u2193"
             if group_score_col not in mae_df.columns:
                 continue
