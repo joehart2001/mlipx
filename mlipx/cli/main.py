@@ -494,6 +494,54 @@ def gmtkn55_compare(
     
 
 @app.command()
+def wiggle150_compare(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+
+    ):
+    
+    nodes = [
+        "*Wiggle150*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_GMTKN55Benchmark")
+
+    benchmark_node_dict = {}
+
+    for name, node in node_objects.items():
+        model = name.split("_Wiggle150")[0]
+        benchmark_node_dict[model] = node
+
+    if models:
+        # filter to selected models
+        benchmark_node_dict = {
+            m: node for m, node in benchmark_node_dict.items() if m in models
+        }
+
+    
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+
+    print('\n UI = ', ui)
+
+    from mlipx import Wiggle150
+    Wiggle150.mae_plot_interactive(
+        node_dict = benchmark_node_dict,
+        ui = ui
+    )
+    
+
+@app.command()
 def cohesive_compare(
     nodes: Annotated[list[str], typer.Argument(help="Path(s) to cohesive nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,

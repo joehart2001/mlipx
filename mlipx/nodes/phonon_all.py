@@ -218,10 +218,8 @@ class PhononAllBatch(zntrack.Node):
 
 
     def run(self):
-        from joblib import Parallel, delayed, parallel_backend
+        from pathlib import Path
         import ray
-        from ray.util.joblib import register_ray
-        
 
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
@@ -230,25 +228,22 @@ class PhononAllBatch(zntrack.Node):
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
 
-
         ray.init(ignore_reinit_error=True, num_gpus=1)
-            
-            
-        register_ray()
-        
+
         calc_model = self.model  # Materialize to avoid lazy ZnTrack object
 
-        def process(mp_id):
-            return PhononAllBatch._process_mp_id_static(
-                mp_id, calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
+        # Split mp_ids into chunks (1 mp_id per job since we have 1 GPU)
+        futures = [
+            process_mp_ids_batch_ray.remote(
+                [mp_id], calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed
             )
+            for mp_id in self.mp_ids
+        ]
 
-        with parallel_backend("ray", n_jobs=self.n_jobs):
-            results = Parallel()(delayed(process)(mp_id) for mp_id in self.mp_ids)
-
+        results_nested = ray.get(futures)
         ray.shutdown()
 
-        results = [res for res in results if res is not None]
+        results = [res for sublist in results_nested for res in sublist if res is not None]
         print(f"\nFinished with {len(results)} successful results.")
 
         phonon_band_path_dict = {
