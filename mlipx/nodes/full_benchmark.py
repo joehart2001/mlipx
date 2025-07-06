@@ -196,6 +196,7 @@ class FullBenchmark(zntrack.Node):
         assets_dir = next(iter(all_group_data.values()))[2]
         
         from mlipx.dash_utils import run_app
+        print("Serving assets from:", assets_dir)
         app_summary = dash.Dash(__name__, suppress_callback_exceptions=True, assets_folder=assets_dir)
 
         bulk_crystal_layout, bulk_crystal_callback_fn = BulkCrystalBenchmark.launch_dashboard(full_benchmark=True)

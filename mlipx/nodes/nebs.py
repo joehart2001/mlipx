@@ -683,9 +683,10 @@ class NEB2(zntrack.Node):
             
         # Use assets_dir from the first group for Dash assets
         first_assets_dir = next(iter(all_group_data.values()))[2]
+        print("Serving assets from:", first_assets_dir)
         app = dash.Dash(__name__, assets_folder=first_assets_dir)
-        app.server.static_folder = 'assets'
-        app.server.static_url_path = '/assets'
+        #app.server.static_folder = 'assets'
+        #app.server.static_url_path = '/assets'
 
         # Set layout using the static method
         app.layout = NEB2.build_layout(all_group_data)
