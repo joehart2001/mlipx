@@ -459,6 +459,7 @@ def phonons_all(
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
     ref: bool = False,
+    threading: bool = False,
 ):
     """Run phonon calculations."""
     if models is not None:
@@ -478,6 +479,7 @@ def phonons_all(
         generate_displacements=generate_displacements,
         n_jobs=n_jobs,
         ref=ref,
+        threading=threading,
     )
     
     
