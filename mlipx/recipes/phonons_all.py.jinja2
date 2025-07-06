@@ -70,6 +70,15 @@ threading = True
 threading = False
 {% endif %}
 
+{% if ray == True %}
+print("Using ray for parallelisation")
+ray = True
+{% else %}
+ray = False
+{% endif %}
+
+
+
 
 {% if ref == True %}
 

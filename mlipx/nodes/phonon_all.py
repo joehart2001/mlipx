@@ -98,7 +98,7 @@ class PhononAllBatch(zntrack.Node):
     n_jobs: int = zntrack.params(-1)
     check_completed: bool = zntrack.params(False)
     threading: bool = zntrack.params(False)
-    cpu: bool = zntrack.params(False)
+    ray: bool = zntrack.params(False)
 
     N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
@@ -108,7 +108,7 @@ class PhononAllBatch(zntrack.Node):
         default_factory=lambda: [0, 75, 150, 300, 600]
     )
 
-    use_ray: bool = zntrack.params(True)
+    
 
     phonon_band_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_band_paths.json")
     phonon_dos_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "phonon_dos_paths.json")

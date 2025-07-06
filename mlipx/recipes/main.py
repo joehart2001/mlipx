@@ -460,6 +460,7 @@ def phonons_all(
     models: t.Annotated[str | None, typer.Option()] = None,
     ref: bool = False,
     threading: bool = False,
+    ray: bool = False,
 ):
     """Run phonon calculations."""
     if models is not None:
@@ -480,6 +481,7 @@ def phonons_all(
         n_jobs=n_jobs,
         ref=ref,
         threading=threading,
+        ray=ray,
     )
     
     
