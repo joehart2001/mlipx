@@ -194,7 +194,8 @@ class FullBenchmark(zntrack.Node):
         with open(f"{cache_dir}/nebs_further_apps/nebs_cache/all_group_data.pkl", "rb") as f:
             all_group_data = pickle.load(f)
         #assets_dir = next(iter(all_group_data.values()))[2]
-        assets_dir = "assets"
+        #assets_dir = "assets"
+        assets_dir = os.path.abspath("assets")
         from mlipx.dash_utils import run_app
         print("Serving assets from:", assets_dir)
         app_summary = dash.Dash(__name__, suppress_callback_exceptions=True, assets_folder=assets_dir)
