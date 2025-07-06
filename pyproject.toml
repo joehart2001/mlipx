@@ -34,7 +34,6 @@ dependencies = [
     "matminer>=0.9.3",
     "bs4>=0.0.2",
     "torch-dftd",
-    "janus-core",
 ]
 
 [dependency-groups]
