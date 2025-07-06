@@ -64,7 +64,7 @@ import ray
 
 # Batched Ray remote function for processing multiple mp_ids at once
 @ray.remote(num_gpus=1)
-def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, n_jobs):
+def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, threading, n_jobs):
     from joblib import Parallel, delayed
 
     # Make model accessible without pickling
@@ -80,9 +80,11 @@ def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_
             print(f"Skipping {mp_id} due to error: {e}")
             return None
 
-    #results = Parallel(n_jobs=n_jobs)(delayed(handle_mp_id)(mp_id) for mp_id in mp_ids)
-    with parallel_backend("threading", n_jobs=n_jobs):
-        results = Parallel()(delayed(handle_mp_id)(mp_id) for mp_id in mp_ids)
+    if threading:
+        with parallel_backend("threading", n_jobs=n_jobs):
+            results = Parallel()(delayed(handle_mp_id)(mp_id) for mp_id in mp_ids)
+    else:
+        results = Parallel(n_jobs=n_jobs)(delayed(handle_mp_id)(mp_id) for mp_id in mp_ids)
     return [res for res in results if res is not None]
 
 
@@ -95,7 +97,7 @@ class PhononAllBatch(zntrack.Node):
     phonopy_yaml_dir: str = zntrack.params()
     n_jobs: int = zntrack.params(-1)
     check_completed: bool = zntrack.params(False)
-    #threading: bool = zntrack.params(False)
+    threading: bool = zntrack.params(False)
     cpu: bool = zntrack.params(False)
 
     N_q_mesh: int = zntrack.params(6)
@@ -215,7 +217,7 @@ class PhononAllBatch(zntrack.Node):
         # Split mp_ids into chunks (1 mp_id per job since we have 1 GPU)
         futures = [
             process_mp_ids_batch_ray.remote(
-                [mp_id], calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed, self.n_jobs
+                [mp_id], calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed, self.threading, self.n_jobs
             )
             for mp_id in self.mp_ids
         ]
