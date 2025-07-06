@@ -942,6 +942,7 @@ class MolecularDynamics(zntrack.Node):
     def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, vacf_df, vdos_df):
         return html.Div([
             html.H1("Water MD Benchmark"),
+            html.P("Simulation details: NVT 330K, 64 water molecules, 10k steps equilibration + 40k steps production run, 1 fs timestep."),
             html.H3("O-O RDF MAE Table"),
             dash_table_interactive(
                 df=mae_df_oo,
