@@ -197,6 +197,12 @@ class X23Benchmark(zntrack.Node):
                 id="x23-mae-table",
                 title="X23 dataset: MAE Table (kJ/mol)",
                 info="This table is not interactive.",
+                tooltip_header={
+                    "Model": "Name of the MLIP model",
+                    "MAE (kJ/mol)": "Mean absolute error of the lattice energy vs PBE DFT reference.",
+                    "Score": "Average of the two MAE columns, lower is better.",
+                    "Rank": "Ranking based on Score (1 = best performing model).",
+                }
             ),
 
             tabs

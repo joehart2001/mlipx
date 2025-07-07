@@ -869,6 +869,18 @@ class PhononDispersion(zntrack.Node):
                 dcc.Store(id="phonon-summary-table-last-clicked"),
                 html.Div(id="phonon-summary-plot-container"),
             ],
+            tooltip_header={
+                "Model": "Name of the MLIP model",
+                "ω_max [THz]": "Maximum phonon frequency across all materials (in THz).",
+                "ω_avg [THz]": "Average phonon frequency over the Brillouin zone (in THz).",
+                "ω_min [THz]": "Minimum phonon frequency across all materials (in THz).",
+                "Avg BZ RMSE [THz]": "Average root mean square error of the phonon dispersion over the Brillouin zone (in THz).",
+                "S [J/mol·K]": "Predicted vibrational entropy at a given temperature (in J/mol·K).",
+                "F [kJ/mol]": "Predicted vibrational Helmholtz free energy (in kJ/mol).",
+                "C_V [J/mol·K]": "Predicted heat capacity at constant volume (in J/mol·K).",
+                "Phonon Score ↓": "Aggregate score based on dispersion and thermodynamic property errors (lower is better).",
+                "Rank": "Ranking based on Phonon Score (1 = best performing model).",
+            }
         )
 
         stability_table_layout = dash_table_interactive(
@@ -883,6 +895,9 @@ class PhononDispersion(zntrack.Node):
                 dcc.Store(id="phonon-stability-table-last-clicked"),
                 html.Div(id="phonon-stability-plot-container"),
             ],
+            tooltip_header={
+                "Model": "Name of the MLIP model",
+                "Stability Classification (F1)": "F1 score (F1 = 2·TP / (2·TP + FP + FN)) for classifying materials as dynamically stable or unstable based on imaginary phonon modes (|ω_min| < 0.05 THz)."            }
         )
 
         return html.Div(

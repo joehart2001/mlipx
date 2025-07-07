@@ -270,6 +270,13 @@ class DMCICE13Benchmark(zntrack.Node):
                 id="dmc-ice-mae-table",
                 info= "This table is not interactive.",
                 title="DMC-ICE-13 Dataset: MAE Table (meV)",
+                tooltip_header={
+                    "Model": "Name of the MLIP model",
+                    "MAE (meV)": "Mean absolute error of the lattice energy vs PBE DFT reference.",
+                    "Avg MAE relative to all polymorphs (meV)": "Average mean absolute error of the lattice energy relative to all polymorphs (e.g. avg of all - Ih, all - II ...) vs PBE DFT reference.",
+                    "Score": "Average of the two MAE columns, lower is better.",
+                    "Rank": "Ranking based on Score (1 = best performing model).",
+                }
             ),
 
             tabs,

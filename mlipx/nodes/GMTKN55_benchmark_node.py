@@ -421,6 +421,12 @@ class GMTKN55Benchmark(zntrack.Node):
                 id="GMTKN55-wtmad-table",
                 title="WTMAD (weighted total mean absolute deviation)",
                 info= "This table is not interactive.",
+                tooltip_header={
+                    "Model": "Name of the MLIP model",
+                    "Weighted Total MAD/MAE [kcal/mol] \u2193": "Weighted total mean absolute deviation (MAD) or mean absolute error (MAE) (defined equivalently by RowanSci) for the 5 categories below (equivalent to the ALL column).  Weights are assigned by the dataset authors based on the subset difficulty.",
+                    "Score": "MAE or normalised MAE.",
+                    "Rank": "Ranking based on Score (1 = best performing model)."
+                }
             ),
 
             dash_table_interactive(
@@ -428,6 +434,15 @@ class GMTKN55Benchmark(zntrack.Node):
                 id="GMTKN55-category-table",
                 title="MAD/MAE per Category (kcal/mol)",
                 info= "This table is not interactive.",
+                tooltip_header={
+                    "Model": "Name of the MLIP model",
+                    "Basic properties and reaction energies for small systems": "MAD/MAE for small systems.",
+                    "Reaction energies for large systems and isomerisation reactions": "MAD/MAE for large systems.",
+                    "Reaction barrier heights": "MAD/MAE for barrier heights.",
+                    "Intramolecular noncovalent interactions": "MAD/MAE for intramolecular noncovalent interactions.",
+                    "Intermolecular noncovalent interactions": "MAD/MAE for intermolecular noncovalent interactions.",
+                    "All (WTMAD)": "Weighted total MAD/MAE for all subsets."
+                }
             ),
 
             html.H2("MAD/MAE per Subset", style={"color": "black", "marginTop": "30px"}),
