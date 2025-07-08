@@ -103,24 +103,25 @@ class HomonuclearDiatomics(zntrack.Node):
         skipped_elements = []
 
         results_list = []
+        
+        already_done_homo = set()
+        # Track already completed elements if provided
+        if completed_traj_dir is not None:
+            completed_traj_dir = Path(completed_traj_dir)
+            if completed_traj_dir.exists():
+                for f in completed_traj_dir.glob("*.extxyz"):
+                    match = re.match(r"([A-Z][a-z]?)2\.extxyz", f.name)
+                    if match:
+                        already_done_homo.add(match.group(1))
+
         for element in tqdm(elements, desc="Homonuclear Elements"):
 
-            # Track already completed elements if provided
-            already_done_homo = set()
-            if completed_traj_dir is not None:
-                completed_traj_dir = Path(completed_traj_dir)
-                if completed_traj_dir.exists():
-                    for f in completed_traj_dir.glob("*.extxyz"):
-                        match = re.match(r"([A-Z][a-z]?)2\.extxyz", f.name)
-                        if match:
-                            already_done_homo.add(match.group(1))
 
-            for element in tqdm(elements, desc="Homonuclear Elements"):
-                if element in already_done_homo:
-                    print(f"Skipping {element} — found in completed_traj_dir.")
-                    traj = ase.io.read(completed_traj_dir / f"{element}2.extxyz", index=":")
-                    self.frames.extend(freeze_copy_atoms(a) for a in traj)
-                    continue
+            if element in already_done_homo:
+                print(f"Skipping {element} — found in completed_traj_dir.")
+                traj = ase.io.read(completed_traj_dir / f"{element}2.extxyz", index=":")
+                self.frames.extend(freeze_copy_atoms(a) for a in traj)
+                continue
             
             # otherwise, proceed with calculations    
             traj_frames = []
