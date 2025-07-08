@@ -87,6 +87,7 @@ class HomonuclearDiatomics(zntrack.Node):
         self.results = pd.DataFrame()
         self.model_outs.mkdir(exist_ok=True, parents=True)
         self.trajectory_dir_path.mkdir(exist_ok=True, parents=True)
+        completed_traj_dir = self.completed_traj_dir
         
         (self.model_outs / "mlipx.txt").write_text("Thank you for using MLIPX!")
         #calc = self.model.get_calculator(directory=self.model_outs)
@@ -106,16 +107,18 @@ class HomonuclearDiatomics(zntrack.Node):
 
             # Track already completed elements if provided
             already_done_homo = set()
-            if self.completed_traj_dir is not None and self.completed_traj_dir.exists():
-                for f in self.completed_traj_dir.glob("*.extxyz"):
-                    match = re.match(r"([A-Z][a-z]?)2\.extxyz", f.name)
-                    if match:
-                        already_done_homo.add(match.group(1))
+            if completed_traj_dir is not None:
+                completed_traj_dir = Path(completed_traj_dir)
+                if completed_traj_dir.exists():
+                    for f in self.completed_traj_dir.glob("*.extxyz"):
+                        match = re.match(r"([A-Z][a-z]?)2\.extxyz", f.name)
+                        if match:
+                            already_done_homo.add(match.group(1))
 
             for element in tqdm(elements, desc="Homonuclear Elements"):
                 if element in already_done_homo:
                     print(f"Skipping {element} — found in completed_traj_dir.")
-                    traj = ase.io.read(self.completed_traj_dir / f"{element}2.extxyz", index=":")
+                    traj = ase.io.read(completed_traj_dir / f"{element}2.extxyz", index=":")
                     self.frames.extend(freeze_copy_atoms(a) for a in traj)
                     continue
             
@@ -184,17 +187,19 @@ class HomonuclearDiatomics(zntrack.Node):
 
         # Track already completed heteronuclear pairs if provided
         already_done_hetero = set()
-        if self.completed_traj_dir is not None and self.completed_traj_dir.exists():
-            for f in self.completed_traj_dir.glob("*.extxyz"):
-                match = re.match(r"([A-Z][a-z]?)([A-Z][a-z]?)\.extxyz", f.name)
-                if match and match.group(1) != match.group(2):
-                    already_done_hetero.add((match.group(1), match.group(2)))
-                    already_done_hetero.add((match.group(2), match.group(1)))  # to cover both orderings
-                    
+        if completed_traj_dir is not None:
+            completed_traj_dir = Path(completed_traj_dir)
+            if completed_traj_dir.exists():
+                for f in self.completed_traj_dir.glob("*.extxyz"):
+                    match = re.match(r"([A-Z][a-z]?)([A-Z][a-z]?)\.extxyz", f.name)
+                    if match and match.group(1) != match.group(2):
+                        already_done_hetero.add((match.group(1), match.group(2)))
+                        already_done_hetero.add((match.group(2), match.group(1)))  # to cover both orderings
+                        
         for elem1, elem2 in tqdm(hetero_pairs, desc="Heteronuclear Pairs"):
             if (elem1, elem2) in already_done_hetero:
                 print(f"Skipping {elem1}-{elem2} — found in completed_traj_dir.")
-                traj = ase.io.read(self.completed_traj_dir / f"{elem1}{elem2}.extxyz", index=":")
+                traj = ase.io.read(completed_traj_dir / f"{elem1}{elem2}.extxyz", index=":")
                 self.frames.extend(freeze_copy_atoms(a) for a in traj)
                 continue
             traj_frames = []

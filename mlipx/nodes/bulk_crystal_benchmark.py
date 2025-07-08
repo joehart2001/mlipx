@@ -177,6 +177,30 @@ class BulkCrystalBenchmark(zntrack.Node):
             triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
             return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
 
+
+        # @app.callback(
+        #     Output("phonon-weight", "value"),
+        #     Output("phonon-weight-input", "value"),
+        #     Output("elasticity-weight", "value"),
+        #     Output("elasticity-weight-input", "value"),
+        #     Output("lattice-const-weight", "value"),
+        #     Output("lattice-const-weight-input", "value"),
+        #     Input("bulk-crystal-weights", "data"),
+        #     prevent_initial_call=True
+        # )
+        # def restore_slider_values_from_store(stored_weights):
+        #     """Restore slider values when tab is switched back"""
+        #     if stored_weights is None:
+        #         # Return default values if no stored weights
+        #         return 1.0, 1.0, 1.0, 1.0, 0.2, 0.2
+            
+        #     phonon_w = stored_weights.get("phonon", 1.0)
+        #     elas_w = stored_weights.get("elasticity", 1.0)
+        #     lat_w = stored_weights.get("lattice_const", 0.2)
+            
+        #     return phonon_w, phonon_w, elas_w, elas_w, lat_w, lat_w
+
+
         # --- Callback to update overall benchmark score table when weights are changed ---
         @app.callback(
             Output("overall-score-table", "data"),
