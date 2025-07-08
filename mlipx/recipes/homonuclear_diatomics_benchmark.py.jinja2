@@ -20,7 +20,7 @@ het_diatomics = False
 {% endif %}
 
 {% if completed_traj_dir %}
-completed_traj_dir = Path("{{completed_traj_dir}}")
+completed_traj_dir = "{{completed_traj_dir}}"
 print(f"loading progress from directory: {completed_traj_dir}")
 {% endif %}
 
