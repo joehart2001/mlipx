@@ -110,7 +110,7 @@ class HomonuclearDiatomics(zntrack.Node):
             if completed_traj_dir is not None:
                 completed_traj_dir = Path(completed_traj_dir)
                 if completed_traj_dir.exists():
-                    for f in self.completed_traj_dir.glob("*.extxyz"):
+                    for f in completed_traj_dir.glob("*.extxyz"):
                         match = re.match(r"([A-Z][a-z]?)2\.extxyz", f.name)
                         if match:
                             already_done_homo.add(match.group(1))
@@ -190,7 +190,7 @@ class HomonuclearDiatomics(zntrack.Node):
         if completed_traj_dir is not None:
             completed_traj_dir = Path(completed_traj_dir)
             if completed_traj_dir.exists():
-                for f in self.completed_traj_dir.glob("*.extxyz"):
+                for f in completed_traj_dir.glob("*.extxyz"):
                     match = re.match(r"([A-Z][a-z]?)([A-Z][a-z]?)\.extxyz", f.name)
                     if match and match.group(1) != match.group(2):
                         already_done_hetero.add((match.group(1), match.group(2)))
