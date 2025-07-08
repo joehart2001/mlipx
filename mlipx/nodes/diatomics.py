@@ -116,11 +116,31 @@ class HomonuclearDiatomics(zntrack.Node):
 
         for element in tqdm(elements, desc="Homonuclear Elements"):
 
-
             if element in already_done_homo:
                 print(f"Skipping {element} — found in completed_traj_dir.")
                 traj = ase.io.read(completed_traj_dir / f"{element}2.extxyz", index=":")
                 self.frames.extend(freeze_copy_atoms(a) for a in traj)
+
+                # Rebuild energy vs. distance
+                energies = []
+                distances = []
+
+                for atoms in traj:
+                    energy = atoms.get_potential_energy()
+                    distance = atoms.get_distance(0, 1)
+                    energies.append(energy)
+                    distances.append(distance)
+
+                df = pd.DataFrame(energies, index=distances, columns=[element])
+                e_v[element] = df
+
+                for dist, en in zip(distances, energies):
+                    results_list.append({
+                        "element": element,
+                        "distance": dist,
+                        "energy": en,
+                    })
+
                 continue
             
             # otherwise, proceed with calculations    
@@ -198,6 +218,25 @@ class HomonuclearDiatomics(zntrack.Node):
                         already_done_hetero.add((match.group(2), match.group(1)))  # to cover both orderings
                         
         for elem1, elem2 in tqdm(hetero_pairs, desc="Heteronuclear Pairs"):
+            # --- New block: check for completed heteronuclear trajectory ---
+            filename = f"{elem1}{elem2}.extxyz"
+            if self.completed_traj_dir is not None and (completed_traj_dir / filename).exists():
+                print(f"Skipping {elem1}-{elem2} — found in completed_traj_dir.")
+                traj = ase.io.read(self.completed_traj_dir / filename, index=":")
+                self.frames.extend(freeze_copy_atoms(a) for a in traj)
+
+                energies = []
+                distances = []
+                for atoms in traj:
+                    energy = atoms.get_potential_energy()
+                    distance = atoms.get_distance(0, 1)
+                    energies.append(energy)
+                    distances.append(distance)
+
+                df = pd.DataFrame(energies, index=distances, columns=[f"{elem1}-{elem2}"])
+                e_v[f"{elem1}-{elem2}"] = df
+                continue
+            # --- End new block ---
             if (elem1, elem2) in already_done_hetero:
                 print(f"Skipping {elem1}-{elem2} — found in completed_traj_dir.")
                 traj = ase.io.read(completed_traj_dir / f"{elem1}{elem2}.extxyz", index=":")
