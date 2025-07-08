@@ -220,9 +220,9 @@ class HomonuclearDiatomics(zntrack.Node):
         for elem1, elem2 in tqdm(hetero_pairs, desc="Heteronuclear Pairs"):
             # --- New block: check for completed heteronuclear trajectory ---
             filename = f"{elem1}{elem2}.extxyz"
-            if self.completed_traj_dir is not None and (completed_traj_dir / filename).exists():
+            if completed_traj_dir is not None and (completed_traj_dir / filename).exists():
                 print(f"Skipping {elem1}-{elem2} — found in completed_traj_dir.")
-                traj = ase.io.read(self.completed_traj_dir / filename, index=":")
+                traj = ase.io.read(completed_traj_dir / filename, index=":")
                 self.frames.extend(freeze_copy_atoms(a) for a in traj)
 
                 energies = []
