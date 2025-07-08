@@ -63,7 +63,7 @@ import ray
 
 
 # Batched Ray remote function for processing multiple mp_ids at once
-@ray.remote(num_gpus=1)
+@ray.remote()
 def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, threading, n_jobs):
     from joblib import Parallel, delayed
 
@@ -214,7 +214,7 @@ class PhononAllBatch(zntrack.Node):
         calc_model = self.model  # Materialize model before parallel loops
 
         if self.ray:
-            ray.init(ignore_reinit_error=True, num_gpus=1)
+            ray.init(ignore_reinit_error=True)
             futures = [
                 process_mp_ids_batch_ray.remote(
                     [mp_id], calc_model, nwd, yaml_dir, fmax,
@@ -341,6 +341,7 @@ class PhononAllBatch(zntrack.Node):
         report=False,
         normalise_to_model: t.Optional[str] = None,
         no_plots: bool = False,
+        n_jobs: int = -1,
     ):
         """
         Benchmarking with multiple models (each one is a PhononAllBatch node).
@@ -403,6 +404,7 @@ class PhononAllBatch(zntrack.Node):
             report=report,
             normalise_to_model=normalise_to_model,
             no_plots=no_plots,
+            n_jobs=n_jobs,
         )
         return output
 
