@@ -801,7 +801,7 @@ def homonuclear_diatomics_benchmark(
         material_ids=material_ids,
         smiles=smiles,
         het_diatomics=het_diatomics,
-        completed_traj_dir = completed_traj_dir,
+        completed_traj_dir=completed_traj_dir,
     )
     
 @app.command()
