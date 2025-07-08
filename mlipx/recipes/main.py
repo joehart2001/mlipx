@@ -774,7 +774,7 @@ def homonuclear_diatomics_benchmark(
     het_diatomics: bool = False,
     smiles: str | None = None,
     models: t.Annotated[str | None, typer.Option()] = None,
-    completed_traj_dir: str | None = None,
+    completed_traj_dir: t.Annotated[str | None, typer.Option()] = None,
 ):
     """Run homonuclear diatomics calculations."""
     if models is not None:
