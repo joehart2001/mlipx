@@ -63,7 +63,7 @@ import ray
 
 
 # Batched Ray remote function for processing multiple mp_ids at once
-@ray.remote()
+@ray.remote
 def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, threading, n_jobs):
     from joblib import Parallel, delayed
 
