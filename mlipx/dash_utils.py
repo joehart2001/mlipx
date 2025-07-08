@@ -216,6 +216,7 @@ def combine_apps(
     extra_components: list = None,
     static_coloured_table: bool = False,
     weights_components: list = None,
+    shared_stores: list = None,
 ):
     """Combines multiple Dash apps or layouts into a single layout.
 
@@ -240,9 +241,13 @@ def combine_apps(
         interactive=True,
         static_coloured_table=static_coloured_table,
     )
-
-    children = [
-        html.H1(f"{benchmark_title}", style={"color": "black"}),
+    children = []
+    
+    if shared_stores:
+        children.extend(shared_stores)
+        
+    children.append(html.H1(f"{benchmark_title}", style={"color": "black"}))
+    children.append(
         html.Div([
             benchmark_score_table,
             html.Br(),
@@ -252,7 +257,21 @@ def combine_apps(
             "padding": "20px",
             "border": "2px solid black",
         })
-    ]
+    )
+    
+        
+    # children = [
+    #     html.H1(f"{benchmark_title}", style={"color": "black"}),
+    #     html.Div([
+    #         benchmark_score_table,
+    #         html.Br(),
+    #         *(weights_components if weights_components else [])
+    #     ], style={
+    #         "backgroundColor": "white",
+    #         "padding": "20px",
+    #         "border": "2px solid black",
+    #     })
+    # ]
 
     # Extract and wrap all layout components
     for idx, entry in enumerate(apps_or_layouts_list):

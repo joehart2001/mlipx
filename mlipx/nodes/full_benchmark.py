@@ -256,23 +256,31 @@ class FullBenchmark(zntrack.Node):
         @app_summary.callback(
             dash.Output("summary-table", "data"),
             dash.Output("summary-table", "style_data_conditional"),
-            dash.Input("bulk-benchmark-score-table", "data"),
+            dash.Input("bulk-crystal-weights", "data"),
         )
-        def update_summary_table(bulk_data):
-            """Re-calculate overall scores whenever the BulkCrystal scores change."""
+        def update_summary_table(_):
             from mlipx.dash_utils import colour_table
             import pandas as pd
-            if bulk_data is None:
-                raise dash.exceptions.PreventUpdate
-
-            bulk_df_current = pd.DataFrame(bulk_data)
+            weights = _
+            if weights is None:
+                weights = {"phonon": 1.0, "elasticity": 1.0, "lattice_const": 0.2}
+            cache_dir = "app_cache/bulk_crystal_benchmark"
+            phonon_mae_df = pd.read_pickle(f"{cache_dir}/phonons_cache/mae_summary.pkl")
+            mae_df_elas = pd.read_pickle(f"{cache_dir}/elasticity_cache/mae_summary.pkl")
+            mae_df_lattice_const = pd.read_pickle(f"{cache_dir}/lattice_cache/mae_summary.pkl")
+            bulk_df = BulkCrystalBenchmark.bulk_crystal_benchmark_score(
+                phonon_mae_df,
+                mae_df_elas,
+                mae_df_lattice_const,
+                weights=weights,
+            ).round(3).sort_values(by='Avg MAE \u2193').reset_index(drop=True)
+            bulk_df["Rank"] = bulk_df['Avg MAE \u2193'].rank(ascending=True)
 
             combined_df = FullBenchmark.get_overall_score_df(
-                (bulk_df_current, "Bulk Crystal"),
+                (bulk_df, "Bulk Crystal"),
                 (mol_crystal_df, "Molecular Crystal"),
                 (molecular_df, "Molecular"),
             )
-
             style_conditional = colour_table(combined_df, all_cols=True)
             return combined_df.to_dict("records"), style_conditional
 
@@ -335,7 +343,6 @@ class FullBenchmark(zntrack.Node):
         style_data_conditional = colour_table(scores_all_df, all_cols=True)
 
         def make_toc_buttons():
-            #BENCHMARK_STRUCTURE_categories = {tab_name: subtests for tab_name, subtests in BENCHMARK_STRUCTURE.items() if tab_name != "Overall Benchmark"}
             return html.Div([
                 html.H1("Table of Contents"),
                 html.Ul([
@@ -376,6 +383,7 @@ class FullBenchmark(zntrack.Node):
         }
 
         full_layout = html.Div([
+            dcc.Store(id="bulk-crystal-weights", storage_type="session"),
             dcc.Tabs(
                 id="tabs",
                 value="Overall Benchmark",

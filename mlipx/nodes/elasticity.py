@@ -79,6 +79,7 @@ class Elasticity(zntrack.Node):
     # norm_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.01, -0.005, 0.005, 0.01)) # mp0 and uma values
     # shear_strains: t.Tuple[float, float, float, float] = zntrack.params((-0.06, -0.03, 0.03, 0.06))
     relax_structure: bool = zntrack.params(True)
+    use_checkpoint: bool = zntrack.params(True)
     n_materials: int = zntrack.params(10)
     fmax: float = zntrack.params(0.05)
 
@@ -108,7 +109,11 @@ class Elasticity(zntrack.Node):
         
         print(self.model_name)
         
-        checkpoint_path = "elasticity_benchmark_checkpoint.json"
+        if self.use_checkpoint:
+            checkpoint_path = "elasticity_benchmark_checkpoint.json"
+        
+        else:
+            checkpoint_path = None
         
         results = benchmark.run(calc, self.model_name, n_jobs=self.n_jobs,
                                 checkpoint_file=checkpoint_path,

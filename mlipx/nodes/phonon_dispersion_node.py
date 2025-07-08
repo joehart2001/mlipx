@@ -561,6 +561,7 @@ class PhononDispersion(zntrack.Node):
         report = False,
         normalise_to_model: t.Optional[str] = None,
         no_plots: bool = False,
+        n_jobs: int = -1
     ):
         """
         Main benchmarking function that coordinates the benchmarking process.
@@ -642,25 +643,25 @@ class PhononDispersion(zntrack.Node):
         
         from joblib import Parallel, delayed, parallel_backend
 
-        with parallel_backend('threading'):
-            results = Parallel(n_jobs=-1)(
-                delayed(PhononDispersion.process_mpid)(
-                    mp_id,
-                    pred_node_dict,
-                    ref_node_dict,
-                    benchmarks,
-                    no_plots=no_plots
-                ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing phonons")
-            )
+        # with parallel_backend('threading'):
+        #     results = Parallel(n_jobs=n_jobs)(
+        #         delayed(PhononDispersion.process_mpid)(
+        #             mp_id,
+        #             pred_node_dict,
+        #             ref_node_dict,
+        #             benchmarks,
+        #             no_plots=no_plots
+        #         ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing phonons")
+        #     )
             
-        # results = Parallel(n_jobs=-1)(
-        #     delayed(PhononDispersion.process_mpid)(
-        #         mp_id,
-        #         pred_node_dict,
-        #         ref_node_dict,
-        #         benchmarks
-        #     ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures")
-        # )
+        results = Parallel(n_jobs=-1)(
+            delayed(PhononDispersion.process_mpid)(
+                mp_id,
+                pred_node_dict,
+                ref_node_dict,
+                benchmarks
+            ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures")
+        )
 
         # build dictionaries from parallel results
         for result in results:

@@ -97,15 +97,23 @@ class BulkCrystalBenchmark(zntrack.Node):
         @app.callback(
             Output("phonon-benchmark-score-table", "data"),
             Output("phonon-benchmark-score-table", "style_data_conditional"),
+            Output("bulk-crystal-weights", "data"),
             Input("phonon-weight-input", "value"),
             Input("elasticity-weight-input", "value"),
             Input("lattice-const-weight-input", "value"),
+            State("bulk-crystal-weights", "data"),
         )
-        def update_benchmark_table(phonon_w, elas_w, lat_w):
-            phonon_w = phonon_w if phonon_w is not None else 1.0
-            elas_w = elas_w if elas_w is not None else 1.0
-            lat_w = lat_w if lat_w is not None else 0.2
+        def update_benchmark_table_and_store(phonon_w, elas_w, lat_w, stored_weights):
+            if None in (phonon_w, elas_w, lat_w):
+                # Try to fall back to stored weights
+                if stored_weights is None:
+                    raise PreventUpdate
+                phonon_w = stored_weights.get("phonon", 1.0)
+                elas_w = stored_weights.get("elasticity", 1.0)
+                lat_w = stored_weights.get("lattice_const", 0.2)
+        
             weights = {"phonon": phonon_w, "elasticity": elas_w, "lattice_const": lat_w}
+            
             updated_df = BulkCrystalBenchmark.bulk_crystal_benchmark_score(
                 phonon_mae_df,
                 mae_df_elas,
@@ -113,9 +121,16 @@ class BulkCrystalBenchmark(zntrack.Node):
                 normalise_to_model=normalise_to_model,
                 weights=weights
             ).round(3).sort_values(by='Avg MAE \u2193').reset_index(drop=True)
+            
             updated_df["Rank"] = updated_df['Avg MAE \u2193'].rank(ascending=True)
             style_data_conditional = colour_table(updated_df, all_cols=True)
-            return updated_df.to_dict("records"), style_data_conditional
+            
+            return (
+                updated_df.to_dict("records"), 
+                style_data_conditional,
+                weights,
+            )
+
 
         # --- Callbacks to sync sliders and input fields ---
         @app.callback(
@@ -131,6 +146,8 @@ class BulkCrystalBenchmark(zntrack.Node):
                 raise PreventUpdate
             triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
             return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
+
+
 
         @app.callback(
             Output("elasticity-weight", "value"),
@@ -159,8 +176,27 @@ class BulkCrystalBenchmark(zntrack.Node):
                 raise PreventUpdate
             triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
             return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
-        
-        
+
+        # --- Callback to update overall benchmark score table when weights are changed ---
+        @app.callback(
+            Output("overall-score-table", "data"),
+            Input("bulk-crystal-weights", "data"),
+            prevent_initial_call=True
+        )
+        def update_overall_table_from_store(weights):
+            if weights is None:
+                raise dash.exceptions.PreventUpdate
+
+            updated_df = BulkCrystalBenchmark.bulk_crystal_benchmark_score(
+                phonon_mae_df,
+                mae_df_elas,
+                mae_df_lattice_const,
+                normalise_to_model=normalise_to_model,
+                weights=weights
+            ).round(3).sort_values(by='Avg MAE \u2193').reset_index(drop=True)
+
+            updated_df["Rank"] = updated_df['Avg MAE \u2193'].rank(ascending=True)
+            return updated_df.to_dict("records")
         
 
     @staticmethod
@@ -532,6 +568,7 @@ class BulkCrystalBenchmark(zntrack.Node):
             weight_control("Lattice Const Weight", "lattice-const-weight", "lattice-const-weight-input", 0.2),
         ], style={"margin": "20px"})
 
+        # Remove dcc.Store(id="bulk-crystal-weights", ...) from here.
         layout = combine_apps(
             benchmark_score_df=benchmark_score_df,
             benchmark_title="Bulk Crystal Benchmark",
@@ -543,6 +580,9 @@ class BulkCrystalBenchmark(zntrack.Node):
             ],
             id="phonon-benchmark-score-table",
             weights_components=[weight_controls],
+            shared_stores=[
+                #dcc.Store(id="bulk-crystal-weights", storage_type="session")
+            ]
         )
 
         return layout

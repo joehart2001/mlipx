@@ -210,6 +210,7 @@ def phonon_compare(
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
     batched: Annotated[bool, Option("--batched", help="does one node contain many materials")]=True,
     no_plots: Annotated[bool, Option("--no_plots", help="Disable plots")] = False,
+    n_jobs: Annotated[int, Option("--n_jobs", help="Number of jobs to run in parallel")]= -1,
 
     ):
     
@@ -256,6 +257,7 @@ def phonon_compare(
             ref_phonon_node=ref_node,
             ui=ui,
             no_plots=no_plots,
+            n_jobs=n_jobs,
         )
             
     else:
@@ -1088,7 +1090,7 @@ def get_mol_benchmark_node_dicts(
 
 @app.command()
 def diatomics_compare(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to diatomics nodes")],
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to diatomics nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
@@ -1099,6 +1101,11 @@ def diatomics_compare(
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
+        
+    nodes = [
+        "*HomonuclearDiatomics*",
+    ]
+    glob = True
     
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_homonuclear-diatomics")
     
