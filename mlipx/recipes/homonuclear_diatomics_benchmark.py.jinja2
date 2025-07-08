@@ -17,6 +17,12 @@ het_diatomics = True
 het_diatomics = False
 {% endif %}
 
+{% if completed_traj_dir %}
+completed_traj_dir = {{completed_traj_dir}}
+print(f"loading progress from {completed_traj_dir}")
+{% endif %}
+
+
 diatomic_dict = {}
 diatomic_list = []
 for model_name, model in MODELS.items():
@@ -30,6 +36,7 @@ for model_name, model in MODELS.items():
             max_distance=6.0,
             eq_distance=None,
             het_diatomics=het_diatomics,
+            completed_traj_dir=completed_traj_dir,
         )
         diatomic_dict[model_name] = diatomic
         diatomic_list.append(diatomic)
