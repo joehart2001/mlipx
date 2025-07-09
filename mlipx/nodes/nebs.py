@@ -21,7 +21,7 @@ from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer
 import flask
 from ase.io import read, write
 from copy import deepcopy
-from matplotlib.pyplot import pyplot as plt
+import matplotlib.pyplot as plt
 from ase.neb import NEBTools
 
 
