@@ -24,7 +24,7 @@ from copy import deepcopy
 import matplotlib.pyplot as plt
 from ase.neb import NEBTools
 
-
+from pathlib import Path
 
 
 class NEBinterpolate(zntrack.Node):
@@ -245,6 +245,7 @@ class NEB2(zntrack.Node):
 
     def run(self):
         calc = self.model.get_calculator()
+        nwd = Path(self.nwd)
         
         initial = read(self.data_path, index=0)
         final = read(self.data_path, index=-1)
@@ -296,9 +297,9 @@ class NEB2(zntrack.Node):
             
             if optimizer == ase.mep.neb.NEBOptimizer:
                 print("Using NEBOptimizer with ODE method")
-                opt = optimizer(neb, method='ode', trajectory=(zntrack.nwd / 'neb.traj').as_posix())
+                opt = optimizer(neb, method='ode', trajectory= nwd / 'neb.traj')
             else:
-                opt = optimizer(neb, trajectory=(zntrack.nwd / 'neb.traj').as_posix())
+                opt = optimizer(neb, trajectory=nwd / 'neb.traj')
             
             opt.run(fmax=1, steps=500)
 
@@ -307,14 +308,14 @@ class NEB2(zntrack.Node):
             neb.climb = True
             print('Climbing NEB:')
             converged = opt.run(fmax=0.05, steps=700)
-            write((zntrack.nwd / 'neb_final_climb.xyz').as_posix(), images)
+            write(nwd / 'neb_final_climb.xyz', images)
 
             # Plot NEB band and get barriers
             fig, ax = plt.subplots()
             nt = NEBTools(images)
             nt.plot_band()
             Ef_NEB, deltaE_NEB = nt.get_barrier()
-            plt.savefig((zntrack.nwd / 'neb-climb.png').as_posix())
+            plt.savefig(nwd / 'neb-climb.png')
             
             ase.io.write(self.frames_path, images, format="extxyz")
             
