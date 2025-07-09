@@ -532,3 +532,117 @@ def create_scatter_plot(
     )
 
     return fig
+from typing import Callable
+from dash import html, dcc, Input, Output, State, callback_context
+
+# --------------------- WEIGHT SCHEMAS AND CONTROLS ---------------------
+
+
+# Define schemas for weight controls for different tabs
+WEIGHT_SCHEMAS = {
+    "bulk-crystal": {
+        "store_id": "bulk-crystal-weights",
+        "reset_button_id": "reset-weights-button-bulk",
+        "weights": {
+            "phonon": 1.0,
+            "elasticity": 1.0,
+            "lattice_const": 0.2,
+        }
+    },
+    # Add more schemas here as needed
+}
+
+
+
+
+
+def build_weight_controls(schema_key: str):
+    """
+    Build a set of weight controls (sliders, inputs, reset button) for a given schema.
+    """
+    schema = WEIGHT_SCHEMAS[schema_key]
+    weight_controls = []
+
+    for name, default in schema["weights"].items():
+        slider_id = f"{schema_key}-{name}-slider"
+        input_id = f"{schema_key}-{name}-input"
+
+        weight_controls.append(html.Label(name.replace("_", " ").title()))
+        weight_controls.append(
+            html.Div([
+                dcc.Slider(
+                    id=slider_id,
+                    min=0,
+                    max=5,
+                    step=0.1,
+                    value=default,
+                ),
+                dcc.Input(
+                    id=input_id,
+                    type="number",
+                    step=0.1,
+                    value=default,
+                    style={"width": "80px"}
+                )
+            ], style={"display": "flex", "gap": "10px", "alignItems": "center"})
+        )
+
+    weight_controls.append(
+        html.Button("Reset Weights", id=schema["reset_button_id"], n_clicks=0, style={"marginTop": "10px"})
+    )
+
+    return html.Div(weight_controls, style={"margin": "20px"})
+
+
+def register_weight_callbacks(app, schema_key: str, update_table_func: Callable, schema: dict = None):
+    """
+    Register callbacks for weight controls (sync slider/input, reset, update table) for a given schema.
+    update_table_func(weights: dict) -> data for the table
+    """
+    
+    if schema is None:
+        schema = WEIGHT_SCHEMAS[schema_key]
+        
+    #schema = WEIGHT_SCHEMAS[schema_key]
+    store_id = schema["store_id"]
+    reset_button_id = schema["reset_button_id"]
+
+    # Sync sliders and inputs + reset
+    for name, default in schema["weights"].items():
+        slider_id = f"{schema_key}-{name}-slider"
+        input_id = f"{schema_key}-{name}-input"
+
+        @app.callback(
+            Output(slider_id, "value"),
+            Output(input_id, "value"),
+            Input(slider_id, "value"),
+            Input(input_id, "value"),
+            Input(reset_button_id, "n_clicks"),
+            State(store_id, "data"),
+        )
+        def sync_slider_input(slider_val, input_val, reset_clicks, store, default_val=default, key=name, _sid=slider_id, _iid=input_id, _rid=reset_button_id):
+            ctx = callback_context
+            if not ctx.triggered:
+                val = (store or {}).get(key, default_val)
+                return val, val
+            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if triggered_id == _rid:
+                return default_val, default_val
+            return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
+
+    # Reset all weights in store
+    @app.callback(
+        Output(store_id, "data"),
+        Input(reset_button_id, "n_clicks"),
+        prevent_initial_call=True
+    )
+    def reset_weights_store(n_clicks):
+        return schema["weights"]
+
+    # Update table when weights change
+    @app.callback(
+        Output(f"{schema_key}-benchmark-table", "data"),
+        Input(store_id, "data"),
+    )
+    def update_table(weights):
+        return update_table_func(weights)

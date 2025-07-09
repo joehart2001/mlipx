@@ -94,6 +94,8 @@ class BulkCrystalBenchmark(zntrack.Node):
         Register callbacks for the interactive benchmark dashboard, including the weight update callback.
         """
         # --- Callback to update benchmark table based on weights (now uses input fields) ---
+    
+    
         @app.callback(
             Output("phonon-benchmark-score-table", "data"),
             Output("phonon-benchmark-score-table", "style_data_conditional"),
@@ -101,18 +103,23 @@ class BulkCrystalBenchmark(zntrack.Node):
             Input("phonon-weight-input", "value"),
             Input("elasticity-weight-input", "value"),
             Input("lattice-const-weight-input", "value"),
+            Input("reset-weights-button", "n_clicks"),
             State("bulk-crystal-weights", "data"),
         )
-        def update_benchmark_table_and_store(phonon_w, elas_w, lat_w, stored_weights):
-            if None in (phonon_w, elas_w, lat_w):
-                # Try to fall back to stored weights
-                if stored_weights is None:
-                    raise PreventUpdate
-                phonon_w = stored_weights.get("phonon", 1.0)
-                elas_w = stored_weights.get("elasticity", 1.0)
-                lat_w = stored_weights.get("lattice_const", 0.2)
-        
-            weights = {"phonon": phonon_w, "elasticity": elas_w, "lattice_const": lat_w}
+        def update_benchmark_table_and_store(phonon_w, elas_w, lat_w, reset_clicks, stored_weights):
+            ctx = dash.callback_context
+            default_weights = {"phonon": 1.0, "elasticity": 1.0, "lattice_const": 0.2}
+
+            if not ctx.triggered:
+                raise PreventUpdate
+
+            if ctx.triggered[0]["prop_id"].split(".")[0] == "reset-weights-button":
+                weights = default_weights
+            elif None in (phonon_w, elas_w, lat_w):
+                weights = stored_weights or default_weights
+            else:
+                weights = {"phonon": phonon_w, "elasticity": elas_w, "lattice_const": lat_w}
+
             
             updated_df = BulkCrystalBenchmark.bulk_crystal_benchmark_score(
                 phonon_mae_df,
@@ -132,35 +139,42 @@ class BulkCrystalBenchmark(zntrack.Node):
             )
 
 
-        # --- Callbacks to sync sliders and input fields ---
+        # --- Callbacks to sync sliders and input fields, including reset button ---
         @app.callback(
             Output("phonon-weight", "value"),
             Output("phonon-weight-input", "value"),
             Input("phonon-weight", "value"),
             Input("phonon-weight-input", "value"),
-            prevent_initial_call=True,
+            Input("reset-weights-button", "n_clicks"),
+            State("bulk-crystal-weights", "data"),
         )
-        def sync_phonon_weight(slider_val, input_val):
+        def sync_phonon_weight(slider_val, input_val, reset_clicks, store):
             ctx = dash.callback_context
             if not ctx.triggered:
-                raise PreventUpdate
+                # Initial load
+                val = (store or {}).get("phonon", 1.0)
+                return val, val
             triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if triggered_id == "reset-weights-button":
+                return 1.0, 1.0
             return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
-
-
 
         @app.callback(
             Output("elasticity-weight", "value"),
             Output("elasticity-weight-input", "value"),
             Input("elasticity-weight", "value"),
             Input("elasticity-weight-input", "value"),
-            prevent_initial_call=True,
+            Input("reset-weights-button", "n_clicks"),
+            State("bulk-crystal-weights", "data"),
         )
-        def sync_elasticity_weight(slider_val, input_val):
+        def sync_elasticity_weight(slider_val, input_val, reset_clicks, store):
             ctx = dash.callback_context
             if not ctx.triggered:
-                raise PreventUpdate
+                val = (store or {}).get("elasticity", 1.0)
+                return val, val
             triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if triggered_id == "reset-weights-button":
+                return 1.0, 1.0
             return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
 
         @app.callback(
@@ -168,37 +182,19 @@ class BulkCrystalBenchmark(zntrack.Node):
             Output("lattice-const-weight-input", "value"),
             Input("lattice-const-weight", "value"),
             Input("lattice-const-weight-input", "value"),
-            prevent_initial_call=True,
+            Input("reset-weights-button", "n_clicks"),
+            State("bulk-crystal-weights", "data"),
         )
-        def sync_lattice_const_weight(slider_val, input_val):
+        def sync_lattice_const_weight(slider_val, input_val, reset_clicks, store):
             ctx = dash.callback_context
             if not ctx.triggered:
-                raise PreventUpdate
+                val = (store or {}).get("lattice_const", 0.2)
+                return val, val
             triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            if triggered_id == "reset-weights-button":
+                return 0.2, 0.2
             return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
 
-
-        # @app.callback(
-        #     Output("phonon-weight", "value"),
-        #     Output("phonon-weight-input", "value"),
-        #     Output("elasticity-weight", "value"),
-        #     Output("elasticity-weight-input", "value"),
-        #     Output("lattice-const-weight", "value"),
-        #     Output("lattice-const-weight-input", "value"),
-        #     Input("bulk-crystal-weights", "data"),
-        #     prevent_initial_call=True
-        # )
-        # def restore_slider_values_from_store(stored_weights):
-        #     """Restore slider values when tab is switched back"""
-        #     if stored_weights is None:
-        #         # Return default values if no stored weights
-        #         return 1.0, 1.0, 1.0, 1.0, 0.2, 0.2
-            
-        #     phonon_w = stored_weights.get("phonon", 1.0)
-        #     elas_w = stored_weights.get("elasticity", 1.0)
-        #     lat_w = stored_weights.get("lattice_const", 0.2)
-            
-        #     return phonon_w, phonon_w, elas_w, elas_w, lat_w, lat_w
 
 
         # --- Callback to update overall benchmark score table when weights are changed ---
@@ -590,9 +586,9 @@ class BulkCrystalBenchmark(zntrack.Node):
             weight_control("Phonon Weight", "phonon-weight", "phonon-weight-input", 1.0),
             weight_control("Elasticity Weight", "elasticity-weight", "elasticity-weight-input", 1.0),
             weight_control("Lattice Const Weight", "lattice-const-weight", "lattice-const-weight-input", 0.2),
+            html.Button("Reset Weights", id="reset-weights-button", n_clicks=0, style={"marginTop": "20px"}),
         ], style={"margin": "20px"})
 
-        # Remove dcc.Store(id="bulk-crystal-weights", ...) from here.
         layout = combine_apps(
             benchmark_score_df=benchmark_score_df,
             benchmark_title="Bulk Crystal Benchmark",

@@ -20,6 +20,11 @@ import os
 from mlipx.abc import ComparisonResults, NodeWithCalculator, Optimizer
 import flask
 from ase.io import read, write
+from copy import deepcopy
+from matplotlib.pyplot import pyplot as plt
+from ase.neb import NEBTools
+
+
 
 
 class NEBinterpolate(zntrack.Node):
@@ -220,7 +225,7 @@ class NEB2(zntrack.Node):
     """
 
     data_path: str = zntrack.params()
-    all_images: bool = zntrack.params(True)
+    #all_images: bool = zntrack.params(True)
     model: NodeWithCalculator = zntrack.deps()
     n_images: int = zntrack.params(5)
     k: float = zntrack.params(0.1)
@@ -239,22 +244,12 @@ class NEB2(zntrack.Node):
     results: pd.DataFrame = zntrack.plots(y="potential_energy", x="data_id")
 
     def run(self):
-        frames = []
         calc = self.model.get_calculator()
         
-        
-        if self.all_images:
-            images = read(self.data_path, index=":")
-            initial = images[0]
-            final = images[-1]
-        else:
-            initial = read(self.data_path, index=0)
-            final = read(self.data_path, index=-1)
-            images = [initial] + [initial.copy() for _ in range(self.n_images)] + [final]
-            
-        
-        for image in images:
-            image.calc = copy(calc)
+        initial = read(self.data_path, index=0)
+        final = read(self.data_path, index=-1)
+        initial.calc = calc
+        final.calc = calc
         
         
         if self.use_janus:
@@ -276,17 +271,11 @@ class NEB2(zntrack.Node):
         else:
             from ase.mep import NEB
 
-            #images = [initial] + [initial.copy() for i in range(self.n_images)] + [final]
-            
-            neb = NEB(images, k=self.k)
-            
-
 
             try:
                 optimizer = getattr(ase.optimize, self.optimizer)
             except AttributeError:
                 optimizer = getattr(ase.mep.neb, self.optimizer)
-                
                 
             optimizer_fallback = getattr(ase.optimize, self.optimizer_fallback)
             
@@ -295,61 +284,98 @@ class NEB2(zntrack.Node):
             
             dyn_final = optimizer_fallback(final)
             dyn_final.run(fmax=self.fmax)
-            
-            if self.all_images:
-                neb.interpolate()
-                
-            # for image in images[1:len(images) - 1]:
-            #     image.calc = copy(calc)
-            #     image.get_potential_energy()
 
-                    
+            # Initial NEB interpolation
+            interpolated = NEB2.add_intermediary_images([initial, final], 1e-10, max_number=self.n_images-2)
+            images = interpolated[1]
+            for image in images:
+                image.set_calculator(deepcopy(calc))
+            
+            # NEB calculations
+            neb = NEB(images=images, climb=False)
+            
             if optimizer == ase.mep.neb.NEBOptimizer:
                 print("Using NEBOptimizer with ODE method")
-                #dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix(), method='ode')
-                dyn = optimizer(neb, method='ode')
+                opt = optimizer(neb, method='ode', trajectory=zntrack.nwd / 'neb.traj')
             else:
-                #dyn = optimizer(neb, trajectory=self.trajectory_path.as_posix())
-                dyn = optimizer(neb)
-                dyn = optimizer(neb)
+                opt = optimizer(neb, trajectory=zntrack.nwd / 'neb.traj')
+            
+            opt.run(fmax=1, steps=500)
+
+
                 
-            dyn.run(fmax=self.fmax, steps=self.n_steps)
-            
-            #dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
-            if self.optimizer_fallback:
-                dyn_fallback = optimizer_fallback(neb)
-                dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
-            
-            for image in neb.images:
-                frames += [image]
-            
-            ase.io.write(self.frames_path, images)
-            
-        # forces = neb.get_forces()
-        # max_force = max(np.linalg.norm(f) for f in forces)
+            neb.climb = True
+            print('Climbing NEB:')
+            converged = opt.run(fmax=0.05, steps=700)
+            write(zntrack.nwd / 'neb_final_climb.xyz', images)
 
-        # # Run fallback only if not converged
-        # if max_force > self.fmax:
-        #     print(f"NEBOptimizer did not converge (fmax = {max_force:.4f}), triggering fallback: {self.optimizer_fallback}")
-        #     dyn_fallback = optimizer_fallback(neb, trajectory=self.trajectory_path.as_posix())
-        #     dyn_fallback.run(fmax=self.fmax, steps=self.n_steps)
-        # else:
-        #     print(f"NEBOptimizer converged (fmax = {max_force:.4f}), skipping fallback.")
-
+            # Plot NEB band and get barriers
+            fig, ax = plt.subplots()
+            nt = NEBTools(images)
+            nt.plot_band()
+            Ef_NEB, deltaE_NEB = nt.get_barrier()
+            plt.savefig(zntrack.nwd / 'neb-climb.png')
+            
+            ase.io.write(self.frames_path, images, format="extxyz")
+            
 
         row_dicts = []
-        for i, frame in enumerate(frames):
+        for i, frame in enumerate(images):
             row_dicts.append(
                 {
                     "data_id": i,
                     "potential_energy": frame.get_potential_energy(),
                     "neb_adjusted_energy": frame.get_potential_energy()
-                    - frames[0].get_potential_energy(),
+                    - images[0].get_potential_energy(),
+                    'converged': converged,
                 },
             )
         self.results = pd.DataFrame(row_dicts)
 
 
+    # functions from Lars
+    @staticmethod
+    def get_distances_between_images(imagesi):
+        """Returns distance between each image ie 2norm of d2-d1"""
+
+        spring_lengths = []
+        for j in range(len(imagesi) - 1):
+            spring_vec = imagesi[j + 1].get_positions() - imagesi[j].get_positions()
+            spring_lengths.append(np.linalg.norm(spring_vec))
+        return np.array(spring_lengths)
+
+    @staticmethod
+    def add_intermediary_images(
+        imagesi, dist_cutoff, interpolate_method="idpp", max_number=100, verbose=False,
+    ):
+        """Add additional images inbetween existing ones, purely based on geometry"""
+        # create copy of images
+        imagesi = [at.copy() for at in imagesi]
+        interp_images = []
+        max_dist_images = max(NEB2.get_distances_between_images(imagesi))
+        for iter in range(max_number):
+            if max_dist_images <= dist_cutoff:
+                print(f"Max distance readched after {iter} iterations")
+                break
+            distances = NEB2.get_distances_between_images(imagesi)
+            jmax = np.argmax(distances)
+
+            toInterpolate = [imagesi[jmax]]
+            toInterpolate += [toInterpolate[0].copy()]
+            toInterpolate += [imagesi[jmax + 1]]
+
+            from ase.mep import NEB
+            neb = NEB(toInterpolate)
+            neb.interpolate(method=interpolate_method, apply_constraint=True)
+
+            interp_images.append([jmax, toInterpolate[1].copy()])
+            # Add images
+            imagesi.insert(jmax + 1, toInterpolate[1].copy())
+            if verbose:
+                print(f"Additional image added at {jmax} with distances {max(distances)}")
+            max_dist_images = max(NEB2.get_distances_between_images(imagesi))
+
+        return interp_images, imagesi
 
 
 

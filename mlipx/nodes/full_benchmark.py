@@ -383,7 +383,11 @@ class FullBenchmark(zntrack.Node):
         }
 
         full_layout = html.Div([
-            dcc.Store(id="bulk-crystal-weights", storage_type="session"),
+            dcc.Store(
+                id="bulk-crystal-weights", 
+                storage_type="session",
+                data={"phonon": 1.0, "elasticity": 1.0, "lattice_const": 0.2}
+            ),
             dcc.Tabs(
                 id="tabs",
                 value="Overall Benchmark",
