@@ -1,5 +1,7 @@
 {% if standalone is not defined %}
 {% set standalone = true %}
+{% else %}
+{% set standalone = false %}
 {% endif %}
 
 {% if standalone %}
@@ -9,10 +11,12 @@ from models import MODELS
 from pathlib import Path
 
 project = zntrack.Project()
+
+
 {% endif %}
 
 
-{% set standalone = false %}
+
 {% include "X23_benchmark.py.jinja2" %}
 {% include "DMC_ICE_benchmark.py.jinja2" %}
 
