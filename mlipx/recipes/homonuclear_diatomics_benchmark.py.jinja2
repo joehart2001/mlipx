@@ -22,6 +22,8 @@ het_diatomics = False
 {% if completed_traj_dir %}
 completed_traj_dir = "{{completed_traj_dir}}"
 print(f"loading progress from directory: {completed_traj_dir}")
+{% else %}
+completed_traj_dir = None
 {% endif %}
 
 

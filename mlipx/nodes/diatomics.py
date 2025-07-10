@@ -131,7 +131,8 @@ class HomonuclearDiatomics(zntrack.Node):
                     energies.append(energy)
                     distances.append(distance)
 
-                df = pd.DataFrame(energies, index=distances, columns=[element])
+                df = pd.DataFrame({element: energies}, index=np.round(distances, 6))
+                df = df[~df.index.duplicated(keep="first")]
                 e_v[element] = df
 
                 for dist, en in zip(distances, energies):
@@ -174,7 +175,9 @@ class HomonuclearDiatomics(zntrack.Node):
                     forces.append(molecule.get_forces())
                     self.frames.append(freeze_copy_atoms(molecule))
                     traj_frames.append(freeze_copy_atoms(molecule))
-                e_v[element] = pd.DataFrame(energies, index=distances, columns=[element])
+                df = pd.DataFrame({element: energies}, index=np.round(distances, 6))
+                df = df[~df.index.duplicated(keep="first")]
+                e_v[element] = df
                 
                 ase.io.write(
                     (self.trajectory_dir_path / f"{element}2.extxyz"),
@@ -233,7 +236,8 @@ class HomonuclearDiatomics(zntrack.Node):
                     energies.append(energy)
                     distances.append(distance)
 
-                df = pd.DataFrame(energies, index=distances, columns=[f"{elem1}-{elem2}"])
+                df = pd.DataFrame({f"{elem1}-{elem2}": energies}, index=np.round(distances, 6))
+                df = df[~df.index.duplicated(keep="first")]
                 e_v[f"{elem1}-{elem2}"] = df
                 continue
             # --- End new block ---
@@ -262,7 +266,8 @@ class HomonuclearDiatomics(zntrack.Node):
                     energies.append(molecule.get_potential_energy())
                     self.frames.append(freeze_copy_atoms(molecule))
                     traj_frames.append(freeze_copy_atoms(molecule))
-                df = pd.DataFrame(energies, index=distances, columns=[f"{elem1}-{elem2}"])
+                df = pd.DataFrame({f"{elem1}-{elem2}": energies}, index=np.round(distances, 6))
+                df = df[~df.index.duplicated(keep="first")]
                 e_v[f"{elem1}-{elem2}"] = df
                 ase.io.write((self.trajectory_dir_path / f"{elem1}{elem2}.extxyz"), traj_frames, append=True)
             except Exception as e:
@@ -271,10 +276,16 @@ class HomonuclearDiatomics(zntrack.Node):
         
         #self.results = pd.DataFrame(results_list)
 
-        self.results = functools.reduce(
-            lambda x, y: pd.merge(x, y, left_index=True, right_index=True, how="outer"),
-            e_v.values(),
-        )
+        # Concatenate results and ensure clean index
+        self.results = pd.concat(e_v.values(), axis=1)
+
+        # Drop rows that have NaNs in all columns
+        self.results = self.results.dropna(how="all")
+
+        # Round and sort index for consistency
+        self.results.index = self.results.index.round(6)
+        self.results = self.results[~self.results.index.duplicated(keep="first")]
+        self.results = self.results.sort_index()
 
     def get_traj(self, element) -> list[ase.Atoms]:
 

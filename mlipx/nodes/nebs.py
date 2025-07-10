@@ -297,9 +297,9 @@ class NEB2(zntrack.Node):
             
             if optimizer == ase.mep.neb.NEBOptimizer:
                 print("Using NEBOptimizer with ODE method")
-                opt = optimizer(neb, method='ode', trajectory= nwd / 'neb.traj')
+                opt = optimizer(neb, method='ode', trajectory= (nwd / 'neb.traj').as_posix())
             else:
-                opt = optimizer(neb, trajectory=nwd / 'neb.traj')
+                opt = optimizer(neb, trajectory=(nwd / 'neb.traj').as_posix())
             
             opt.run(fmax=1, steps=500)
 
@@ -315,7 +315,7 @@ class NEB2(zntrack.Node):
             nt = NEBTools(images)
             nt.plot_band()
             Ef_NEB, deltaE_NEB = nt.get_barrier()
-            plt.savefig(nwd / 'neb-climb.png')
+            plt.savefig((nwd / 'neb-climb.png').as_posix())
             
             ase.io.write(self.frames_path, images, format="extxyz")
             
