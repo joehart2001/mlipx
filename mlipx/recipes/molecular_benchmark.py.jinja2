@@ -15,7 +15,7 @@ project = zntrack.Project()
 
 {% set standalone = false %}
 {% include "GMTKN55_benchmark.py.jinja2" %}
-#{% include "homonuclear_diatomics_benchmark.py.jinja2" %}
+{% include "homonuclear_diatomics_benchmark.py.jinja2" %}
 
 
 with project.group('mol-benchmark'):

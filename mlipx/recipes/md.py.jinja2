@@ -73,7 +73,6 @@ for model_name, model in MODELS.items():
                 #modifiers=[t_ramp],
                 steps=steps,
                 print_energy_every=1000,
-                resume_MD=resume_MD,
                 resume_trajectory_path=resume_trajectory_path,
             )
             if len(frames) == 1:
