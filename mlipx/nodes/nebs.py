@@ -523,23 +523,6 @@ class NEB2(zntrack.Node):
 
 
 
-        ref_data = {
-            "Si_64": [],
-            "Si_216": [],
-            "LiFePO4_b": [0.27],
-            #"LiFePO4_c": [2.5],
-            
-        }
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -590,6 +573,7 @@ class NEB2(zntrack.Node):
             #"LiFePO4_b": "LiFePO4",
             "_LiFePO4_start_end_b_": "LiFePO4",
             "_LiFePO4_start_end_c_": "LiFePO4",
+            #t1x
         }
 
         # === Group nodes by system group ===
@@ -709,9 +693,9 @@ class NEB2(zntrack.Node):
             
             
         # Use assets_dir from the first group for Dash assets
-        first_assets_dir = next(iter(all_group_data.values()))[2]
-        print("Serving assets from:", first_assets_dir)
-        app = dash.Dash(__name__, assets_folder=first_assets_dir)
+        assets_dir = os.path.abspath("assets")
+        print("Serving assets from:", assets_dir)
+        app = dash.Dash(__name__, assets_folder=assets_dir)
         #app.server.static_folder = 'assets'
         #app.server.static_url_path = '/assets'
 

@@ -461,6 +461,7 @@ def phonons_all(
     ref: bool = False,
     threading: bool = False,
     ray: bool = False,
+    mp_ids_done: str | None = None,
 ):
     """Run phonon calculations."""
     if models is not None:
@@ -482,6 +483,7 @@ def phonons_all(
         ref=ref,
         threading=threading,
         ray=ray,
+        mp_ids_done=mp_ids_done,
     )
     
     

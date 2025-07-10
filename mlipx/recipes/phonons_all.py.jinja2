@@ -38,6 +38,12 @@ mp_ids = mp_ids[:{{ n_phonons }}]
 {% elif n_phonons %}
 mp_ids = mp_ids[{{ n_phonons_start }}:]
 
+{% elif mp_ids_done %}
+
+with open("{{mp_ids_done}}") as f:
+    done_ids = set(line.strip() for line in f if line.strip())
+mp_ids = sorted(mp_ids - done_ids)
+
 {% endif %}
 print(f"Using {len(mp_ids)} mp-ids")
 
