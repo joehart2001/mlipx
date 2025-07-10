@@ -23,6 +23,7 @@ import dash
 from mlipx.dash_utils import run_app, dash_table_interactive
 import pickle
 from pathlib import Path
+from ase.io.trajectory import Trajectory
 
 
 
@@ -90,82 +91,131 @@ class MolecularDynamics(zntrack.Node):
     observers: list[DynamicsObserver] = zntrack.deps(None)
     modifiers: list[DynamicsModifier] = zntrack.deps(None)
     external_save_path: pathlib.Path = zntrack.params(None)
-    resume_MD: bool = zntrack.params(False)
     resume_trajectory_path: pathlib.Path = zntrack.params(None)
 
     observer_metrics: dict = zntrack.metrics()
     plots: pd.DataFrame = zntrack.plots(y=["energy", "fmax"], autosave=True)
 
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
-    velocities_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "velocities.npy")
+    traj_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "trajectory.traj")
+
 
     def run(self):
         start_time = time.time()
 
         # Only check for existing frames and plots if resuming MD
-        if self.resume_MD:
-            existing_frames = []
-            start_idx = 0
-            if Path(self.resume_trajectory_path).exists():
-                existing_frames = list(ase.io.iread(self.resume_trajectory_path, format="extxyz"))
-                start_idx = len(existing_frames) * self.write_frames_every
+        # if self.resume_trajectory_path is not None:
+        #     if Path(self.resume_trajectory_path).exists():
+        #         atoms = read(self.resume_trajectory_path, index=-1)
+            
+                #existing_frames = list(ase.io.iread(self.resume_trajectory_path, format="extxyz"))
+                #start_idx = len(existing_frames) * self.write_frames_every
 
+        #     plots_path = self.frames_path.with_name("plots.csv")
+        #     if plots_path.exists():
+        #         self.plots = pd.read_csv(plots_path)
+        #     else:
+        # self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
+        # else:
+            
+        plots_path = self.frames_path.with_name("plots.csv")
+
+        if self.observers is None:
+            self.observers = []
+        if self.modifiers is None:
+            self.modifiers = []
+
+        if self.resume_trajectory_path and Path(self.resume_trajectory_path).exists():
+            # Resume from last frame
+            atoms = read(self.resume_trajectory_path, index=-1)
+            atoms.calc = self.model.get_calculator()
+
+            # Load full trajectory to count previous frames
+            full = read(self.resume_trajectory_path, index=":")
+            start_idx = len(full) * self.write_frames_every
+            # populate the traj file with the existing frames
+            with Trajectory(self.traj_path, mode="w") as traj:
+                for atoms_i in full:
+                    traj.write(atoms_i)
+
+            if start_idx >= self.steps:
+                print(f"Already completed {start_idx} steps, stopping run.")
+                # repopulate the node directory with the existing data
+                write(self.traj_path, full, format="extxyz")
+                
+                self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
+                
+                for atoms_i in full:
+                    ase.io.write(self.frames_path, atoms_i, append=True)
+                    if self.external_save_path:
+                        ase.io.write(self.external_save_path, atoms_i, append=True)
+                    plots = {
+                        "energy": atoms_i.get_potential_energy(),
+                        "fmax": np.max(np.linalg.norm(atoms_i.get_forces(), axis=1)),
+                        "fnorm": np.linalg.norm(atoms_i.get_forces()),
+                    }
+                    self.plots.loc[len(self.plots)] = plots
+                self.plots.to_csv(plots_path, index=False)
+                self.observer_metrics = {}
+                return
+            
+
+            print(f"Resuming from trajectory: {self.resume_trajectory_path} at step {start_idx}")
+
+            traj_mode = 'a'  # Append to both files
+
+            # Try to resume previous plot data
             plots_path = self.frames_path.with_name("plots.csv")
             if plots_path.exists():
                 self.plots = pd.read_csv(plots_path)
             else:
                 self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
         else:
+            # Fresh start
+            if self.data:
+                atoms = self.data[self.data_id]
+            elif self.data_path:
+                atoms = read(self.data_path, self.data_id)
+            atoms.calc = self.model.get_calculator()
             start_idx = 0
+            traj_mode = 'w'
             self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
-            plots_path = self.frames_path.with_name("plots.csv")
 
-        if self.observers is None:
-            self.observers = []
-        if self.modifiers is None:
-            self.modifiers = []
-            
-        if self.resume_trajectory_path:
-            atoms = read(self.resume_trajectory_path, index=-1)
-        elif self.data:
-            atoms = self.data[self.data_id]
-        elif self.data_path:
-            atoms = read(self.data_path, self.data_id)
-
-        atoms.calc = self.model.get_calculator()
         dyn = self.thermostat.get_molecular_dynamics(atoms)
         for obs in self.observers:
             obs.initialize(atoms)
 
         self.observer_metrics = {}
 
-        # --- Collect velocities per frame ---
-        from numpy.lib.format import open_memmap
-        n_atoms = len(atoms)
-        n_frames = self.steps // self.write_frames_every + 1
-        velocities_memmap = open_memmap(self.velocities_path, mode='w+', dtype='float64', shape=(n_frames, n_atoms, 3))
-        frame_idx = 0
 
-        for idx, _ in enumerate(
+        
+        if self.resume_trajectory_path:
+            if Path(self.resume_trajectory_path).exists():
+                resume_traj = Trajectory(self.resume_trajectory_path, mode="a", atoms=atoms)
+                node_traj = Trajectory(self.traj_path, mode=traj_mode, atoms=atoms)
+                dyn.attach(resume_traj.write, interval=self.write_frames_every)
+                dyn.attach(node_traj.write, interval=self.write_frames_every)
+        else:
+            trajectory = Trajectory(self.traj_path, mode=traj_mode, atoms=atoms)
+            dyn.attach(trajectory.write, interval=self.write_frames_every)
+            
+        remaining_steps = max(0, self.steps - start_idx)
+
+        for local_idx, _ in enumerate(
             tqdm.tqdm(
-                dyn.irun(steps=self.steps),
+                dyn.irun(steps=remaining_steps),
                 total=self.steps,
-                initial=start_idx if self.resume_MD else 0
+                initial=start_idx,
             )
         ):
-            if self.resume_MD and idx < start_idx:
-                # Don't write the first frame if already present
-                continue
+            idx = start_idx + local_idx
+
             if idx % self.write_frames_every == 0:
                 ase.io.write(self.frames_path, atoms, append=True)
-                if self.resume_trajectory_path:
-                    ase.io.write(self.resume_trajectory_path, atoms, append=True)
+
+
                 if self.external_save_path:
                     ase.io.write(self.external_save_path, atoms, append=True)
-
-                # Collect velocities for this frame directly to disk
-                velocities_memmap[frame_idx] = atoms.get_velocities()
-                frame_idx += 1
 
                 plots = {
                     "energy": atoms.get_potential_energy(),
@@ -198,8 +248,6 @@ class MolecularDynamics(zntrack.Node):
             for mod in self.modifiers:
                 mod.modify(dyn, idx)
 
-        # velocities_memmap is already written to disk during the run
-
         for obs in self.observers:
             # document all attached observers
             self.observer_metrics[obs.name] = self.observer_metrics.get(obs.name, -1)
@@ -212,11 +260,10 @@ class MolecularDynamics(zntrack.Node):
             return list(ase.io.iread(f, format="extxyz"))
 
     @property
-    def velocities(self) -> np.ndarray:
-        if not self.velocities_path.exists():
-            raise FileNotFoundError(f"Velocities file {self.velocities_path} does not exist.")
-        return np.load(self.velocities_path)
-
+    def traj(self) -> list[ase.Atoms]:
+        """Return the trajectory as a list of Atoms objects."""
+        with self.state.fs.open(self.traj_path, "rb") as f:
+            return list(Trajectory(f))
 
 
     @property

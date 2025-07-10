@@ -35,7 +35,7 @@ mp_ids = mp_ids[{{ n_phonons_start }}:{{ n_phonons }}]
 {% elif n_phonons %}
 mp_ids = mp_ids[:{{ n_phonons }}]
 
-{% elif n_phonons %}
+{% elif n_phonons_start %}
 mp_ids = mp_ids[{{ n_phonons_start }}:]
 
 {% elif mp_ids_done %}
