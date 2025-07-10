@@ -308,7 +308,7 @@ class NEB2(zntrack.Node):
             neb.climb = True
             print('Climbing NEB:')
             converged = opt.run(fmax=0.05, steps=700)
-            write(nwd / 'neb_final_climb.xyz', images)
+            write((nwd / 'neb_final_climb.xyz').as_posix(), images)
 
             # Plot NEB band and get barriers
             fig, ax = plt.subplots()
