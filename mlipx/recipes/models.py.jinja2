@@ -181,12 +181,26 @@ class SumCalcWrapper:
 
                 if class_name == "FAIRChemCalculator":
                     from fairchem.core import pretrained_mlip, FAIRChemCalculator
-                    predictor = pretrained_mlip.get_predict_unit(
-                        kwargs["model_name"],
-                        device=device,
-                        overrides=kwargs.get("overrides", {})
-                    )
-                    calc = FAIRChemCalculator(predictor, task_name=kwargs.get("task_name", "omat"))
+                    
+                    model_name = kwargs["model_name"]
+                    model_path = Path(self.model_name)
+                    if model_path.exists() and model_path.suffix == ".pt":
+                        # Load from checkpoint directly
+                        calc = FAIRChemCalculator.from_model_checkpoint(
+                            str(model_path),
+                            task_name=kwargs.get("task_name", "omat"),
+                            device=device,
+                            overrides=kwargs.get("overrides", {})
+                        )
+                    else:
+                        # Load from pretrained registry
+                        predictor = pretrained_mlip.get_predict_unit(
+                            model_name,
+                            device=device,
+                            overrides=kwargs.get("overrides", {})
+                        )
+                        calc = FAIRChemCalculator(predictor, task_name=kwargs.get("task_name", "omat"))
+
 
                 elif class_name == "OrbCalc":
                     name = kwargs.pop("name")
