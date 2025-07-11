@@ -616,30 +616,6 @@ class PhononDispersion(zntrack.Node):
         
         #-------------
         
-            
-        # for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures"):
-        #     if not PhononDispersion.process_reference_data(ref_node_dict, mp_id, ref_band_data_dict, 
-        #                                 ref_benchmarks_dict, pred_benchmarks_dict):
-        #         continue
-            
-        #     phonon_plot_paths[mp_id] = {}
-            
-        #     # process
-        #     PhononDispersion.process_prediction_data(
-        #         pred_node_dict[mp_id], 
-        #         ref_node_dict[mp_id], 
-        #         mp_id,
-        #         ref_benchmarks_dict,
-        #         pred_benchmarks_dict,
-        #         model_benchmarks_dict,
-        #         plot_stats_dict,
-        #         scatter_to_dispersion_map,
-        #         phonon_plot_paths,
-        #         point_index_to_id,
-        #         benchmarks
-        #     )
-        
-        # 
         
         from joblib import Parallel, delayed, parallel_backend
 
@@ -654,12 +630,13 @@ class PhononDispersion(zntrack.Node):
         #         ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing phonons")
         #     )
             
-        results = Parallel(n_jobs=-1)(
+        results = Parallel(n_jobs=n_jobs)(
             delayed(PhononDispersion.process_mpid)(
                 mp_id,
                 pred_node_dict,
                 ref_node_dict,
-                benchmarks
+                benchmarks,
+                no_plots=no_plots
             ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures")
         )
 

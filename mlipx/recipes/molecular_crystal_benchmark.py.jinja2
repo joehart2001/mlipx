@@ -1,7 +1,10 @@
 {% if standalone is not defined %}
 {% set standalone = true %}
-{% else %}
-{% set standalone = false %}
+{% set build = true %}
+{% endif %}
+
+{% if build is not defined %}
+{% set build = false %}
 {% endif %}
 
 {% if standalone %}
@@ -11,12 +14,10 @@ from models import MODELS
 from pathlib import Path
 
 project = zntrack.Project()
-
-
 {% endif %}
 
 
-
+{% set standalone = false %}
 {% include "X23_benchmark.py.jinja2" %}
 {% include "DMC_ICE_benchmark.py.jinja2" %}
 
@@ -29,5 +30,7 @@ with project.group('mol-crystal-benchmark'):
 
 
 {% if standalone %}
+project.build()
+{% if build %}
 project.build()
 {% endif %}
