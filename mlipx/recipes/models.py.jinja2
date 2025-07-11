@@ -183,7 +183,7 @@ class SumCalcWrapper:
                     from fairchem.core import pretrained_mlip, FAIRChemCalculator
                     
                     model_name = kwargs["model_name"]
-                    model_path = Path(self.model_name)
+                    model_path = Path(model_name)
                     if model_path.exists() and model_path.suffix == ".pt":
                         # Load from checkpoint directly
                         calc = FAIRChemCalculator.from_model_checkpoint(
