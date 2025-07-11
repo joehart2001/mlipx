@@ -218,6 +218,12 @@ class OC157Benchmark(zntrack.Node):
     
     
     
+    
+    
+    
+    
+    
+    
     @staticmethod
     def benchmark_interactive(
         node_dict: dict[str, "OC157Benchmark"],
@@ -226,16 +232,30 @@ class OC157Benchmark(zntrack.Node):
         normalise_to_model: t.Optional[str] = None,
     ):
         from mlipx.dash_utils import run_app
+        from scipy.stats import pearsonr
 
         mae_dict = {}
+        rmsd_dict = {}
+        pearsons_dict = {}
         rank_dict = {}
         rel_df_all = []
 
+        dft_df = list(node_dict.values())[0].get_ref.copy()
+        dft_df = dft_df[["dE_2-1", "dE_3-1", "dE_3-2"]]
+        dft_values = dft_df.values.flatten()
+
         for model_name, node in node_dict.items():
-            mae_dict[model_name] = node.get_mae
-            rank_dict[model_name] = node.get_rank_acc
             rel_df = node.get_relative_energies.copy()
             rel_df["Model"] = model_name
+            pred_values = rel_df[["dE_2-1", "dE_3-1", "dE_3-2"]].values.flatten()
+            mae = np.mean(np.abs(pred_values - dft_values))
+            # Insert RMSD and Pearson r calculation
+            rmsd = np.sqrt(np.mean((pred_values - dft_values) ** 2))
+            r, _ = pearsonr(dft_values, pred_values)
+            rmsd_dict[model_name] = rmsd
+            pearsons_dict[model_name] = r
+            mae_dict[model_name] = mae
+            rank_dict[model_name] = node.get_rank_acc
             rel_df_all.append(rel_df)
 
         rel_all_df = pd.concat(rel_df_all, axis=0)
@@ -243,6 +263,8 @@ class OC157Benchmark(zntrack.Node):
         mae_df = (
             pd.DataFrame(mae_dict.items(), columns=["Model", "MAE (meV)"])
             .merge(pd.DataFrame(rank_dict.items(), columns=["Model", "Ranking Accuracy"]), on="Model")
+            .merge(pd.DataFrame(rmsd_dict.items(), columns=["Model", "RMSD (meV)"]), on="Model")
+            .merge(pd.DataFrame(pearsons_dict.items(), columns=["Model", "Pearson r"]), on="Model")
         )
 
         mae_df["Score"] = mae_df[["MAE (meV)", "Ranking Accuracy"]].apply(
@@ -262,10 +284,6 @@ class OC157Benchmark(zntrack.Node):
         if ui is None and run_interactive:
             return mae_df, rel_all_df
 
-        dft_df = list(node_dict.values())[0].get_ref.copy()
-        dft_df = dft_df[["dE_2-1", "dE_3-1", "dE_3-2"]]
-        dft_values = dft_df.values.flatten()
-
         # Create a grid of subplots, one for each model
         from plotly.subplots import make_subplots
         from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -284,17 +302,14 @@ class OC157Benchmark(zntrack.Node):
 
         for i, model in enumerate(mae_df["Model"]):
             full_df = rel_df_all[i].copy()
-
             system_labels = full_df[["system_id", "composition"]].apply(
                 lambda row: f"{row.system_id}: {row.composition}", axis=1
             ).tolist()
-            # Insert energy_types and energy_labels
             energy_types = ["dE_2-1", "dE_3-1", "dE_3-2"]
             pred_df = full_df.drop(columns=["Model", "system_id", "composition"]).reset_index(drop=True)
             pred_values = pred_df[["dE_2-1", "dE_3-1", "dE_3-2"]].values.flatten()
             n_pred = len(pred_values)
             dft_slice = dft_values[:n_pred]
-
             energy_labels = []
             hover_labels = []
             for system_label in system_labels:
@@ -305,10 +320,8 @@ class OC157Benchmark(zntrack.Node):
                 "DFT Relative Energy": dft_slice.astype(float),
                 "Predicted Relative Energy": pred_values.astype(float)
             })
-
             row = i // n_cols + 1
             col = i % n_cols + 1
-
             fig_rel.add_trace(
                 go.Scatter(
                     x=merged_df["DFT Relative Energy"],
@@ -343,7 +356,6 @@ class OC157Benchmark(zntrack.Node):
             rmsd = np.sqrt(mse)
             r, _ = pearsonr(merged_df["DFT Relative Energy"], merged_df["Predicted Relative Energy"])
             n_points = len(merged_df)
-
             fig_rel.add_annotation(
                 text=f"N = {n_points} energies, {n_points/3} systems<br>MAE = {mae:.2f} eV<br>RMSD = {rmsd:.2f} eV<br>Pearson r = {r:.2f}",
                 xref="paper",

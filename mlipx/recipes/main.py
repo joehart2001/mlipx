@@ -661,7 +661,7 @@ def atomisation_energy(
     
 
 @app.command()
-def X23(
+def x23(
     initialize: bool = False,
     repro: bool = False,
     datapath: str | None = None,
@@ -682,6 +682,7 @@ def X23(
         n_materials=n_materials,
         smiles=smiles,
     )
+    
     
 @app.command()
 def DMC_ICE(
@@ -805,6 +806,32 @@ def homonuclear_diatomics_benchmark(
         het_diatomics=het_diatomics,
         completed_traj_dir=completed_traj_dir,
     )
+    
+    
+@app.command()
+def oc157(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    n_materials: int | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run oc157 benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "oc157_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        n_materials=n_materials,
+        smiles=smiles,
+    )
+    
+    
     
 @app.command()
 def further_applications_benchmark(
