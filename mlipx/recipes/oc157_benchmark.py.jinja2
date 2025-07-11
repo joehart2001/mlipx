@@ -13,7 +13,7 @@ project = zntrack.Project()
 
 oc_dict = {}
 oc_list = []
-for model_name, model in MODELS_subset.items():
+for model_name, model in MODELS.items():
     with project.group(model_name, "oc157"):
         oc = mlipx.OC157Benchmark(
                 model=model,
