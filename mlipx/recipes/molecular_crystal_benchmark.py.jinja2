@@ -31,6 +31,6 @@ with project.group('mol-crystal-benchmark'):
 
 {% if standalone %}
 project.build()
-{% if build %}
+{% elif build %}
 project.build()
 {% endif %}
