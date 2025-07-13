@@ -78,7 +78,7 @@ for model_name, model in MODELS.items():
                 ensemble="{{ ensemble }}",
             )
             if len(frames) == 1:
-            MD_dict[model_name] = md
+                MD_dict[model_name] = md
             else:
                 MD_dict[f"{model_name}_{idx}"] = md
             MD_list.append(md)
