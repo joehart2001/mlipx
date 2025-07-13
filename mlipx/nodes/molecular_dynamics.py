@@ -36,6 +36,7 @@ from mlipx.abc import (
 )
 
 
+
 @dataclasses.dataclass
 class LangevinConfig:
     """Configure a Langevin thermostat for molecular dynamics.
@@ -49,7 +50,6 @@ class LangevinConfig:
     friction : float
         Friction coefficient of the thermostat.
     """
-
     timestep: float
     temperature: float
     friction: float
@@ -60,6 +60,42 @@ class LangevinConfig:
             timestep=self.timestep * ase.units.fs,
             temperature_K=self.temperature,
             friction=self.friction,
+        )
+
+
+# NPTConfig dataclass for NPT ensemble
+@dataclasses.dataclass
+class NPTConfig:
+    """Configure an NPT barostat for molecular dynamics.
+
+    Parameters
+    ----------
+    timestep : float
+        Time step for the MD simulation in fs.
+    temperature : float
+        Target temperature in Kelvin.
+    externalstress : float
+        External pressure/stress (default: 0.0).
+    ttime : float
+        Thermostat time constant in fs.
+    pfactor : float
+        Barostat mass factor (dimensionless or in ASE units).
+    """
+    timestep: float
+    temperature: float
+    externalstress: float = 0.0
+    ttime: float = 20.0    # thermostat time in fs
+    pfactor: float = 2.0   # Barostat parameter in GPa
+
+    def get_molecular_dynamics(self, atoms):
+        from ase.md.npt import NPT
+        return NPT(
+            atoms,
+            timestep=self.timestep * ase.units.fs,
+            temperature_K=self.temperature,
+            externalstress=self.externalstress,
+            ttime=self.ttime * ase.units.fs,
+            pfactor=self.pfactor*ase.units.GPa*(ase.units.fs**2),
         )
 
 
@@ -78,10 +114,12 @@ class MolecularDynamics(zntrack.Node):
         Index of the initial configuration to use.
     steps : int, default=100
         Number of steps to run the simulation.
+    ensemble : str, default="NVT"
+        Ensemble to use for molecular dynamics ("NVT" or "NPT").
     """
 
     model: NodeWithCalculator = zntrack.deps()
-    thermostat: NodeWithMolecularDynamics = zntrack.deps()
+    thermostat_barostat_config: t.Union[LangevinConfig, NPTConfig] = zntrack.deps()
     data: list[ase.Atoms] = zntrack.deps(None)
     data_path: pathlib.Path = zntrack.params(None)
     data_id: int = zntrack.params(-1)
@@ -92,6 +130,7 @@ class MolecularDynamics(zntrack.Node):
     modifiers: list[DynamicsModifier] = zntrack.deps(None)
     external_save_path: pathlib.Path = zntrack.params(None)
     resume_trajectory_path: pathlib.Path = zntrack.params(None)
+    ensemble: str = zntrack.params("NVT")  # Options: "NVT", "NPT"
 
     observer_metrics: dict = zntrack.metrics()
     plots: pd.DataFrame = zntrack.plots(y=["energy", "fmax"], autosave=True)
@@ -181,7 +220,21 @@ class MolecularDynamics(zntrack.Node):
             traj_mode = 'w'
             self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
 
-        dyn = self.thermostat.get_molecular_dynamics(atoms)
+        # Select MD integrator based on ensemble
+        if self.ensemble.upper() == "NVT":
+            dyn = self.thermostat.get_molecular_dynamics(atoms)
+        elif self.ensemble.upper() == "NPT":
+            from ase.md.npt import NPT
+            dyn = NPT(
+                atoms,
+                timestep=self.thermostat.timestep * ase.units.fs,
+                temperature_K=self.thermostat.temperature,
+                externalstress=0.0,
+                ttime=25.0 * ase.units.fs,
+                pfactor=1.0,
+            )
+        else:
+            raise ValueError(f"Unknown ensemble '{self.ensemble}'. Choose 'NVT' or 'NPT'.")
         for obs in self.observers:
             obs.initialize(atoms)
 

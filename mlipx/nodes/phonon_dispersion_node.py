@@ -629,6 +629,9 @@ class PhononDispersion(zntrack.Node):
         #             no_plots=no_plots
         #         ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing phonons")
         #     )
+        
+        #mp_ids_list = list(pred_node_dict.keys())[:100]
+        
             
         results = Parallel(n_jobs=n_jobs)(
             delayed(PhononDispersion.process_mpid)(
