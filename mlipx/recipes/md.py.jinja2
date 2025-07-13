@@ -58,7 +58,7 @@ raise ValueError("Invalid ensemble: {{ ensemble }}. Choose NVT or NPT.")
 #t_ramp = mlipx.TemperatureRampModifier(end_temperature=400, total_steps=100)
 
 
-print(f"Running MD for {steps} steps at {temperature} K with {len(frames)} initial configurations.")
+print(f"Running {{ ensemble }} MD for {steps} steps at {temperature} K with {len(frames)} initial configurations.")
 
 MD_dict = {}
 MD_list = []
