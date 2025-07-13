@@ -15,7 +15,7 @@ from .nodes.invariances import (
 )
 from .nodes.io import LoadDataFile
 from .nodes.modifier import TemperatureRampModifier
-from .nodes.molecular_dynamics import LangevinConfig, MolecularDynamics
+from .nodes.molecular_dynamics import LangevinConfig, MolecularDynamics, NPTConfig
 from .nodes.mp_api import MPRester
 from .nodes.nebs import NEBinterpolate, NEBs, NEB2
 from .nodes.observer import MaximumForceObserver
@@ -112,5 +112,6 @@ __all__ = [
     "Wiggle150",
     "FutherApplications",
     "NEBFutherApplications",
+    "NPTConfig",
     "__version__",
 ]
