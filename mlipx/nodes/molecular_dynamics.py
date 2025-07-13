@@ -222,13 +222,13 @@ class MolecularDynamics(zntrack.Node):
 
         # Select MD integrator based on ensemble
         if self.ensemble.upper() == "NVT":
-            dyn = self.thermostat.get_molecular_dynamics(atoms)
+            dyn = self.thermostat_barostat_config.get_molecular_dynamics(atoms)
         elif self.ensemble.upper() == "NPT":
             from ase.md.npt import NPT
             dyn = NPT(
                 atoms,
-                timestep=self.thermostat.timestep * ase.units.fs,
-                temperature_K=self.thermostat.temperature,
+                timestep=self.thermostat_barostat_config.timestep * ase.units.fs,
+                temperature_K=self.thermostat_barostat_config.temperature,
                 externalstress=0.0,
                 ttime=25.0 * ase.units.fs,
                 pfactor=1.0,
