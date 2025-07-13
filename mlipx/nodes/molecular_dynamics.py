@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import tqdm
 import zntrack
 from ase.md import Langevin
+from ase.md.npt import NPT
 from ase.io import read, write
 import typing as t
 import time
@@ -88,7 +89,6 @@ class NPTConfig:
     pfactor: float = 2.0   # Barostat parameter in GPa
 
     def get_molecular_dynamics(self, atoms):
-        from ase.md.npt import NPT
         return NPT(
             atoms,
             timestep=self.timestep * ase.units.fs,

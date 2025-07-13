@@ -46,7 +46,7 @@ print(f"Resuming trajectory from {resume_trajectory_path}")
 resume_trajectory_path = None
 {% endif %}
 
-{% if {{ensemble}} == "NVT" %}
+{% if ensemble == "NVT" %}
 thermostat_barostat_config = mlipx.LangevinConfig(timestep=1, temperature=temperature, friction=0.05)
 {% elif ensemble == "NPT" %}
 thermostat_barostat_config = mlipx.NPTConfig(timestep=1, temperature=temperature, ttime=20, pfactor=2.0, externalstress=0)
@@ -68,7 +68,7 @@ for model_name, model in MODELS.items():
     with project.group(model_name, "{{ ensemble }}"):
         md = mlipx.MolecularDynamics(
             model=model,
-            thermostat=thermostat,
+            thermostat_barostat_config=thermostat_barostat_config,
             data=data.frames,
             #observers=[force_check],
             #modifiers=[t_ramp],
