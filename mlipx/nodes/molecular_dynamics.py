@@ -521,6 +521,8 @@ class MolecularDynamics(zntrack.Node):
         # Load VACF reference data (just vacf key)
         with open(ref_data_path / "vcaf_300K_NPT_SPE_water_clean.json", "r") as f:
             vacf_ref_data = json.load(f)
+        with open(ref_data_path / "vdos_300K_PBE_D3.json.json", "r") as f:
+            vdos_ref_data = json.load(f)
             
         # Insert VACF reference into properties_dict["vacf"] following RDF pattern
         properties_dict["vacf"] = {
