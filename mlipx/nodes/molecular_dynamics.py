@@ -25,7 +25,7 @@ from mlipx.dash_utils import run_app, dash_table_interactive
 import pickle
 from pathlib import Path
 from ase.io.trajectory import Trajectory
-
+from ase.md.nose_hoover_chain import IsotropicMTKNPT
 
 
 from mlipx.abc import (
@@ -99,6 +99,60 @@ class NPTConfig:
         )
 
 
+    @dataclasses.dataclass
+    class NPT_MTK_Config:
+        """Configure an NPT barostat using the Nose-Hoover MTK integrator.
+
+        Parameters
+        ----------
+        timestep : float
+            The time step in fs.
+        temperature : float
+            The target temperature in Kelvin.
+        pressure : float
+            External pressure in GPa (default: 0.0).
+        tdamp : float
+            Thermostat time constant in fs (typically 100x timestep).
+        pdamp : float
+            Barostat time constant in fs (typically 1000x timestep).
+        tchain : int
+            Number of thermostat chain variables.
+        pchain : int
+            Number of barostat chain variables.
+        tloop : int
+            Number of thermostat substeps.
+        ploop : int
+            Number of barostat substeps.
+        extra_kwargs : dict
+            Extra arguments passed to the integrator.
+        """
+        timestep: float
+        temperature: float
+        pressure: float = 1
+        tdamp: float = 100
+        pdamp: float = 1000
+        tchain: int = 3
+        pchain: int = 3
+        tloop: int = 1
+        ploop: int = 1
+        extra_kwargs: dict = dataclasses.field(default_factory=dict)
+
+        def get_molecular_dynamics(self, atoms):
+            return IsotropicMTKNPT(
+                atoms,
+                timestep=self.timestep * ase.units.fs,
+                temperature_K=self.temperature,
+                pressure_au=self.pressure * ase.units.GPa,
+                tdamp=self.tdamp * ase.units.fs,
+                pdamp=self.pdamp * ase.units.fs,
+                tchain=self.tchain,
+                pchain=self.pchain,
+                tloop=self.tloop,
+                ploop=self.ploop,
+                **self.extra_kwargs,
+            )
+
+        
 class MolecularDynamics(zntrack.Node):
     """Run molecular dynamics simulation.
 
@@ -221,20 +275,25 @@ class MolecularDynamics(zntrack.Node):
             self.plots = pd.DataFrame(columns=["energy", "fmax", "fnorm"])
 
         # Select MD integrator based on ensemble
-        if self.ensemble.upper() == "NVT":
-            dyn = self.thermostat_barostat_config.get_molecular_dynamics(atoms)
-        elif self.ensemble.upper() == "NPT":
-            from ase.md.npt import NPT
-            dyn = NPT(
-                atoms,
-                timestep=self.thermostat_barostat_config.timestep * ase.units.fs,
-                temperature_K=self.thermostat_barostat_config.temperature,
-                externalstress=0.0,
-                ttime=25.0 * ase.units.fs,
-                pfactor=1.0,
-            )
-        else:
-            raise ValueError(f"Unknown ensemble '{self.ensemble}'. Choose 'NVT' or 'NPT'.")
+        # if self.ensemble.upper() == "NVT":
+        #     dyn = self.thermostat_barostat_config.get_molecular_dynamics(atoms)
+        # elif self.ensemble.upper() == "NPT":
+        #     from ase.md.npt import NPT
+        #     dyn = NPT(
+        #         atoms,
+        #         timestep=self.thermostat_barostat_config.timestep * ase.units.fs,
+        #         temperature_K=self.thermostat_barostat_config.temperature,
+        #         externalstress=0.0,
+        #         ttime=25.0 * ase.units.fs,
+        #         pfactor=1.0,
+        #     )
+        # elif self.ensemble.upper() == "NPT_MTK":
+        #     dyn = IsotropicMTKNPT
+        # else:
+        #     raise ValueError(f"Unknown ensemble '{self.ensemble}'. Choose 'NVT' or 'NPT'.")
+        
+        dyn = self.thermostat_barostat_config.get_molecular_dynamics(atoms)
+        
         for obs in self.observers:
             obs.initialize(atoms)
 

@@ -50,6 +50,18 @@ resume_trajectory_path = None
 thermostat_barostat_config = mlipx.LangevinConfig(timestep=1, temperature=temperature, friction=0.05)
 {% elif ensemble == "NPT" %}
 thermostat_barostat_config = mlipx.NPTConfig(timestep=1, temperature=temperature, ttime=20, pfactor=2.0, externalstress=0)
+{% elif ensemble == "NPT_MTK" %}
+thermostat_barostat_config = mlipx.NPT_MTK_Config(
+    timestep=1,
+    temperature=temperature,
+    pressure=1.0,
+    tdamp=100.0,
+    pdamp=1000.0,
+    tchain=3,
+    pchain=3,
+    tloop=1,
+    ploop=1
+)
 {% else %}
 raise ValueError("Invalid ensemble: {{ ensemble }}. Choose NVT or NPT.")
 {% endif %}
