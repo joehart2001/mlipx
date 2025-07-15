@@ -113,5 +113,6 @@ __all__ = [
     "FutherApplications",
     "NEBFutherApplications",
     "NPTConfig",
+    "NPT_MTK_Config",
     "__version__",
 ]

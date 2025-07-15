@@ -49,7 +49,7 @@ resume_trajectory_path = None
 {% if ensemble == "NVT" %}
 thermostat_barostat_config = mlipx.LangevinConfig(timestep=1, temperature=temperature, friction=0.05)
 {% elif ensemble == "NPT" %}
-thermostat_barostat_config = mlipx.NPTConfig(timestep=1, temperature=temperature, ttime=20, pfactor=2.0, externalstress=0)
+thermostat_barostat_config = mlipx.NPTConfig(timestep=1, temperature=temperature, thermostat_time=20, barostat_time=75.0, bulk_modulus=2, externalstress=0)
 {% elif ensemble == "NPT_MTK" %}
 thermostat_barostat_config = mlipx.NPT_MTK_Config(
     timestep=1,

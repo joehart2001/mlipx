@@ -1,6 +1,8 @@
 import dataclasses
 import pathlib
 
+from scipy.ndimage import gaussian_filter1d
+
 import ase.io
 import ase.units
 import numpy as np
@@ -85,8 +87,14 @@ class NPTConfig:
     timestep: float
     temperature: float
     externalstress: float = 0.0
-    ttime: float = 20.0    # thermostat time in fs
-    pfactor: float = 2.0   # Barostat parameter in GPa
+    thermostat_time: float = 20.0  # thermostat time in fs
+    barostat_time: float = 75.0  # barostat time in fs
+    bulk_modulus: float = 2.0  # Bulk modulus in GPa
+    #ttime: float = 20.0    # thermostat time in fs
+    #pfactor: float = 2.0   # Barostat parameter in GPa
+    
+    ttime = thermostat_time * units.fs
+    pfactor = barostat_time**2 * bulk_modulus
 
     def get_molecular_dynamics(self, atoms):
         return NPT(
@@ -94,8 +102,8 @@ class NPTConfig:
             timestep=self.timestep * ase.units.fs,
             temperature_K=self.temperature,
             externalstress=self.externalstress,
-            ttime=self.ttime * ase.units.fs,
-            pfactor=self.pfactor*ase.units.GPa*(ase.units.fs**2),
+            ttime=ttime,
+            pfactor=pfactor*ase.units.GPa*(ase.units.fs**2),
         )
 
 
@@ -371,12 +379,17 @@ class MolecularDynamics(zntrack.Node):
         with self.state.fs.open(self.frames_path, "r") as f:
             return list(ase.io.iread(f, format="extxyz"))
 
+    # @property
+    # def traj(self) -> list[ase.Atoms]:
+    #     """Return the trajectory as a list of Atoms objects."""
+    #     with self.state.fs.open(self.traj_path, "rb") as f:
+    #         return list(Trajectory(f))
+
     @property
     def traj(self) -> list[ase.Atoms]:
         """Return the trajectory as a list of Atoms objects."""
-        with self.state.fs.open(self.traj_path, "rb") as f:
-            return list(Trajectory(f))
 
+        return read(self.traj_path, index=":")
 
     @property
     def figures(self) -> dict[str, go.Figure]:
@@ -504,6 +517,8 @@ class MolecularDynamics(zntrack.Node):
             'vacf',
             'vdos',
         ]
+        
+        # ------------ ref data ------------
 
         from mlipx.benchmark_download_utils import get_benchmark_data
         ref_data_path = get_benchmark_data("water_MD_data.zip", force=True) / "water_MD_data"
@@ -521,7 +536,7 @@ class MolecularDynamics(zntrack.Node):
         # Load VACF reference data (just vacf key)
         with open(ref_data_path / "vcaf_300K_NPT_SPE_water_clean.json", "r") as f:
             vacf_ref_data = json.load(f)
-        with open(ref_data_path / "vdos_300K_PBE_D3.json.json", "r") as f:
+        with open(ref_data_path / "vdos_300K_PBE_D3.json", "r") as f:
             vdos_ref_data = json.load(f)
             
         # Insert VACF reference into properties_dict["vacf"] following RDF pattern
@@ -529,6 +544,18 @@ class MolecularDynamics(zntrack.Node):
             "SPC/E_300K": {
                 "time": np.array(vacf_ref_data["x"]) / 10,
                 "vaf": vacf_ref_data["y"]
+            }
+        }
+        
+        # Normalize the reference VDOS
+        ref_freq = np.array(vdos_ref_data["x"]) / 10
+        ref_vdos = np.array(vdos_ref_data["y"])
+        ref_vdos /= np.trapz(ref_vdos, x=ref_freq) 
+        ref_vdos = ref_vdos * 1000
+        properties_dict["vdos"] = {
+            "PBE_D3_300K": {
+                "frequency": ref_freq.tolist(),
+                "vdos": ref_vdos.tolist()
             }
         }
 
@@ -557,16 +584,43 @@ class MolecularDynamics(zntrack.Node):
             'rdf': exp_300K['y']
         }
         
+        properties_dict['msd_O'] = {
+            "PBE_TS_vdW(SC)": {
+                "time": [], # to include
+                "msd": [],
+                "D": 0.044  # Å^2/ps
+            }
+        }
+        
+        groups = {
+            "water_rdfs": {
+                "properties": ['g_r_oo', 'g_r_oh', 'g_r_hh'],
+                "table_id": "rdf-mae-score-table",
+                "details_id": "rdf-table-details",
+                "last_clicked_id": "rdf-table-last-clicked",
+                "title": "RDFs: O-O, O-H, H-H",
+            },
+            "water_dynamic_properties": {
+                "properties": ['msd_O', 'vacf', 'vdos'],
+                "table_id": "dynamic-score-table",
+                "details_id": "dynamic-table-details",
+                "last_clicked_id": "dynamic-table-last-clicked",
+                "title": "Dynamic Properties: MSD, VACF, VDOS",
+            },
+        }
+        
+        
+        # ----------- predicted data -----------
+        
 
         # Compute properties for each model
         for model_name, node in tqdm.tqdm(node_dict.items(), desc="Computing properties for models"):
-            traj = node.frames
+            traj = node.traj
             #traj = traj[::10]
             traj = traj[1000:]
             
             print(f"Processing model: {model_name} with {len(traj)} frames")
-            velocities = node.velocities
-            velocities = velocities[1000:]
+            velocities = [atoms.get_velocities() for atoms in traj]
             print("loaded trajectory for model:", model_name)
             o_indices = [atom.index for atom in traj[0] if atom.symbol == 'O']
             h_indices = [atom.index for atom in traj[0] if atom.symbol == 'H']
@@ -584,7 +638,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_oo':
                     # O-O RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj,
+                        traj[::100],
                         i_indices=o_indices,
                         j_indices=o_indices,
                         r_max=6.0,
@@ -598,7 +652,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_oh':
                     # O-H RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj,
+                        traj[::100],
                         i_indices=o_indices,
                         j_indices=h_indices,
                         r_max=6.0,
@@ -612,7 +666,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_hh':
                     # H-H RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj,
+                        traj[::100],
                         i_indices=h_indices,
                         j_indices=h_indices,
                         r_max=6.0,
@@ -634,393 +688,332 @@ class MolecularDynamics(zntrack.Node):
                     }
                 elif prop == 'vdos':
                     # Velocity density of states
-                    vdos = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True, atoms_filter=(('O',),))
+                    freq, vdos_values = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True, atoms_filter=(('O',),))
+                    #vdos_values /= np.trapz(vdos_values, x=freq)  # Normalize VDOS
+                    freq *= 1000  # Convert to desired units (ps^-1)
                     properties_dict[prop][model_name] = {
-                        "frequency": vdos[0],
-                        "vdos": vdos[1],
+                        "frequency": freq.tolist(),
+                        "vdos": vdos_values.tolist(),
                     }
 
         # Add msd_dict for later use
         msd_dict = properties_dict["msd_O"]
+        
+        # print(properties_dict.keys())
+        # print(properties_dict['vdos']['mace_mp_0a_D3'].keys())
 
         # Compute VACF and VDOS MAE tables (dummy placeholders since no ref currently)
 
 
         # --- Helper to compute MAE DataFrame for a property ---
         def compute_mae_table(prop, properties_dict, model_names, normalise_to_model=None):
-            # Build reference_keys and valid_model_names as per new logic
+            import numpy as np
+            import pandas as pd
+
+            # Dynamically determine reference keys and valid models
             reference_keys = []
             valid_model_names = []
 
-            for k in properties_dict[prop].keys():
-                data = properties_dict[prop][k]
+            for k, data in properties_dict[prop].items():
                 if k in model_names:
                     valid_model_names.append(k)
-                elif 'rdf' in data or 'vaf' in data:
+                elif isinstance(data, dict) and any(key in data for key in ["rdf", "vaf", "vdos"]):
                     reference_keys.append(k)
 
             mae_data = []
+
             for model_name in valid_model_names:
                 row = {"Model": model_name}
-                # For each reference, compute MAE if both model and reference data are available
+                model_data = properties_dict[prop].get(model_name)
                 for ref_key in reference_keys:
-                    model_rdf_data = properties_dict[prop].get(model_name)
-                    if model_rdf_data is None:
-                        # fallback: check if model_name is a top-level key (legacy)
-                        if model_name in properties_dict and prop in properties_dict[model_name]:
-                            model_rdf_data = properties_dict[model_name][prop]
+                    ref_data = properties_dict[prop].get(ref_key)
+                    # Guard against missing or invalid data
                     if (
-                        ref_key in properties_dict[prop]
-                        and model_rdf_data is not None
+                        model_data is None or ref_data is None
+                        or not isinstance(model_data, dict)
+                        or not isinstance(ref_data, dict)
                     ):
-                        # Interpolate both to common grid depending on property
-                        if 'rdf' in properties_dict[prop][ref_key] and 'rdf' in model_rdf_data:
-                            # RDF case
-                            r_common = properties_dict[prop][ref_key]['r']
-                            rdf_ref = np.interp(r_common, properties_dict[prop][ref_key]['r'], properties_dict[prop][ref_key]['rdf'])
-                            rdf_model = np.interp(r_common, model_rdf_data['r'], model_rdf_data['rdf'])
-                            mae = np.mean(np.abs(rdf_model - rdf_ref))
-                            row[ref_key] = round(mae, 4)
-                        elif 'vaf' in properties_dict[prop][ref_key] and 'vaf' in model_rdf_data:
-                            # VACF case
-                            model_x = np.array(model_rdf_data['time']) / 100
-                            model_y = np.array(model_rdf_data['vaf'])
-                            ref_x = np.array(properties_dict[prop][ref_key]['time']) / 100
-                            ref_y = np.array(properties_dict[prop][ref_key]['vaf'])
-                            ref_interp = np.interp(model_x, ref_x, ref_y)
-                            mae = np.mean(np.abs(model_y - ref_interp))
-                            row[ref_key] = round(mae, 4)
+                        continue
+
+                    # RDF MAE computation
+                    if "rdf" in ref_data and "rdf" in model_data:
+                        r_ref = np.array(ref_data["r"])
+                        rdf_ref = np.array(ref_data["rdf"])
+                        r_model = np.array(model_data["r"])
+                        rdf_model = np.array(model_data["rdf"])
+                        if (
+                            len(r_ref) == 0 or len(rdf_ref) == 0
+                            or len(r_model) == 0 or len(rdf_model) == 0
+                        ):
+                            continue
+                        rdf_model_interp = np.interp(r_ref, r_model, rdf_model)
+                        mae = np.mean(np.abs(rdf_model_interp - rdf_ref))
+                        row[ref_key] = round(mae, 4)
+
+                    # VACF MAE computation
+                    elif "vaf" in ref_data and "vaf" in model_data:
+                        t_ref = np.array(ref_data["time"]) / 100
+                        vaf_ref = np.array(ref_data["vaf"])
+                        t_model = np.array(model_data["time"]) / 100
+                        vaf_model = np.array(model_data["vaf"])
+                        if (
+                            len(t_ref) == 0 or len(vaf_ref) == 0
+                            or len(t_model) == 0 or len(vaf_model) == 0
+                        ):
+                            continue
+                        mask = (t_model >= t_ref[0]) & (t_model <= t_ref[-1])
+                        t_model_masked = t_model[mask]
+                        vaf_model_masked = vaf_model[mask]
+                        if len(t_model_masked) == 0 or len(vaf_model_masked) == 0:
+                            continue
+                        vaf_ref_interp = np.interp(t_model_masked, t_ref, vaf_ref)
+                        mae = np.mean(np.abs(vaf_model_masked - vaf_ref_interp))
+                        row[ref_key] = round(mae, 4)
+
+                    # VDOS MAE computation
+                    elif "vdos" in ref_data and "vdos" in model_data:
+                        freq_ref = np.array(ref_data["frequency"])
+                        vdos_ref = np.array(ref_data["vdos"])
+                        freq_model = np.array(model_data["frequency"])
+                        vdos_model = np.array(model_data["vdos"])
+                        if (
+                            len(freq_ref) == 0 or len(vdos_ref) == 0
+                            or len(freq_model) == 0 or len(vdos_model) == 0
+                        ):
+                            continue
+                        mask = (freq_model >= freq_ref[0]) & (freq_model <= freq_ref[-1])
+                        freq_model_masked = freq_model[mask]
+                        vdos_model_masked = vdos_model[mask]
+                        if len(freq_model_masked) == 0 or len(vdos_model_masked) == 0:
+                            continue
+                        vdos_ref_interp = np.interp(freq_model_masked, freq_ref, vdos_ref)
+                        mae = np.mean(np.abs(vdos_model_masked - vdos_ref_interp))
+                        row[ref_key] = round(mae, 4)
+
                 mae_data.append(row)
-            # Construct the dataframe with 'Model' as the first column and one column per reference
-            columns = ['Model'] + reference_keys
-            mae_df = pd.DataFrame(mae_data, columns=columns)
-            # Score and rank logic using reference if present
-            ref_col = None
-            if prop == "g_r_oo":
-                ref_col = "pbe_D3_330K_oo"
-            elif prop == "g_r_oh":
-                ref_col = "pbe_D3_330K_oh"
-            elif prop == "g_r_hh":
-                ref_col = "pbe_D3_330K_hh"
-            elif prop == "msd_O":
-                ref_col = None
-            elif prop == "vacf":
-                ref_col = "SPC/E_300K"
-            elif prop == "vdos":
-                ref_col = None
-            # Adjust score_col/rank_col for VACF
-            if ref_col is not None and ref_col in mae_df.columns:
-                score_col = "Score ↓ (PBE)" if prop.startswith("g_r_") else "Score ↓ (SPC/E)"
-                rank_col = "Rank (PBE)" if prop.startswith("g_r_") else "Rank (SPC/E)"
-                if normalise_to_model is not None and normalise_to_model in mae_df["Model"].values:
-                    base_mae = mae_df.loc[mae_df["Model"] == normalise_to_model, ref_col].values[0]
-                else:
-                    base_mae = mae_df[ref_col].min()
-                mae_df[score_col] = mae_df[ref_col] / base_mae
-                mae_df[rank_col] = mae_df[score_col].rank(method="min").astype(int)
-            return mae_df.round(3)
+
+            columns = ["Model"] + reference_keys
+            return pd.DataFrame(mae_data, columns=columns).round(3)
 
         model_names = list(node_dict.keys())
-        # Compute MAE DataFrames for each property
-        mae_df_oo = compute_mae_table('g_r_oo', properties_dict, model_names, normalise_to_model)
-        mae_df_oh = compute_mae_table('g_r_oh', properties_dict, model_names, normalise_to_model)
-        mae_df_hh = compute_mae_table('g_r_hh', properties_dict, model_names, normalise_to_model)
-        vacf_mae_df = compute_mae_table('vacf', properties_dict, model_names, normalise_to_model)
+
+        # --- Helper to build group MAE tables ---
+        def build_group_mae_table(group, properties_dict, model_names, normalise_to_model=None):
+            import pandas as pd
+            dfs = []
+            scores = {}
+            for prop in group["properties"]:
+                df = compute_mae_table(prop, properties_dict, model_names)
+                if df.empty or len(df.columns) <= 1:
+                    print(f"No data for property '{prop}' in group '{group['title']}'")
+                    continue
+                print(prop)
+                print(df)
+                mae_cols = [col for col in df.columns if col != "Model"]
+                ref_col = mae_cols[0]  # Assume first column is the reference
+
+                if normalise_to_model is not None:
+                    match = df[df["Model"] == normalise_to_model]
+                    ref_mae = match[ref_col].values[0]
+                    scores[prop] = df[ref_col] / ref_mae
+
+                else:
+                    scores[prop] = df[ref_col]
+                    
+                dfs.append(df.set_index("Model"))
+
+            merged = pd.concat(dfs, axis=1)
+            merged["Score ↓"] = np.average(list(scores.values()))
+            merged["Rank"] = merged["Score ↓"].rank(method="min").astype(int)
+            merged.reset_index(inplace=True)
+            return merged
+
+        # Build group MAE tables
+        group_mae_tables = {}
+        for group_name, group in groups.items():
+            group_mae_tables[group_name] = build_group_mae_table(group, properties_dict, model_names, normalise_to_model)
 
         if ui is None and run_interactive:
-            return mae_df_oo, mae_df_oh, mae_df_hh, vacf_mae_df
+            return group_mae_tables, properties_dict, groups
 
-        # --- Dash Layout ---
-        app = dash.Dash(__name__)
-        app.layout = html.Div([
-            html.H1("Water MD Benchmark"),
-            html.P("Simulation details: NVT 330K, 64 water molecules, 50,000 steps, 1 fs timestep, initial 10,000 steps discarded."),
-            html.H3("O-O RDF MAE Table"),
-            dash_table_interactive(
-                df=mae_df_oo,
-                id="rdf-mae-score-table-oo",
-                title=None,
-                extra_components=[
-                    html.Div(id="rdf-table-details-oo"),
-                    dcc.Store(id="rdf-table-last-clicked-oo", data=None),
-                ],
-            ),
-            html.H3("O-H RDF Table"),
-            dash_table_interactive(
-                df=mae_df_oh,
-                id="rdf-mae-score-table-oh",
-                title=None,
-                extra_components=[
-                    html.Div(id="rdf-table-details-oh"),
-                    dcc.Store(id="rdf-table-last-clicked-oh", data=None),
-                ],
-            ),
-            html.H3("H-H RDF Table"),
-            dash_table_interactive(
-                df=mae_df_hh,
-                id="rdf-mae-score-table-hh",
-                title=None,
-                extra_components=[
-                    html.Div(id="rdf-table-details-hh"),
-                    dcc.Store(id="rdf-table-last-clicked-hh", data=None),
-                ],
-            ),
-            html.H3("VACF Curves"),
-            dash_table_interactive(
-                df=vacf_mae_df,
-                id="vacf-score-table",
-                title=None,
-                extra_components=[
-                    html.Div(id="vacf-table-details"),
-                    dcc.Store(id="vacf-table-last-clicked", data=None),
-                ],
-            ),
-            # html.H3("VDOS Curves"),
-            # dash_table_interactive(
-            #     df=vdos_mae_df,
-            #     id="vdos-score-table",
-            #     title=None,
-            #     extra_components=[
-            #         html.Div(id="vdos-table-details"),
-            #         dcc.Store(id="vdos-table-last-clicked", data=None),
-            #     ],
-            # ),
-        ],
-        style={"backgroundColor": "white"})
-
-        # Register callbacks for all tables at once
-        MolecularDynamics.register_callbacks(
-            app, [
-                ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
-                ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
-                ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
-                ("vacf-score-table", "vacf-table-details", "vacf-table-last-clicked", "vacf"),
-                #("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
-            ],
-            mae_df_list=[mae_df_oo, mae_df_oh, mae_df_hh, vacf_mae_df], #, vdos_mae_df],
-            properties_dict=properties_dict
-        )
 
         if not run_interactive:
-            return app, (mae_df_oo, mae_df_oh, mae_df_hh, vacf_mae_df), properties_dict
+            return app, (group_mae_tables, properties_dict, groups)
         return run_app(app, ui=ui)
 
 
 
     @staticmethod
-    def register_callbacks(app, table_configs, mae_df_list, properties_dict):
-        from dash.dependencies import Input, Output, State
-        from dash.exceptions import PreventUpdate
-        from dash import dcc
+    def register_callbacks(app, groups, group_mae_tables, properties_dict):
+        from dash import Input, Output, State, no_update, html, dcc
         import plotly.graph_objs as go
+        import numpy as np
+        from plotly.express.colors import qualitative
 
-        # Use default arguments in the loop to capture loop variables at definition time (avoid late binding)
-        for config in zip(table_configs, mae_df_list):
-            table_id, details_id, last_clicked_id, selected_property = config[0]
-            mae_df = config[1]
-            #print(f"Registering callbacks for {table_id} with property {selected_property}")
-            #print(mae_df)
-            model_names = list(mae_df["Model"].values)
+        # --- Plot configuration dictionary for known properties ---
+        plot_config = {
+            "g_r_oo": {
+                "xlim": (2.0, 5.5),
+                "ylim": (None, 4),
+                "xaxis_title": "r (Å)",
+                "yaxis_title": "g(r)",
+                "title": "O-O RDF",
+            },
+            "g_r_oh": {
+                "xlim": (0, 4.5),
+                "ylim": (None, None),
+                "xaxis_title": "r (Å)",
+                "yaxis_title": "g(r)",
+                "title": "O-H RDF",
+            },
+            "g_r_hh": {
+                "xlim": (0, 5),
+                "ylim": (None, None),
+                "xaxis_title": "r (Å)",
+                "yaxis_title": "g(r)",
+                "title": "H-H RDF",
+            },
+            "vacf": {
+                "xlim": (0, 1),
+                "ylim": (None, None),
+                "xaxis_title": "Time (ps)",
+                "yaxis_title": "VACF",
+                "title": "Velocity Auto-correlation Function",
+            },
+            "vdos": {
+                "xlim": (0, 100),
+                "ylim": (None, None),
+                "xaxis_title": "Frequency (ps⁻¹)",
+                "yaxis_title": "VDOS",
+                "title": "Vibrational Density of States",
+            },
+        }
 
-            def make_callback(selected_property=selected_property, mae_df=mae_df, model_names=model_names):
-                def update_rdf_plot(active_cell, last_clicked):
-                    # Special handling for VACF and VDOS
-                    if selected_property in ["vacf", "vdos"]:
-                        if active_cell is None:
-                            raise PreventUpdate
-                        row = active_cell["row"]
-                        model_name = mae_df.loc[row, "Model"]
-                        if last_clicked is not None and active_cell == last_clicked:
-                            return None, None
+        @app.callback(
+            Output("mae-plot", "figure"),
+            Input("mae-table", "active_cell"),
+            State("mae-table", "data")
+        )
+        def plot_property(model, prop, properties_dict):
+            data = properties_dict.get(prop, {})
+            fig = None
+            if prop == "vacf":
+                fig = go.Figure()
+                for m, d in data.items():
+                    if m == "SPC/E_300K":
+                        fig.add_trace(go.Scatter(x=np.array(d["time"]) / 100, y=d["vaf"],
+                                                 mode="lines", name="Reference", line=dict(dash='dash', color='black')))
+                    elif m == model:
+                        fig.add_trace(go.Scatter(x=np.array(d["time"]) / 100, y=d["vaf"],
+                                                 mode="lines", name=m, line=dict(width=3)))
+                    else:
+                        fig.add_trace(go.Scatter(x=np.array(d["time"]) / 100, y=d["vaf"],
+                                                 mode="lines", name=m, opacity=0.2))
+                # Apply plot config for vacf
+            elif prop == "vdos":
+                fig = go.Figure()
+                for m, d in data.items():
+                    if m == "PBE_D3_300K":
+                        fig.add_trace(go.Scatter(x=d["frequency"], y=d["vdos"],
+                                                 mode="lines", name="Reference", line=dict(dash='dash', color='black')))
+                    elif m == model:
+                        fig.add_trace(go.Scatter(x=d["frequency"], y=d["vdos"],
+                                                 mode="lines", name=m, line=dict(width=3)))
+                    else:
+                        fig.add_trace(go.Scatter(x=d["frequency"], y=d["vdos"],
+                                                 mode="lines", name=m, opacity=0.2))
+                # Apply plot config for vdos
+            else:
+                fig = go.Figure()
+                color_map = {m: qualitative.Plotly[i % len(qualitative.Plotly)] for i, m in enumerate(data)}
+                for m, d in data.items():
+                    r = d["r"]
+                    rdf = d["rdf"]
+                    if m == model:
+                        fig.add_trace(go.Scatter(x=r, y=rdf, mode="lines", name=m,
+                                                 line=dict(width=3, color=color_map[m])))
+                    elif "PBE" in m.upper():
+                        fig.add_trace(go.Scatter(x=r, y=rdf, mode="lines", name=m,
+                                                 line=dict(dash='dash', color='black')))
+                    elif "EXP" in m.upper():
+                        fig.add_trace(go.Scatter(x=r, y=rdf, mode="lines", name=m,
+                                                 line=dict(dash='dot', color='black')))
+                    else:
+                        fig.add_trace(go.Scatter(x=r, y=rdf, mode="lines", name=m,
+                                                 line=dict(color=color_map[m])))
+                # Apply plot config for RDFs
 
-                        fig = go.Figure()
-                        # Use explicit keys and labels for clarity
-                        x_data_key = "time" if selected_property == "vacf" else "frequency"
-                        y_data_key = "vaf" if selected_property == "vacf" else "vdos"
-                        x_label = "Time (ps)" if selected_property == "vacf" else "Frequency (ps^-1)"
-                        y_label = "VACF" if selected_property == "vacf" else "VDOS"
-                        for model in model_names:
-                            data = properties_dict[selected_property].get(model)
-                            if data:
-                                import numpy as np
-                                if selected_property == "vacf":
-                                    x_vals = np.array(data[x_data_key]) / 100  # fs → ps
-                                    y_vals = np.array(data[y_data_key])
-                                else:
-                                    x_vals = np.array(data[x_data_key]) * 1000
-                                    y_vals = np.array(data[y_data_key]) / 1000
-                                fig.add_trace(go.Scatter(
-                                    x=x_vals,
-                                    y=y_vals,
-                                    mode='lines',
-                                    name=model,
-                                    opacity=1.0 if model == model_name else 0.2
-                                ))
-                        # Add reference VACF trace if plotting VACF
-                        if selected_property == "vacf":
-                            ref_x = np.array(properties_dict["vacf"]["SPC/E_300K"]["time"]) / 100
-                            ref_y = np.array(properties_dict["vacf"]["SPC/E_300K"]["vaf"])
-                            fig.add_trace(go.Scatter(
-                                x=ref_x,
-                                y=ref_y,
-                                mode='lines',
-                                name="Reference",
-                                line=dict(dash='dash', color='black'),
-                                opacity=1.0
-                            ))
-                        # Set layout, including xaxis range for VACF
-                        fig.update_layout(
-                            title=f"{selected_property.upper()} curves",
-                            xaxis_title=x_label,
-                            yaxis_title=y_label,
-                            xaxis=dict(range=[0, 1]) if selected_property == "vacf" else dict(range=[0, 150])
-                        )
-                        return dcc.Graph(figure=fig), active_cell
+            # Apply plot config settings if available
+            cfg = plot_config.get(prop, {})
+            # Use fallback titles if not in config
+            fig.update_layout(
+                title=cfg.get("title", f"{prop}"),
+                xaxis_title=cfg.get("xaxis_title", getattr(fig.layout.xaxis.title, "text", None) or "x"),
+                yaxis_title=cfg.get("yaxis_title", getattr(fig.layout.yaxis.title, "text", None) or "y"),
+            )
+            if "xlim" in cfg:
+                fig.update_xaxes(range=list(cfg["xlim"]))
+            if "ylim" in cfg:
+                fig.update_yaxes(range=list(cfg["ylim"]))
+            return dcc.Graph(figure=fig)
 
-                    # Reference keys are those in properties_dict[selected_property] but not in model_names and must contain 'rdf'
-                    reference_keys = [
-                        k for k in properties_dict[selected_property]
-                        if k not in model_names and 'rdf' in properties_dict[selected_property][k]
-                    ]
-                    if active_cell is None:
-                        raise PreventUpdate
-                    row = active_cell["row"]
-                    model_name = mae_df.loc[row, "Model"]
-                    if last_clicked is not None and active_cell == last_clicked:
-                        return None, None
+        import re
+        for group_name, group in groups.items():
+            table_id = group["table_id"]
+            details_id = group["details_id"]
+            last_clicked_id = group["last_clicked_id"]
+            props = group["properties"]
+            df = group_mae_tables[group_name]
 
-                    col = active_cell["column_id"]
-                    # Begin new logic for consistent ordering, labeling, and coloring
-                    fig = go.Figure()
-                    legend_order = reference_keys + model_names
-
-                    # Assign consistent colors from Plotly's qualitative palette
-                    from plotly.express.colors import qualitative
-                    color_map = {name: qualitative.Plotly[i % len(qualitative.Plotly)] for i, name in enumerate(legend_order)}
-
-                    # Plot all references
-                    for ref_key in reference_keys:
-                        trace_name = f"{ref_key} ({selected_property})"
-                        r = properties_dict[selected_property][ref_key]['r']
-                        rdf = properties_dict[selected_property][ref_key]['rdf']
-                        opacity = 1.0 if col == ref_key else 0.3
-                        fig.add_trace(go.Scatter(
-                            x=r,
-                            y=rdf,
-                            mode='lines',
-                            name=trace_name,
-                            opacity=opacity,
-                            # Always dashed for reference curves
-                            line=dict(color=color_map[ref_key], width=2, dash='dot'),
-                        ))
-
-                    # Plot all models
-                    for model in model_names:
-                        model_rdf = properties_dict[selected_property].get(model)
-                        if model_rdf is not None:
-                            r = model_rdf['r']
-                            rdf = model_rdf['rdf']
-                            opacity = 1.0 if model == model_name else 0.2
-                            fig.add_trace(go.Scatter(
-                                x=r,
-                                y=rdf,
-                                mode='lines',
-                                name=model,
-                                opacity=opacity,
-                                line=dict(color=color_map[model], width=2),
-                            ))
-
-                    # Highlight selected model and reference again for emphasis
-                    if model_name in color_map and model_name in properties_dict[selected_property]:
-                        r = properties_dict[selected_property][model_name]['r']
-                        rdf = properties_dict[selected_property][model_name]['rdf']
-                        fig.add_trace(go.Scatter(
-                            x=r,
-                            y=rdf,
-                            mode='lines',
-                            name=f"{model_name} (highlight)",
-                            line=dict(color=color_map[model_name], width=3),
-                            opacity=1.0,
-                            showlegend=False,
-                        ))
-
-                    if col in reference_keys and col in properties_dict[selected_property]:
-                        r = properties_dict[selected_property][col]['r']
-                        rdf = properties_dict[selected_property][col]['rdf']
-                        fig.add_trace(go.Scatter(
-                            x=r,
-                            y=rdf,
-                            mode='lines',
-                            name=f"{col} (highlight)",
-                            line=dict(color=color_map[col], width=3, dash='dot'),
-                            opacity=1.0,
-                            showlegend=False,
-                        ))
-
-                    fig.update_layout(
-                        title=f"RDF Comparison for {model_name} ({selected_property.replace('_', '-')})",
-                        xaxis_title="r (Å)",
-                        yaxis_title="g(r)",
-                    )
-                    return dcc.Graph(figure=fig), active_cell
-                return update_rdf_plot
-
-            app.callback(
+            @app.callback(
                 Output(details_id, "children"),
                 Output(last_clicked_id, "data"),
                 Input(table_id, "active_cell"),
-                State(last_clicked_id, "data"),
-            )(make_callback())
+                State(table_id, "data"),
+                prevent_initial_call=True,
+            )
+            def update_property_details(active_cell, table_data, props=props):
+                # Debug: print the clicked row and column
+                if active_cell is None:
+                    return "Click a property cell to view plot.", None
+                row_idx = active_cell.get("row")
+                col_id = active_cell.get("column_id")
+                if row_idx is None or col_id is None:
+                    return "Click a property cell to view plot.", None
+
+                # Ignore clicks on Score ↓ column
+                if col_id == "Score ↓":
+                    raise dash.exceptions.PreventUpdate
+
+                row = table_data[row_idx]
+                model_name = row.get("Model")
+                prop_name = col_id
+                print(f"CLICKED: column={prop_name}, row={model_name}")
+
+                # Only proceed if valid property and model are selected
+                # Remove "Score ↓" and "Rank" columns
+                if prop_name in ["Score ↓", "Rank"]:
+                    return html.Div("Please click on a property column."), model_name
+
+                # Extract property name from column header, expecting format "property (ref)"
+                match = re.match(r"^(.*?)\s*\(", prop_name)
+                if match:
+                    prop_name_clean = match.group(1)
+                else:
+                    prop_name_clean = prop_name
+
+                if prop_name_clean not in props:
+                    return html.Div("Click a property cell to view plot."), model_name
+
+                # Check if property/model are present in properties_dict
+                if prop_name_clean not in properties_dict or model_name not in properties_dict[prop_name_clean]:
+                    return f"No data available for {model_name} / {prop_name_clean}", model_name
+
+                return html.Div([
+                    html.H4(f"{prop_name_clean} plot for {model_name}"),
+                    plot_property(model_name, prop_name_clean, properties_dict)
+                ]), model_name
             
-    def _compute_partial_rdf(atoms, i_indices, j_indices, r_max):
-        i_list, j_list, dists = neighbor_list('ijd', atoms, r_max)
-
-        mask = np.isin(i_list, i_indices) & np.isin(j_list, j_indices)
-        valid_distances = dists[mask]
-        return valid_distances, len(valid_distances), atoms.get_volume()
-
-    def compute_rdf_optimized_parallel(atoms_list, i_indices, j_indices, r_max=6.0, bins=100, n_jobs=-1):
-        i_indices = np.array(i_indices)
-        j_indices = np.array(j_indices)
-        
-        atom_a = atoms_list[0][i_indices][0]
-        atom_b = atoms_list[0][j_indices][0]
-        pair = f"{atom_a.symbol}-{atom_b.symbol}"
-
-
-        from tqdm import tqdm
-        results = Parallel(n_jobs=n_jobs)(
-            delayed(MolecularDynamics._compute_partial_rdf)(atoms, i_indices, j_indices, r_max)
-            for atoms in tqdm(atoms_list, desc=f"Computing {pair} RDF")
-        )
-
-        all_distances = []
-        total_pairs = 0
-        total_volume = 0.0
-
-        for distances, pair_count, volume in results:
-            all_distances.append(distances)
-            total_pairs += pair_count
-            total_volume += volume
-
-        all_distances = np.concatenate(all_distances)
-        avg_volume = total_volume / len(atoms_list)
-        rho = len(j_indices) / avg_volume  # Average number density
-
-        hist, bin_edges = np.histogram(all_distances, bins=bins, range=(0, r_max))
-        r = 0.5 * (bin_edges[1:] + bin_edges[:-1])
-        bin_width = bin_edges[1] - bin_edges[0]
-
-        shell_volumes = 4 * np.pi * r**2 * bin_width
-        ideal_gas_distribution = shell_volumes * rho
-
-        rdf = hist / (ideal_gas_distribution * total_pairs)
-        
-        rdf = rdf / rdf[np.argmax(r)] # liquid rdf should be 1 at large r
-
-        return r, rdf
-    
-    
 
     
     @staticmethod
@@ -1033,16 +1026,15 @@ class MolecularDynamics(zntrack.Node):
     ):
         import os
         os.makedirs(cache_dir, exist_ok=True)
-        app, (mae_df_oo, mae_df_oh, mae_df_hh, mae_df_vacf), properties_dict = MolecularDynamics.mae_plot_interactive(
+        app, (group_mae_tables, properties_dict, groups) = MolecularDynamics.mae_plot_interactive(
             node_dict=node_dict,
             run_interactive=run_interactive,
             ui=ui,
             normalise_to_model=normalise_to_model,
         )
-        mae_df_oo.to_pickle(f"{cache_dir}/mae_df_oo.pkl")
-        mae_df_oh.to_pickle(f"{cache_dir}/mae_df_oh.pkl")
-        mae_df_hh.to_pickle(f"{cache_dir}/mae_df_hh.pkl")
-        mae_df_vacf.to_pickle(f"{cache_dir}/vacf_df.pkl")
+        # Save each group mae table separately
+        for group_name, group_df in group_mae_tables.items():
+            group_df.to_pickle(f"{cache_dir}/mae_df_{group_name}.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
             pickle.dump(properties_dict, f)
         msd_dict = properties_dict["msd_O"]
@@ -1051,48 +1043,45 @@ class MolecularDynamics(zntrack.Node):
         vdos_dict = properties_dict["vdos"]
         with open(f"{cache_dir}/vdos_data.pkl", "wb") as f:
             pickle.dump(vdos_dict, f)
+        # Save groups structure
+        with open(f"{cache_dir}/groups.pkl", "wb") as f:
+            pickle.dump(groups, f)
         return app
 
 
 
     @staticmethod
     def launch_dashboard(
-        cache_dir="app_cache/further_applications_benchmark/molecular_dynamics_cache", 
+        cache_dir="app_cache/further_applications_benchmark/molecular_dynamics_cache",
         ui=None
     ):
-
-        mae_df_oo = pd.read_pickle(f"{cache_dir}/mae_df_oo.pkl")
-        mae_df_oh = pd.read_pickle(f"{cache_dir}/mae_df_oh.pkl")
-        mae_df_hh = pd.read_pickle(f"{cache_dir}/mae_df_hh.pkl")
-        mae_df_vacf = pd.read_pickle(f"{cache_dir}/vacf_df.pkl")
+        import pickle
+        import pandas as pd
+        import dash
+        # Load groups structure
+        with open(f"{cache_dir}/groups.pkl", "rb") as f:
+            groups = pickle.load(f)
+        # Load group mae tables
+        group_mae_tables = {}
+        for group_name in groups:
+            group_mae_tables[group_name] = pd.read_pickle(f"{cache_dir}/mae_df_{group_name}.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
             properties_dict = pickle.load(f)
         with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
         with open(f"{cache_dir}/vdos_data.pkl", "rb") as f:
             vdos_dict = pickle.load(f)
-        # Add to properties_dict
         properties_dict["msd_O"] = msd_dict
-        properties_dict["vdos"] = vdos_dict
-
-        # Dummy MAE DataFrames for VACF/VDOS
-        vdos_df = pd.DataFrame([{"Model": k} for k in vdos_dict.keys()])
+        #properties_dict["vdos"] = vdos_dict
 
         app = dash.Dash(__name__)
-        app.layout = MolecularDynamics.build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, mae_df_vacf, vdos_df)
-
-        table_configs = [
-            ("rdf-mae-score-table-oo", "rdf-table-details-oo", "rdf-table-last-clicked-oo", "g_r_oo"),
-            ("rdf-mae-score-table-oh", "rdf-table-details-oh", "rdf-table-last-clicked-oh", "g_r_oh"),
-            ("rdf-mae-score-table-hh", "rdf-table-details-hh", "rdf-table-last-clicked-hh", "g_r_hh"),
-            ("vacf-score-table", "vacf-table-details", "vacf-table-last-clicked", "vacf"),
-            #("vdos-score-table", "vdos-table-details", "vdos-table-last-clicked", "vdos"),
-        ]
-        mae_df_list = [mae_df_oo, mae_df_oh, mae_df_hh, mae_df_vacf]
+        app.layout = MolecularDynamics.build_layout(groups=groups, group_mae_tables=group_mae_tables)
         MolecularDynamics.register_callbacks(
-            app, table_configs, mae_df_list=mae_df_list, properties_dict=properties_dict
+            app,
+            groups=groups,
+            group_mae_tables=group_mae_tables,
+            properties_dict=properties_dict
         )
-
         return run_app(app, ui=ui)
     
     
@@ -1100,77 +1089,33 @@ class MolecularDynamics(zntrack.Node):
     
     
     @staticmethod
-    def build_layout(mae_df_oo, mae_df_oh, mae_df_hh, msd_dict, vacf_df, vdos_df):
-        return html.Div([
+    def build_layout(groups, group_mae_tables):
+        from dash import html, dcc
+        from mlipx.dash_utils import dash_table_interactive
+        layout_children = [
             html.H1("Water MD Benchmark"),
             html.P("Simulation details: NVT 330K, D3 dispersion, 64 water molecules, 10k steps equilibration + 40k steps production run, 1 fs timestep."),
-            html.H3("O-O RDF MAE Table"),
-            dash_table_interactive(
-                df=mae_df_oo,
-                id="rdf-mae-score-table-oo",
-                title=None,
-                extra_components=[
-                    html.Div(id="rdf-table-details-oo"),
-                    dcc.Store(id="rdf-table-last-clicked-oo", data=None),
-                ],
-            ),
-            html.H3("O-H RDF Table"),
-            dash_table_interactive(
-                df=mae_df_oh,
-                id="rdf-mae-score-table-oh",
-                title=None,
-                extra_components=[
-                    html.Div(id="rdf-table-details-oh"),
-                    dcc.Store(id="rdf-table-last-clicked-oh", data=None),
-                ],
-            ),
-            html.H3("H-H RDF Table"),
-            dash_table_interactive(
-                df=mae_df_hh,
-                id="rdf-mae-score-table-hh",
-                title=None,
-                extra_components=[
-                    html.Div(id="rdf-table-details-hh"),
-                    dcc.Store(id="rdf-table-last-clicked-hh", data=None),
-                ],
-            ),
-            # html.H3("Mean Squared Displacement (MSD) for Oxygen"),
-            # dcc.Graph(
-            #     figure=go.Figure([
-            #         go.Scatter(
-            #             x=msd_dict[model]["time"],
-            #             y=msd_dict[model]["msd"],
-            #             mode="lines",
-            #             name=model
-            #         )
-            #         for model in msd_dict
-            #     ]).update_layout(
-            #         title="MSD vs Time",
-            #         xaxis_title="Time (ps)",
-            #         yaxis_title="MSD (Å²)"
-            #     )
-            # ),
-            html.H3("Oxygen Velocity Autocorrelation Function (VACF)"),
-            dash_table_interactive(
-                df=vacf_df,
-                id="vacf-score-table",
-                title=None,
-                extra_components=[
-                    html.Div(id="vacf-table-details"),
-                    dcc.Store(id="vacf-table-last-clicked", data=None),
-                ],
-            ),
-        #     html.H3("Oxygen VDOS (FT of VACF)"),
-        #     dash_table_interactive(
-        #         df=vdos_df,
-        #         id="vdos-score-table",
-        #         title=None,
-        #         extra_components=[
-        #             html.Div(id="vdos-table-details"),
-        #             dcc.Store(id="vdos-table-last-clicked", data=None),
-        #         ],
-        #     ),
-        ], style={"backgroundColor": "white"})
+        ]
+        for group_name, group in groups.items():
+            group_df = group_mae_tables[group_name]
+            layout_children.append(html.H3(group["title"]))
+            layout_children.append(
+                dash_table_interactive(
+                    df=group_df,
+                    id=group["table_id"],
+                    title=None,
+                    extra_components=[
+                        html.Div(id=group["details_id"]),
+                        dcc.Store(id=group["last_clicked_id"], data=None),
+                    ],
+                )
+            )
+        # Add a dcc.Graph for MAE plot if not already present (handled in mae_plot_interactive)
+        return html.Div(layout_children, style={"backgroundColor": "white"})
+        
+        
+        
+        
         
         
     @staticmethod
@@ -1209,91 +1154,11 @@ class MolecularDynamics(zntrack.Node):
     
     
     
-    
-    
-    # def compute_vacf(
-    #     traj, 
-    #     velocities, 
-    #     atoms_filter = ((None,),),
-    #     start_index=0, 
-    #     timestep=1, 
-    #     fft=False
-    # ):
-        
-    #     n_steps = len(velocities)
-    #     n_atoms = len(velocities[0])
-    
-    #     filtered_atoms = []
-    #     atom_symbols = traj[0].get_chemical_symbols()
-    #     symbols = set(atom_symbols)
-    #     for atoms in atoms_filter:
-    #         if any(atom is None for atom in atoms):
-    #             # If atoms_filter not specified use all atoms.
-    #             filtered_atoms.append(range(n_atoms))
-    #         elif all(isinstance(a, str) for a in atoms):
-    #             # If all symbols, get the matching indices.
-    #             atoms = set(atoms)
-    #             if atoms.difference(symbols):
-    #                 raise ValueError(
-    #                     f"{atoms.difference(symbols)} not allowed in VAF"
-    #                     f", allowed symbols are {symbols}"
-    #                 )
-    #             filtered_atoms.append(
-    #                 [i for i in range(len(atom_symbols)) if atom_symbols[i] in list(atoms)]
-    #             )
-    #         elif all(isinstance(a, int) for a in atoms):
-    #             filtered_atoms.append(atoms)
-    #         else:
-    #             raise ValueError(
-    #                 "Cannot mix element symbols and indices in vaf atoms_filter"
-    #             )
 
-    #     used_atoms = {atom for atoms in filtered_atoms for atom in atoms}
-    #     used_atoms = {j: i for i, j in enumerate(used_atoms)}
-        
-        
-    #     vafs = np.sum(
-    #         np.asarray(
-    #             [
-    #                 [
-    #                     np.correlate(velocities[:, j, i], velocities[:, j, i], "full")[
-    #                         n_steps - 1 :
-    #                     ]
-    #                     for i in range(3)
-    #                 ]
-    #                 for j in used_atoms
-    #             ]
-    #         ),
-    #         axis=1,
-    #     )
-
-    #     vafs /= n_steps - np.arange(n_steps)
-
-    #     lags = np.arange(n_steps) * timestep
-
-    #     if fft:
-    #         vafs = np.fft.fft(vafs, axis=0)
-    #         lags = np.fft.fftfreq(n_steps, timestep)
-
-    #     # vafs = (
-    #     #     lags,
-    #     #     [
-    #     #         np.average([vafs[used_atoms[i]] for i in atoms], axis=0)
-    #     #         for atoms in filtered_atoms
-    #     #     ],
-    #     # )
-    #     vafs = [
-    #             np.average([vafs[used_atoms[i]] for i in atoms], axis=0)
-    #             for atoms in filtered_atoms
-    #         ]
-    #     print(f"Computed VACF for {len(filtered_atoms)} atom groups with {len(lags)} lags.")
-    #     print(f"VACF shape: {vafs[0].shape} for {len(vafs)} groups")
-        
-    #     total_vacf = np.mean(np.stack(vafs), axis=0)
-        
-    #     return lags, total_vacf
     
-    
+
+
+    # ------------ computing properties ------------
 
     def compute_vacf(
         traj,
@@ -1338,6 +1203,7 @@ class MolecularDynamics(zntrack.Node):
         vafs = []
         for j in used_atoms:
             atom_vacf = np.zeros(n_steps)
+            velocities = np.array(velocities)
             for i in range(3):  # x, y, z components
                 v = velocities[:, j, i]
                 # Proper autocorrelation calculation
@@ -1368,14 +1234,12 @@ class MolecularDynamics(zntrack.Node):
             # Power spectral density (VDOS)
             vafs = np.abs(vafs_fft)**2
             
-            # Only take positive frequencies (real signal)
-            # For real signals, we only need frequencies from 0 to Nyquist
-            vafs = vafs[:, :n_fft//2 + 1]  # Include DC and Nyquist
-            lags = np.fft.fftfreq(n_fft, timestep)[:n_fft//2 + 1]
-            
-            # Convert to proper units (frequencies in Hz or cm^-1)
-            # If timestep is in femtoseconds, frequencies will be in THz
-            # To convert to cm^-1: freq_cm = freq_THz * 33.356
+            # Only keep strictly positive frequencies
+            freqs = np.fft.fftfreq(n_fft, timestep)
+            mask = freqs > 0  # only keep strictly positive frequencies
+            freqs = freqs[mask]
+            vafs = vafs[:, mask]
+            lags = freqs
         
         # Average over atom groups
         vafs_grouped = [
@@ -1389,9 +1253,71 @@ class MolecularDynamics(zntrack.Node):
         # Calculate total VACF
         total_vacf = np.mean(np.stack(vafs_grouped), axis=0)
         if fft:
-            auc = np.trapezoid(total_vacf, lags)
-            total_vacf = total_vacf / auc  # Normalize to max value
+            try:
+                if hasattr(np, "trapezoid"):
+                    auc = np.trapezoid(total_vacf, lags)
+                else:
+                    auc = np.trapz(total_vacf, lags)
+                total_vacf = total_vacf / auc  # Normalize to unit area
+            except Exception as e:
+                print(f"Normalization failed: {e}")
+            # Gaussian smoothing for VDOS
+            sigma = 5  # adjust smoothing width as needed
+            total_vacf = gaussian_filter1d(total_vacf, sigma)
         else:
             total_vacf = total_vacf / np.max(total_vacf)  # Normalize to max value
         
         return lags, total_vacf
+    
+    
+
+    def _compute_partial_rdf(atoms, i_indices, j_indices, r_max):
+        i_list, j_list, dists = neighbor_list('ijd', atoms, r_max)
+
+        mask = np.isin(i_list, i_indices) & np.isin(j_list, j_indices)
+        valid_distances = dists[mask]
+        return valid_distances, len(valid_distances), atoms.get_volume()
+
+
+    def compute_rdf_optimized_parallel(atoms_list, i_indices, j_indices, r_max=6.0, bins=100, n_jobs=-1):
+        i_indices = np.array(i_indices)
+        j_indices = np.array(j_indices)
+        
+        atom_a = atoms_list[0][i_indices][0]
+        atom_b = atoms_list[0][j_indices][0]
+        pair = f"{atom_a.symbol}-{atom_b.symbol}"
+
+
+        from tqdm import tqdm
+        results = Parallel(n_jobs=n_jobs)(
+            delayed(MolecularDynamics._compute_partial_rdf)(atoms, i_indices, j_indices, r_max)
+            for atoms in tqdm(atoms_list, desc=f"Computing {pair} RDF")
+        )
+
+        all_distances = []
+        total_pairs = 0
+        total_volume = 0.0
+
+        for distances, pair_count, volume in results:
+            all_distances.append(distances)
+            total_pairs += pair_count
+            total_volume += volume
+
+        all_distances = np.concatenate(all_distances)
+        avg_volume = total_volume / len(atoms_list)
+        rho = len(j_indices) / avg_volume  # Average number density
+
+        hist, bin_edges = np.histogram(all_distances, bins=bins, range=(0, r_max))
+        r = 0.5 * (bin_edges[1:] + bin_edges[:-1])
+        bin_width = bin_edges[1] - bin_edges[0]
+
+        shell_volumes = 4 * np.pi * r**2 * bin_width
+        ideal_gas_distribution = shell_volumes * rho
+
+        rdf = hist / (ideal_gas_distribution * total_pairs)
+        
+        rdf = rdf / rdf[np.argmax(r)] # liquid rdf should be 1 at large r
+
+        return r, rdf
+    
+    
