@@ -92,9 +92,7 @@ class NPTConfig:
     bulk_modulus: float = 2.0  # Bulk modulus in GPa
     #ttime: float = 20.0    # thermostat time in fs
     #pfactor: float = 2.0   # Barostat parameter in GPa
-    
-    ttime = self.thermostat_time * ase.units.fs
-    pfactor = self.barostat_time**2 * self.bulk_modulus
+
 
     def get_molecular_dynamics(self, atoms):
         return NPT(
@@ -102,8 +100,8 @@ class NPTConfig:
             timestep=self.timestep * ase.units.fs,
             temperature_K=self.temperature,
             externalstress=self.externalstress,
-            ttime=ttime,
-            pfactor=pfactor*ase.units.GPa*(ase.units.fs**2),
+            ttime=self.thermostat_time * ase.units.fs,
+            pfactor=(self.barostat_time**2 * self.bulk_modulus)*ase.units.GPa*(ase.units.fs**2),
         )
 
 
@@ -891,30 +889,37 @@ class MolecularDynamics(zntrack.Node):
             },
         }
 
+        # --- MAE Plot Callback: Outputs figure to dcc.Graph(id="mae-plot") and displays clicked property ---
         @app.callback(
-            #Output("mae-plot", "figure"),
+            Output("mae-plot", "figure"),
+            Output("mae-plot-property", "children"),
             Input("rdf-table-last-clicked", "data"),
             Input("dynamic-table-last-clicked", "data"),
             prevent_initial_call=True,
         )
-        def update_plot(rdf_clicked, dynamic_clicked):
+        def update_mae_plot(rdf_clicked, dynamic_clicked):
             import plotly.graph_objs as go
             import numpy as np
-
-            # Use whichever click is more recent
             ctx = dash.callback_context
             if not ctx.triggered:
-                return go.Figure()
+                raise dash.exceptions.PreventUpdate
 
-            prop = None
+            triggered_id = ctx.triggered_id
             model = None
-            if ctx.triggered_id == "rdf-table-last-clicked":
+            prop = None
+            if triggered_id == "rdf-table-last-clicked":
+                if rdf_clicked is None or len(rdf_clicked) != 2:
+                    raise dash.exceptions.PreventUpdate
                 model, prop = rdf_clicked
-            elif ctx.triggered_id == "dynamic-table-last-clicked":
+            elif triggered_id == "dynamic-table-last-clicked":
+                if dynamic_clicked is None or len(dynamic_clicked) != 2:
+                    raise dash.exceptions.PreventUpdate
                 model, prop = dynamic_clicked
+            else:
+                raise dash.exceptions.PreventUpdate
 
             if model is None or prop is None:
-                return go.Figure()
+                raise dash.exceptions.PreventUpdate
 
             data = properties_dict.get(prop, {})
             fig = go.Figure()
@@ -939,7 +944,13 @@ class MolecularDynamics(zntrack.Node):
                         fig.add_trace(go.Scatter(x=x, y=y, name=m, line=dict(width=3)))
                     else:
                         fig.add_trace(go.Scatter(x=x, y=y, name=m, opacity=0.2))
-            else:
+            elif prop == "msd_O":
+                for m, d in data.items():
+                    x = d["time"]
+                    y = d["msd"]
+                    style = dict(width=3) if m == model else dict()
+                    fig.add_trace(go.Scatter(x=x, y=y, name=m, line=style))
+            else:  # RDFs
                 for m, d in data.items():
                     x = d["r"]
                     y = d["rdf"]
@@ -960,7 +971,9 @@ class MolecularDynamics(zntrack.Node):
                 fig.update_xaxes(range=list(cfg["xlim"]))
             if "ylim" in cfg:
                 fig.update_yaxes(range=list(cfg["ylim"]))
-            return fig
+            # Display the clicked property
+            prop_display = f"Property: {prop} | Model: {model}"
+            return fig, prop_display
 
         import re
         for group_name, group in groups.items():
@@ -978,46 +991,32 @@ class MolecularDynamics(zntrack.Node):
                 prevent_initial_call=True,
             )
             def update_property_details(active_cell, table_data, props=props):
-                # Debug: print the clicked row and column
                 if active_cell is None:
                     return "Click a property cell to view plot.", None
                 row_idx = active_cell.get("row")
                 col_id = active_cell.get("column_id")
                 if row_idx is None or col_id is None:
                     return "Click a property cell to view plot.", None
-
-                # Ignore clicks on Score ↓ column
                 if col_id == "Score ↓":
                     raise dash.exceptions.PreventUpdate
-
                 row = table_data[row_idx]
                 model_name = row.get("Model")
                 prop_name = col_id
-                print(f"CLICKED: column={prop_name}, row={model_name}")
-
-                # Only proceed if valid property and model are selected
                 # Remove "Score ↓" and "Rank" columns
                 if prop_name in ["Score ↓", "Rank"]:
                     return html.Div("Please click on a property column."), model_name
-
-                # Extract property name from column header, expecting format "property (ref)"
                 match = re.match(r"^(.*?)\s*\(", prop_name)
                 if match:
                     prop_name_clean = match.group(1)
                 else:
                     prop_name_clean = prop_name
-
                 if prop_name_clean not in props:
                     return html.Div("Click a property cell to view plot."), model_name
-
-                # Check if property/model are present in properties_dict
                 if prop_name_clean not in properties_dict or model_name not in properties_dict[prop_name_clean]:
                     return f"No data available for {model_name} / {prop_name_clean}", model_name
-
-                return html.Div([
-                    html.H4(f"{prop_name_clean} plot for {model_name}"),
-                    plot_property(model_name, prop_name_clean, properties_dict)
-                ]), model_name
+                # Instead of plotting, store the selected model/prop in the appropriate Store
+                # so the main MAE plot callback can pick it up
+                return html.Div(f"Selected: {prop_name_clean} for {model_name}"), [model_name, prop_name_clean]
             
 
     
@@ -1115,7 +1114,11 @@ class MolecularDynamics(zntrack.Node):
                     ],
                 )
             )
-        # Add a dcc.Graph for MAE plot if not already present (handled in mae_plot_interactive)
+        # Add the MAE plot and a property display below the tables
+        layout_children.append(html.Hr())
+        layout_children.append(html.H3("MAE Plot"))
+        layout_children.append(dcc.Graph(id="mae-plot"))
+        layout_children.append(html.Div(id="mae-plot-property"))
         return html.Div(layout_children, style={"backgroundColor": "white"})
         
         
