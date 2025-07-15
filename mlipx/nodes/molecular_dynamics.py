@@ -93,7 +93,7 @@ class NPTConfig:
     #ttime: float = 20.0    # thermostat time in fs
     #pfactor: float = 2.0   # Barostat parameter in GPa
     
-    ttime = thermostat_time * units.fs
+    ttime = thermostat_time * ase.units.fs
     pfactor = barostat_time**2 * bulk_modulus
 
     def get_molecular_dynamics(self, atoms):
@@ -891,71 +891,74 @@ class MolecularDynamics(zntrack.Node):
 
         @app.callback(
             Output("mae-plot", "figure"),
-            Input("mae-table", "active_cell"),
-            State("mae-table", "data")
+            Input("rdf-table-last-clicked", "data"),
+            Input("dynamic-table-last-clicked", "data"),
+            prevent_initial_call=True,
         )
-        def plot_property(model, prop, properties_dict):
-            data = properties_dict.get(prop, {})
-            fig = None
-            if prop == "vacf":
-                fig = go.Figure()
-                for m, d in data.items():
-                    if m == "SPC/E_300K":
-                        fig.add_trace(go.Scatter(x=np.array(d["time"]) / 100, y=d["vaf"],
-                                                 mode="lines", name="Reference", line=dict(dash='dash', color='black')))
-                    elif m == model:
-                        fig.add_trace(go.Scatter(x=np.array(d["time"]) / 100, y=d["vaf"],
-                                                 mode="lines", name=m, line=dict(width=3)))
-                    else:
-                        fig.add_trace(go.Scatter(x=np.array(d["time"]) / 100, y=d["vaf"],
-                                                 mode="lines", name=m, opacity=0.2))
-                # Apply plot config for vacf
-            elif prop == "vdos":
-                fig = go.Figure()
-                for m, d in data.items():
-                    if m == "PBE_D3_300K":
-                        fig.add_trace(go.Scatter(x=d["frequency"], y=d["vdos"],
-                                                 mode="lines", name="Reference", line=dict(dash='dash', color='black')))
-                    elif m == model:
-                        fig.add_trace(go.Scatter(x=d["frequency"], y=d["vdos"],
-                                                 mode="lines", name=m, line=dict(width=3)))
-                    else:
-                        fig.add_trace(go.Scatter(x=d["frequency"], y=d["vdos"],
-                                                 mode="lines", name=m, opacity=0.2))
-                # Apply plot config for vdos
-            else:
-                fig = go.Figure()
-                color_map = {m: qualitative.Plotly[i % len(qualitative.Plotly)] for i, m in enumerate(data)}
-                for m, d in data.items():
-                    r = d["r"]
-                    rdf = d["rdf"]
-                    if m == model:
-                        fig.add_trace(go.Scatter(x=r, y=rdf, mode="lines", name=m,
-                                                 line=dict(width=3, color=color_map[m])))
-                    elif "PBE" in m.upper():
-                        fig.add_trace(go.Scatter(x=r, y=rdf, mode="lines", name=m,
-                                                 line=dict(dash='dash', color='black')))
-                    elif "EXP" in m.upper():
-                        fig.add_trace(go.Scatter(x=r, y=rdf, mode="lines", name=m,
-                                                 line=dict(dash='dot', color='black')))
-                    else:
-                        fig.add_trace(go.Scatter(x=r, y=rdf, mode="lines", name=m,
-                                                 line=dict(color=color_map[m])))
-                # Apply plot config for RDFs
+        def update_plot(rdf_clicked, dynamic_clicked):
+            import plotly.graph_objs as go
+            import numpy as np
 
-            # Apply plot config settings if available
+            # Use whichever click is more recent
+            ctx = dash.callback_context
+            if not ctx.triggered:
+                return go.Figure()
+
+            prop = None
+            model = None
+            if ctx.triggered_id == "rdf-table-last-clicked":
+                model, prop = rdf_clicked
+            elif ctx.triggered_id == "dynamic-table-last-clicked":
+                model, prop = dynamic_clicked
+
+            if model is None or prop is None:
+                return go.Figure()
+
+            data = properties_dict.get(prop, {})
+            fig = go.Figure()
+
+            if prop == "vacf":
+                for m, d in data.items():
+                    x = np.array(d["time"]) / 100
+                    y = d["vaf"]
+                    if m == "SPC/E_300K":
+                        fig.add_trace(go.Scatter(x=x, y=y, name="Reference", line=dict(dash="dash", color="black")))
+                    elif m == model:
+                        fig.add_trace(go.Scatter(x=x, y=y, name=m, line=dict(width=3)))
+                    else:
+                        fig.add_trace(go.Scatter(x=x, y=y, name=m, opacity=0.2))
+            elif prop == "vdos":
+                for m, d in data.items():
+                    x = d["frequency"]
+                    y = d["vdos"]
+                    if m == "PBE_D3_300K":
+                        fig.add_trace(go.Scatter(x=x, y=y, name="Reference", line=dict(dash="dash", color="black")))
+                    elif m == model:
+                        fig.add_trace(go.Scatter(x=x, y=y, name=m, line=dict(width=3)))
+                    else:
+                        fig.add_trace(go.Scatter(x=x, y=y, name=m, opacity=0.2))
+            else:
+                for m, d in data.items():
+                    x = d["r"]
+                    y = d["rdf"]
+                    line = dict(width=3) if m == model else dict()
+                    if "PBE" in m.upper():
+                        line = dict(dash="dash", color="black")
+                    elif "EXP" in m.upper():
+                        line = dict(dash="dot", color="black")
+                    fig.add_trace(go.Scatter(x=x, y=y, name=m, line=line))
+
             cfg = plot_config.get(prop, {})
-            # Use fallback titles if not in config
             fig.update_layout(
-                title=cfg.get("title", f"{prop}"),
-                xaxis_title=cfg.get("xaxis_title", getattr(fig.layout.xaxis.title, "text", None) or "x"),
-                yaxis_title=cfg.get("yaxis_title", getattr(fig.layout.yaxis.title, "text", None) or "y"),
+                title=cfg.get("title", prop),
+                xaxis_title=cfg.get("xaxis_title", "x"),
+                yaxis_title=cfg.get("yaxis_title", "y"),
             )
             if "xlim" in cfg:
                 fig.update_xaxes(range=list(cfg["xlim"]))
             if "ylim" in cfg:
                 fig.update_yaxes(range=list(cfg["ylim"]))
-            return dcc.Graph(figure=fig)
+            return fig
 
         import re
         for group_name, group in groups.items():
