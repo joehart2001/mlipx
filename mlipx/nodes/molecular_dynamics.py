@@ -93,8 +93,8 @@ class NPTConfig:
     #ttime: float = 20.0    # thermostat time in fs
     #pfactor: float = 2.0   # Barostat parameter in GPa
     
-    ttime = thermostat_time * ase.units.fs
-    pfactor = barostat_time**2 * bulk_modulus
+    ttime = self.thermostat_time * ase.units.fs
+    pfactor = self.barostat_time**2 * self.bulk_modulus
 
     def get_molecular_dynamics(self, atoms):
         return NPT(
@@ -836,9 +836,11 @@ class MolecularDynamics(zntrack.Node):
         if ui is None and run_interactive:
             return group_mae_tables, properties_dict, groups
 
-
         if not run_interactive:
-            return app, (group_mae_tables, properties_dict, groups)
+            return group_mae_tables, properties_dict, groups
+        
+        # if not run_interactive:
+        #     return app, (group_mae_tables, properties_dict, groups)
         return run_app(app, ui=ui)
 
 
@@ -890,7 +892,7 @@ class MolecularDynamics(zntrack.Node):
         }
 
         @app.callback(
-            Output("mae-plot", "figure"),
+            #Output("mae-plot", "figure"),
             Input("rdf-table-last-clicked", "data"),
             Input("dynamic-table-last-clicked", "data"),
             prevent_initial_call=True,
@@ -1029,7 +1031,7 @@ class MolecularDynamics(zntrack.Node):
     ):
         import os
         os.makedirs(cache_dir, exist_ok=True)
-        app, (group_mae_tables, properties_dict, groups) = MolecularDynamics.mae_plot_interactive(
+        group_mae_tables, properties_dict, groups = MolecularDynamics.mae_plot_interactive(
             node_dict=node_dict,
             run_interactive=run_interactive,
             ui=ui,
@@ -1049,7 +1051,7 @@ class MolecularDynamics(zntrack.Node):
         # Save groups structure
         with open(f"{cache_dir}/groups.pkl", "wb") as f:
             pickle.dump(groups, f)
-        return app
+        return
 
 
 

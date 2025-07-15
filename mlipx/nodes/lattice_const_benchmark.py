@@ -51,19 +51,6 @@ class LatticeConstant(zntrack.Node):
     """
     # inputs
     structure: List[mlipx.StructureOptimization] = zntrack.deps()
-    @staticmethod
-    def build_layout(mae_df):
-        from mlipx.dash_utils import dash_table_interactive
-        from dash import html, dcc
-        return dash_table_interactive(
-            df=mae_df,
-            id="lat-mae-score-table",
-            title="Lattice Constants MAE Summary Table",
-            extra_components=[
-                html.Div(id="lattice-const-table"),
-                dcc.Store(id="lattice-table-last-clicked", data=None),
-            ],
-        )
     # outputs
     # nwd: ZnTrack's node working directory for saving files
     lattice_const_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lattice_const.json")
@@ -482,3 +469,20 @@ class LatticeConstant(zntrack.Node):
         app.layout = LatticeConstant.build_layout(mae_df)
         LatticeConstant.register_callbacks(app, mae_df, lat_const_df)
         return run_app(app, ui=ui)
+    
+    
+    
+    
+    @staticmethod
+    def build_layout(mae_df):
+        from mlipx.dash_utils import dash_table_interactive
+        from dash import html, dcc
+        return dash_table_interactive(
+            df=mae_df,
+            id="lat-mae-score-table",
+            title="Lattice Constants MAE Summary Table",
+            extra_components=[
+                html.Div(id="lattice-const-table"),
+                dcc.Store(id="lattice-table-last-clicked", data=None),
+            ],
+        )
