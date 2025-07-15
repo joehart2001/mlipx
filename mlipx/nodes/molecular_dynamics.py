@@ -842,15 +842,53 @@ class MolecularDynamics(zntrack.Node):
         return run_app(app, ui=ui)
 
 
+        # plot_config = {
+        #     "g_r_oo": {
+        #         "xlim": (2.0, 5.5),
+        #         "ylim": (None, 4),
+        #         "xaxis_title": "r (Å)",
+        #         "yaxis_title": "g(r)",
+        #         "title": "O-O RDF",
+        #     },
+        #     "g_r_oh": {
+        #         "xlim": (0, 4.5),
+        #         "ylim": (None, None),
+        #         "xaxis_title": "r (Å)",
+        #         "yaxis_title": "g(r)",
+        #         "title": "O-H RDF",
+        #     },
+        #     "g_r_hh": {
+        #         "xlim": (0, 5),
+        #         "ylim": (None, None),
+        #         "xaxis_title": "r (Å)",
+        #         "yaxis_title": "g(r)",
+        #         "title": "H-H RDF",
+        #     },
+        #     "vacf": {
+        #         "xlim": (0, 1),
+        #         "ylim": (None, None),
+        #         "xaxis_title": "Time (ps)",
+        #         "yaxis_title": "VACF",
+        #         "title": "Velocity Auto-correlation Function",
+        #     },
+        #     "vdos": {
+        #         "xlim": (0, 100),
+        #         "ylim": (None, None),
+        #         "xaxis_title": "Frequency (ps⁻¹)",
+        #         "yaxis_title": "VDOS",
+        #         "title": "Vibrational Density of States",
+        #     },
+        # }
+        
 
     @staticmethod
     def register_callbacks(app, groups, group_mae_tables, properties_dict):
         from dash import Input, Output, State, no_update, html, dcc
         import plotly.graph_objs as go
         import numpy as np
-        from plotly.express.colors import qualitative
+        import re
 
-        # --- Plot configuration dictionary for known properties ---
+        # Plot configuration dictionary
         plot_config = {
             "g_r_oo": {
                 "xlim": (2.0, 5.5),
@@ -878,7 +916,7 @@ class MolecularDynamics(zntrack.Node):
                 "ylim": (None, None),
                 "xaxis_title": "Time (ps)",
                 "yaxis_title": "VACF",
-                "title": "Velocity Auto-correlation Function",
+                "title": "Velocity Auto-correlation Function (Oxygen)",
             },
             "vdos": {
                 "xlim": (0, 100),
@@ -889,93 +927,6 @@ class MolecularDynamics(zntrack.Node):
             },
         }
 
-        # --- MAE Plot Callback: Outputs figure to dcc.Graph(id="mae-plot") and displays clicked property ---
-        @app.callback(
-            Output("mae-plot", "figure"),
-            Output("mae-plot-property", "children"),
-            Input("rdf-table-last-clicked", "data"),
-            Input("dynamic-table-last-clicked", "data"),
-            prevent_initial_call=True,
-        )
-        def update_mae_plot(rdf_clicked, dynamic_clicked):
-            import plotly.graph_objs as go
-            import numpy as np
-            ctx = dash.callback_context
-            if not ctx.triggered:
-                raise dash.exceptions.PreventUpdate
-
-            triggered_id = ctx.triggered_id
-            model = None
-            prop = None
-            if triggered_id == "rdf-table-last-clicked":
-                if rdf_clicked is None or len(rdf_clicked) != 2:
-                    raise dash.exceptions.PreventUpdate
-                model, prop = rdf_clicked
-            elif triggered_id == "dynamic-table-last-clicked":
-                if dynamic_clicked is None or len(dynamic_clicked) != 2:
-                    raise dash.exceptions.PreventUpdate
-                model, prop = dynamic_clicked
-            else:
-                raise dash.exceptions.PreventUpdate
-
-            if model is None or prop is None:
-                raise dash.exceptions.PreventUpdate
-
-            data = properties_dict.get(prop, {})
-            fig = go.Figure()
-
-            if prop == "vacf":
-                for m, d in data.items():
-                    x = np.array(d["time"]) / 100
-                    y = d["vaf"]
-                    if m == "SPC/E_300K":
-                        fig.add_trace(go.Scatter(x=x, y=y, name="Reference", line=dict(dash="dash", color="black")))
-                    elif m == model:
-                        fig.add_trace(go.Scatter(x=x, y=y, name=m, line=dict(width=3)))
-                    else:
-                        fig.add_trace(go.Scatter(x=x, y=y, name=m, opacity=0.2))
-            elif prop == "vdos":
-                for m, d in data.items():
-                    x = d["frequency"]
-                    y = d["vdos"]
-                    if m == "PBE_D3_300K":
-                        fig.add_trace(go.Scatter(x=x, y=y, name="Reference", line=dict(dash="dash", color="black")))
-                    elif m == model:
-                        fig.add_trace(go.Scatter(x=x, y=y, name=m, line=dict(width=3)))
-                    else:
-                        fig.add_trace(go.Scatter(x=x, y=y, name=m, opacity=0.2))
-            elif prop == "msd_O":
-                for m, d in data.items():
-                    x = d["time"]
-                    y = d["msd"]
-                    style = dict(width=3) if m == model else dict()
-                    fig.add_trace(go.Scatter(x=x, y=y, name=m, line=style))
-            else:  # RDFs
-                for m, d in data.items():
-                    x = d["r"]
-                    y = d["rdf"]
-                    line = dict(width=3) if m == model else dict()
-                    if "PBE" in m.upper():
-                        line = dict(dash="dash", color="black")
-                    elif "EXP" in m.upper():
-                        line = dict(dash="dot", color="black")
-                    fig.add_trace(go.Scatter(x=x, y=y, name=m, line=line))
-
-            cfg = plot_config.get(prop, {})
-            fig.update_layout(
-                title=cfg.get("title", prop),
-                xaxis_title=cfg.get("xaxis_title", "x"),
-                yaxis_title=cfg.get("yaxis_title", "y"),
-            )
-            if "xlim" in cfg:
-                fig.update_xaxes(range=list(cfg["xlim"]))
-            if "ylim" in cfg:
-                fig.update_yaxes(range=list(cfg["ylim"]))
-            # Display the clicked property
-            prop_display = f"Property: {prop} | Model: {model}"
-            return fig, prop_display
-
-        import re
         for group_name, group in groups.items():
             table_id = group["table_id"]
             details_id = group["details_id"]
@@ -988,35 +939,78 @@ class MolecularDynamics(zntrack.Node):
                 Output(last_clicked_id, "data"),
                 Input(table_id, "active_cell"),
                 State(table_id, "data"),
+                State(last_clicked_id, "data"),
                 prevent_initial_call=True,
             )
-            def update_property_details(active_cell, table_data, props=props):
+            def update_property_plot(active_cell, table_data, last_clicked, table_id=table_id, props=props, details_id=details_id):
+                import plotly.graph_objs as go
+                from dash import html, dcc
+                import numpy as np
+
                 if active_cell is None:
-                    return "Click a property cell to view plot.", None
+                    raise dash.exceptions.PreventUpdate
+
                 row_idx = active_cell.get("row")
                 col_id = active_cell.get("column_id")
                 if row_idx is None or col_id is None:
-                    return "Click a property cell to view plot.", None
-                if col_id == "Score ↓":
                     raise dash.exceptions.PreventUpdate
-                row = table_data[row_idx]
-                model_name = row.get("Model")
-                prop_name = col_id
-                # Remove "Score ↓" and "Rank" columns
-                if prop_name in ["Score ↓", "Rank"]:
-                    return html.Div("Please click on a property column."), model_name
-                match = re.match(r"^(.*?)\s*\(", prop_name)
-                if match:
-                    prop_name_clean = match.group(1)
-                else:
-                    prop_name_clean = prop_name
-                if prop_name_clean not in props:
-                    return html.Div("Click a property cell to view plot."), model_name
-                if prop_name_clean not in properties_dict or model_name not in properties_dict[prop_name_clean]:
-                    return f"No data available for {model_name} / {prop_name_clean}", model_name
-                # Instead of plotting, store the selected model/prop in the appropriate Store
-                # so the main MAE plot callback can pick it up
-                return html.Div(f"Selected: {prop_name_clean} for {model_name}"), [model_name, prop_name_clean]
+
+                model_name = table_data[row_idx]["Model"].strip()
+                ref_name = col_id.strip()
+
+                if last_clicked == [model_name, ref_name]:
+                    return html.Div(), None
+
+                tabs = []
+
+                for prop in props:
+                    if prop not in properties_dict:
+                        continue
+                    prop_data = properties_dict[prop]
+
+                    if ref_name not in prop_data or model_name not in prop_data:
+                        continue
+
+                    fig = go.Figure()
+
+                    # Plot reference
+                    ref = prop_data[ref_name]
+                    if prop == "vacf":
+                        x, y = np.array(ref["time"]) / 100, ref["vaf"]
+                    elif prop == "vdos":
+                        x, y = ref["frequency"], ref["vdos"]
+                    elif prop == "msd_O":
+                        x, y = ref["time"], ref["msd"]
+                    else:  # RDF
+                        x, y = ref["r"], ref["rdf"]
+
+                    fig.add_trace(go.Scatter(x=x, y=y, name=f"{ref_name} (Ref)", line=dict(dash="dash", color="black")))
+
+                    # Plot model
+                    model = prop_data[model_name]
+                    if prop == "vacf":
+                        x, y = np.array(model["time"]) / 100, model["vaf"]
+                    elif prop == "vdos":
+                        x, y = model["frequency"], model["vdos"]
+                    elif prop == "msd_O":
+                        x, y = model["time"], model["msd"]
+                    else:  # RDF
+                        x, y = model["r"], model["rdf"]
+
+                    fig.add_trace(go.Scatter(x=x, y=y, name=model_name, line=dict(width=3)))
+
+                    # Lookup plot configuration for this property
+                    config = plot_config.get(prop, {})
+                    fig.update_layout(
+                        title=config.get("title", f"{prop} — {model_name} vs {ref_name}"),
+                        xaxis_title=config.get("xaxis_title", "x"),
+                        yaxis_title=config.get("yaxis_title", "y"),
+                        xaxis_range=config.get("xlim"),
+                        yaxis_range=config.get("ylim"),
+                        margin=dict(l=20, r=20, t=40, b=20),
+                    )
+
+                return dcc.Graph(figure=fig), [model_name, ref_name]
             
 
     
@@ -1114,11 +1108,7 @@ class MolecularDynamics(zntrack.Node):
                     ],
                 )
             )
-        # Add the MAE plot and a property display below the tables
-        layout_children.append(html.Hr())
-        layout_children.append(html.H3("MAE Plot"))
-        layout_children.append(dcc.Graph(id="mae-plot"))
-        layout_children.append(html.Div(id="mae-plot-property"))
+            
         return html.Div(layout_children, style={"backgroundColor": "white"})
         
         
