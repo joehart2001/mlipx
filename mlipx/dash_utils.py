@@ -55,7 +55,8 @@ def dash_table_interactive(
                 df: pd.DataFrame, 
                 id: str, 
                 title: str,
-                info: str = "Info: click on an interactive cell to show plots, click on the models column to collapse",
+                info: str = "Interactivity info: click on an interactive cell to show plots, click on the models column to collapse",
+                benchmark_info: str = "",
                 extra_components: list = None,
                 interactive: bool = True,
                 static_coloured_table: bool = False,
@@ -85,7 +86,9 @@ def dash_table_interactive(
     
     return html.Div([
         html.H2(title, style={"color": "black"}),
+        html.H6(benchmark_info, style={"color": "black", "fontSize": "14px"}),
         html.P(info, style={"fontSize": "14px", "color": "#555"}) if interactive else None,
+        
 
         dash_table.DataTable(
             id=id,

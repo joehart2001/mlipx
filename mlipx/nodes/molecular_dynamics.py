@@ -558,32 +558,32 @@ class MolecularDynamics(zntrack.Node):
         }
 
         properties_dict['g_r_oo'] = {
-            'pbe_D3_330K_oo': {
+            'PBE_D3_330K': {
                 'r': pbe_D3_330K_oo['x'],
                 'rdf': pbe_D3_330K_oo['y']
             }
         }
 
         properties_dict['g_r_oh'] = {
-            'pbe_D3_330K_oh': {
+            'PBE_D3_330K': {
                 'r': pbe_D3_330K_oh['x'],
                 'rdf': pbe_D3_330K_oh['y']
             }
         }
         properties_dict['g_r_hh'] = {
-            'pbe_D3_330K_hh': {
+            'PBE_D3_330K': {
                 'r': pbe_D3_330K_hh['x'],
                 'rdf': pbe_D3_330K_hh['y']
             }
         }
         # Merge in exp_300K data for g_r_oo without overwriting existing dict
-        properties_dict['g_r_oo']['exp_300K'] = {
+        properties_dict['g_r_oo']['EXP_300K'] = {
             'r': exp_300K['x'],
             'rdf': exp_300K['y']
         }
         
         properties_dict['msd_O'] = {
-            "PBE_TS_vdW(SC)": {
+            "PBE_TS_vdW(SC)_300K": {
                 "time": [], # to include
                 "msd": [],
                 "D": 0.044  # Å^2/ps
@@ -746,7 +746,7 @@ class MolecularDynamics(zntrack.Node):
                             continue
                         rdf_model_interp = np.interp(r_ref, r_model, rdf_model)
                         mae = np.mean(np.abs(rdf_model_interp - rdf_ref))
-                        row[ref_key] = round(mae, 4)
+                        row[f"{prop} ({ref_key})"] = round(mae, 4)
 
                     # VACF MAE computation
                     elif "vaf" in ref_data and "vaf" in model_data:
@@ -766,7 +766,7 @@ class MolecularDynamics(zntrack.Node):
                             continue
                         vaf_ref_interp = np.interp(t_model_masked, t_ref, vaf_ref)
                         mae = np.mean(np.abs(vaf_model_masked - vaf_ref_interp))
-                        row[ref_key] = round(mae, 4)
+                        row[f"{prop} ({ref_key})"] = round(mae, 4)
 
                     # VDOS MAE computation
                     elif "vdos" in ref_data and "vdos" in model_data:
@@ -786,11 +786,12 @@ class MolecularDynamics(zntrack.Node):
                             continue
                         vdos_ref_interp = np.interp(freq_model_masked, freq_ref, vdos_ref)
                         mae = np.mean(np.abs(vdos_model_masked - vdos_ref_interp))
-                        row[ref_key] = round(mae, 4)
+                        row[f"{prop} ({ref_key})"] = round(mae, 4)
 
                 mae_data.append(row)
 
-            columns = ["Model"] + reference_keys
+            # Columns are Model plus all reference-property pairs (now using new header format)
+            columns = ["Model"] + [f"{prop} ({ref_key})" for ref_key in reference_keys]
             return pd.DataFrame(mae_data, columns=columns).round(3)
 
         model_names = list(node_dict.keys())
@@ -842,44 +843,6 @@ class MolecularDynamics(zntrack.Node):
         return run_app(app, ui=ui)
 
 
-        # plot_config = {
-        #     "g_r_oo": {
-        #         "xlim": (2.0, 5.5),
-        #         "ylim": (None, 4),
-        #         "xaxis_title": "r (Å)",
-        #         "yaxis_title": "g(r)",
-        #         "title": "O-O RDF",
-        #     },
-        #     "g_r_oh": {
-        #         "xlim": (0, 4.5),
-        #         "ylim": (None, None),
-        #         "xaxis_title": "r (Å)",
-        #         "yaxis_title": "g(r)",
-        #         "title": "O-H RDF",
-        #     },
-        #     "g_r_hh": {
-        #         "xlim": (0, 5),
-        #         "ylim": (None, None),
-        #         "xaxis_title": "r (Å)",
-        #         "yaxis_title": "g(r)",
-        #         "title": "H-H RDF",
-        #     },
-        #     "vacf": {
-        #         "xlim": (0, 1),
-        #         "ylim": (None, None),
-        #         "xaxis_title": "Time (ps)",
-        #         "yaxis_title": "VACF",
-        #         "title": "Velocity Auto-correlation Function",
-        #     },
-        #     "vdos": {
-        #         "xlim": (0, 100),
-        #         "ylim": (None, None),
-        #         "xaxis_title": "Frequency (ps⁻¹)",
-        #         "yaxis_title": "VDOS",
-        #         "title": "Vibrational Density of States",
-        #     },
-        # }
-        
 
     @staticmethod
     def register_callbacks(app, groups, group_mae_tables, properties_dict):
@@ -946,6 +909,7 @@ class MolecularDynamics(zntrack.Node):
                 import plotly.graph_objs as go
                 from dash import html, dcc
                 import numpy as np
+                import re
 
                 if active_cell is None:
                     raise dash.exceptions.PreventUpdate
@@ -957,16 +921,28 @@ class MolecularDynamics(zntrack.Node):
 
                 model_name = table_data[row_idx]["Model"].strip()
                 ref_name = col_id.strip()
+                # New parsing: parse "prop (ref_key)" header
+                match = re.match(r"(.*?) \((.*?)\)", ref_name)
+                if match:
+                    prop, ref_name = match.group(1), match.group(2)
 
-                if last_clicked == [model_name, ref_name]:
+                # Collapse plot if the "Model" column is clicked, consistent with lattice constant plots
+                if col_id == "Model":
                     return html.Div(), None
+
+                # if last_clicked == [model_name, ref_name]:
+                #     return html.Div(), None
 
                 tabs = []
 
-                for prop in props:
-                    if prop not in properties_dict:
+                for _prop in props:
+                    if _prop not in properties_dict:
                         continue
-                    prop_data = properties_dict[prop]
+                    prop_data = properties_dict[_prop]
+
+                    # Only show plot if _prop matches prop (from header)
+                    if match and _prop != prop:
+                        continue
 
                     if ref_name not in prop_data or model_name not in prop_data:
                         continue
@@ -975,11 +951,11 @@ class MolecularDynamics(zntrack.Node):
 
                     # Plot reference
                     ref = prop_data[ref_name]
-                    if prop == "vacf":
+                    if _prop == "vacf":
                         x, y = np.array(ref["time"]) / 100, ref["vaf"]
-                    elif prop == "vdos":
+                    elif _prop == "vdos":
                         x, y = ref["frequency"], ref["vdos"]
-                    elif prop == "msd_O":
+                    elif _prop == "msd_O":
                         x, y = ref["time"], ref["msd"]
                     else:  # RDF
                         x, y = ref["r"], ref["rdf"]
@@ -988,11 +964,11 @@ class MolecularDynamics(zntrack.Node):
 
                     # Plot model
                     model = prop_data[model_name]
-                    if prop == "vacf":
+                    if _prop == "vacf":
                         x, y = np.array(model["time"]) / 100, model["vaf"]
-                    elif prop == "vdos":
+                    elif _prop == "vdos":
                         x, y = model["frequency"], model["vdos"]
-                    elif prop == "msd_O":
+                    elif _prop == "msd_O":
                         x, y = model["time"], model["msd"]
                     else:  # RDF
                         x, y = model["r"], model["rdf"]
@@ -1000,9 +976,9 @@ class MolecularDynamics(zntrack.Node):
                     fig.add_trace(go.Scatter(x=x, y=y, name=model_name, line=dict(width=3)))
 
                     # Lookup plot configuration for this property
-                    config = plot_config.get(prop, {})
+                    config = plot_config.get(_prop, {})
                     fig.update_layout(
-                        title=config.get("title", f"{prop} — {model_name} vs {ref_name}"),
+                        title=config.get("title", f"{_prop} — {model_name} vs {ref_name}"),
                         xaxis_title=config.get("xaxis_title", "x"),
                         yaxis_title=config.get("yaxis_title", "y"),
                         xaxis_range=config.get("xlim"),
@@ -1067,8 +1043,6 @@ class MolecularDynamics(zntrack.Node):
             properties_dict = pickle.load(f)
         with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
-        with open(f"{cache_dir}/vdos_data.pkl", "rb") as f:
-            vdos_dict = pickle.load(f)
         properties_dict["msd_O"] = msd_dict
         #properties_dict["vdos"] = vdos_dict
 

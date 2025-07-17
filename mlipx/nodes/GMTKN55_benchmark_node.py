@@ -93,7 +93,7 @@ class GMTKN55Benchmark(zntrack.Node):
             csv_writer = csv.writer(csv_file)
             csv_writer.writerow(["Subset", "MAE", "Completed"])
 
-            for subset_name, subset in structure_dict.items():
+            for subset_name, subset in tqdm(structure_dict.items(), desc="Processing GMTKN55 subsets"):
                 # e.g. subset Amino20x4, BHROT27
                 if self.subsets and subset_name not in self.subsets:
                     continue
@@ -634,8 +634,6 @@ class GMTKN55Benchmark(zntrack.Node):
         wtmad_table.to_pickle(os.path.join(cache_dir, "wtmad_table.pkl"))
         benchmark_df.to_pickle(os.path.join(cache_dir, "benchmark_df.pkl"))
         mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
-
-
 
         return app
 

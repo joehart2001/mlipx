@@ -544,6 +544,67 @@ def wiggle150_compare(
     
     
 @app.command()
+def wiggle150_precompute(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
+    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+
+    ):
+    
+    nodes = [
+        "*Wiggle150*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_Wiggle150")
+    
+    benchmark_node_dict = {}
+
+    for name, node in node_objects.items():
+        model = name.split("_Wiggle150")[0]
+        benchmark_node_dict[model] = node
+        
+    if models:
+        # filter to selected models
+        node_objects = {
+            m: node for m, node in node_objects.items() if m in models
+        }
+
+    from mlipx import Wiggle150
+    Wiggle150.benchmark_precompute(
+        node_dict=benchmark_node_dict,
+        normalise_to_model=normalise_to_model,
+        ui=ui
+    )
+    
+    
+    
+@app.command()
+def wiggle150_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import Wiggle150
+    Wiggle150.launch_dashboard(
+        ui=ui,
+    )
+    
+    
+@app.command()
 def oc157_compare(
     #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
@@ -752,12 +813,18 @@ def get_bulk_crystal_benchmark_node_dicts(
     
 @app.command()
 def lattice_constants_compare(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to lattice constant nodes")],
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to lattice constant nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
 
     ):
+    
+    nodes = [
+        "*LatticeConst*",
+    ]
+    glob = True
+    
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
@@ -811,13 +878,16 @@ def load_nodes_and_ref_node_lat(node_objects, models, split_str):
 
 @app.command()
 def X23_compare(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to X23 nodes")],
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to X23 nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     ):
     
-    
+    nodes = [
+        "*X23Benchmark*",
+    ]
+    glob = True
     
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()
@@ -845,11 +915,17 @@ def X23_compare(
     
 @app.command()
 def DMC_ICE_compare(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to DMC ICE nodes")],
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to DMC ICE nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     ):
+    
+    nodes = [
+        "*DMCICE13Benchmark*",
+    ]
+    glob = True
+    
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
@@ -938,6 +1014,66 @@ def get_mol_crystal_benchmark_node_dicts(
     
     
     
+@app.command()
+def mol_crystal_precompute(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to molecular crystal nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    ):
+    
+    nodes = [
+        "*X23Benchmark*",
+        "*DMCICE13Benchmark*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+ 
+    X23_dict, ICE_DMC_dict = get_mol_crystal_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_X23="_X23Benchmark",
+        split_str_ICE="_DMCICE13Benchmark",
+    )
+    
+    from mlipx import MolecularCrystalBenchmark
+    MolecularCrystalBenchmark.benchmark_precompute(
+        X23_data=X23_dict,
+        DMC_ICE_data=ICE_DMC_dict,
+    )
+    
+@app.command()
+def mol_crystal_launch_dashboard(
+    cache_dir="app_cache/molecular_crystal_benchmark/",
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import MolecularCrystalBenchmark
+    if return_app == True:
+        return MolecularCrystalBenchmark.launch_dashboard(
+            cache_dir=cache_dir,
+            ui=ui,
+            return_app=return_app,
+        )
+    else:
+        MolecularCrystalBenchmark.launch_dashboard(
+            cache_dir=cache_dir,
+            ui=ui,
+        )
+    
     
 @app.command()
 def full_benchmark_precompute(
@@ -958,6 +1094,7 @@ def full_benchmark_precompute(
         "*DMCICE13Benchmark*",
         "*GMTKN55Benchmark*",
         "*HomonuclearDiatomics*",
+        "*Wiggle150*",
         "*MolecularDynamics*",
         "*NEB2*"
     ]
@@ -990,13 +1127,14 @@ def full_benchmark_precompute(
         split_str_ICE="_DMCICE13Benchmark",
     )
     # molecular benchmark
-    GMTKN55_dict, HD_dict = get_mol_benchmark_node_dicts(
+    GMTKN55_dict, HD_dict, wig150_dict = get_mol_benchmark_node_dicts(
         nodes,
         glob,
         models,
         all_nodes,
         split_str_GMTKN55="_GMTKN55Benchmark",
         split_str_HD="_homonuclear-diatomics",
+        split_str_wiggle150="_Wiggle150",
     )
     
     MD_dict = get_further_apps_benchmark_node_dicts(
@@ -1034,11 +1172,9 @@ def full_benchmark_precompute(
         DMC_ICE_data=ICE_DMC_dict,
         GMTKN55_data=GMTKN55_dict,
         HD_data=HD_dict,
+        Wiggle150_data=wig150_dict,
         MD_data=MD_dict,
         NEB_data=neb_dict,
-        #ui=ui,
-        #return_app = return_app,
-        #report=report,
         normalise_to_model=normalise_to_model,
     )
     
@@ -1087,13 +1223,14 @@ def molecular_benchmark(
         all_nodes = list(json.load(f).keys())
     
     
-    GMTKN55_dict, HD_dict = get_mol_benchmark_node_dicts(
+    GMTKN55_dict, HD_dict, wig150_dict = get_mol_benchmark_node_dicts(
         nodes,
         glob,
         models,
         all_nodes,
         split_str_GMTKN55="_GMTKN55Benchmark",
         split_str_HD="_homonuclear-diatomics",
+        split_str_wiggle150="_Wiggle150",
     )
     
     if ui not in {None, "browser"}:
@@ -1108,6 +1245,59 @@ def molecular_benchmark(
         normalise_to_model=normalise_to_model, # default model for normalisation
     )
     
+    
+@app.command()
+def mol_benchmark_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+    ):
+    
+    nodes = [
+        "*GMTKN55Benchmark*",
+        "*HomonuclearDiatomics*",
+        "*Wiggle150*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    
+    GMTKN55_dict, HD_dict, wig150_dict = get_mol_benchmark_node_dicts(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        split_str_GMTKN55="_GMTKN55Benchmark",
+        split_str_HD="_homonuclear-diatomics",
+        split_str_wiggle150="_Wiggle150",
+    )
+    
+    from mlipx import MolecularBenchmark
+    MolecularBenchmark.benchmark_precompute(
+        GMTKN55_data=GMTKN55_dict,
+        HD_data=HD_dict,
+        Wiggle150_data=wig150_dict,
+        normalise_to_model=normalise_to_model, # default model for normalisation
+    )    
+    
+
+@app.command()
+def mol_benchmark_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import MolecularBenchmark
+    MolecularBenchmark.launch_dashboard(
+        ui=ui,
+    )
+
 
 def get_mol_benchmark_node_dicts(
     nodes: list[str],
@@ -1116,18 +1306,22 @@ def get_mol_benchmark_node_dicts(
     all_nodes: list[str],
     split_str_GMTKN55: str = "_GMTKN55Benchmark",
     split_str_HD: str = "_homonuclear-diatomics",
+    split_str_wiggle150: str = "_Wiggle150",
 ) -> dict[str, zntrack.Node]:
     
     GMTKN55_nodes = [node for node in all_nodes if "GMTKN55Benchmark" in node]
     HD_nodes = [node for node in all_nodes if "HomonuclearDiatomics" in node]
+    wiggle150_nodes = [node for node in all_nodes if "Wiggle150" in node]
     
     GMTKN55_node_objects = load_node_objects(nodes, glob, models, GMTKN55_nodes, split_str=split_str_GMTKN55)
     HD_node_objects = load_node_objects(nodes, glob, models, HD_nodes, split_str=split_str_HD)
+    wiggle150_node_objects = load_node_objects(nodes, glob, models, wiggle150_nodes, split_str=split_str_wiggle150)
     
     GMTKN55_dict = load_nodes_model(GMTKN55_node_objects, models, split_str=split_str_GMTKN55)
     HD_dict = load_nodes_model(HD_node_objects, models, split_str=split_str_HD)
+    wiggle150_dict = load_nodes_model(wiggle150_node_objects, models, split_str=split_str_wiggle150)
     
-    return GMTKN55_dict, HD_dict
+    return GMTKN55_dict, HD_dict, wiggle150_dict
 
 
 
@@ -1307,12 +1501,28 @@ def further_apps_precompute(
     MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
     
 
-    from mlipx import FutherApplications
-    FutherApplications.benchmark_precompute(
+    from mlipx import FurtherApplications
+    FurtherApplications.benchmark_precompute(
         MD_data=MD_dict,
         normalise_to_model=normalise_to_model,
     )
     
+
+@app.command()
+def further_apps_launch_dashboard(
+    cache_dir="app_cache/",
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import FurtherApplications
+    FurtherApplications.launch_dashboard(
+        ui=ui,
+    )
 
 
 

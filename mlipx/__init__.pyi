@@ -15,7 +15,7 @@ from .nodes.invariances import (
 )
 from .nodes.io import LoadDataFile
 from .nodes.modifier import TemperatureRampModifier
-from .nodes.molecular_dynamics import LangevinConfig, MolecularDynamics, NPTConfig
+from .nodes.molecular_dynamics import LangevinConfig, MolecularDynamics, NPTConfig, NPT_MTK_Config
 from .nodes.mp_api import MPRester
 from .nodes.nebs import NEBinterpolate, NEBs, NEB2
 from .nodes.observer import MaximumForceObserver
@@ -49,7 +49,7 @@ from .nodes.phonon_all_ref import PhononAllRef
 from .nodes.phonon_all_meta import PhononAllBatchMeta
 from .nodes.oc157 import OC157Benchmark
 from .nodes.wiggle150 import Wiggle150
-from .nodes.further_applications import FutherApplications
+from .nodes.further_applications import FurtherApplications
 from .nodes.further_applications_neb import NEBFutherApplications
 from .project import Project
 from .version import __version__
@@ -110,7 +110,7 @@ __all__ = [
     "OC157Benchmark",
     "PhononAllBatchMeta",
     "Wiggle150",
-    "FutherApplications",
+    "FurtherApplications",
     "NEBFutherApplications",
     "NPTConfig",
     "NPT_MTK_Config",

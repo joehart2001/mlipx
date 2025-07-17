@@ -34,7 +34,7 @@ from typing import List, Dict, Any, Optional
 
 import mlipx
 from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, MolecularBenchmark, HomonuclearDiatomics
-from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, FutherApplications, NEBFutherApplications, NEB2
+from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, FurtherApplications, NEBFutherApplications, NEB2, Wiggle150
 
 
 
@@ -60,7 +60,7 @@ BENCHMARK_STRUCTURE = {
     "Overall Benchmark": [],
     "Bulk Crystal Score": ["Phonon Dispersion", "Lattice Constants", "Elasticity"],
     "Molecular Crystal Score": ["X23 Benchmark", "DMC-ICE13 Benchmark"],
-    "Molecular Score": ["GMTKN55 Benchmark", "Homonuclear Diatomics"],
+    "Molecular Score": ["GMTKN55 Benchmark", "Homonuclear Diatomics", "Wiggle150"],
     "Water MD": ["Water RDFs"],
     "NEBs": ["LiFePO4 b and c paths"]#, "Si 64 and 216"],
 }
@@ -84,7 +84,7 @@ class FullBenchmark(zntrack.Node):
     bulk_crystal_benchmark: List[BulkCrystalBenchmark] = zntrack.deps()
     mol_crystal_benchmark: List[MolecularCrystalBenchmark] = zntrack.deps()
     mol_benchmark: List[MolecularBenchmark] = zntrack.deps()
-    further_apps_benchmark: List[FutherApplications] = zntrack.deps()
+    further_apps_benchmark: List[FurtherApplications] = zntrack.deps()
     neb_further_apps_benchmark: List[NEBFutherApplications] = zntrack.deps()
     
     # outputs
@@ -116,6 +116,7 @@ class FullBenchmark(zntrack.Node):
         DMC_ICE_data: List[DMCICE13Benchmark] | Dict[str, DMCICE13Benchmark],
         GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
         HD_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
+        Wiggle150_data: List[Wiggle150] | Dict[str, Wiggle150],
         MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics] = None,
         NEB_data: List[NEB2] | Dict[str, NEB2] = None,
         report: bool = False,
@@ -150,13 +151,14 @@ class FullBenchmark(zntrack.Node):
         MolecularBenchmark.benchmark_precompute(
             GMTKN55_data=GMTKN55_data,
             HD_data=HD_data,
+            Wiggle150_data=Wiggle150_data,
             cache_dir=str(cache_dir / "molecular_benchmark"),
             report=report,
             normalise_to_model=normalise_to_model,
         )
         
         print("Precomputing Further Applications Benchmark (4/4)...")
-        FutherApplications.benchmark_precompute(
+        FurtherApplications.benchmark_precompute(
             MD_data=MD_data,
             cache_dir=str(cache_dir / "further_applications_benchmark"),
             report=report,
@@ -191,10 +193,10 @@ class FullBenchmark(zntrack.Node):
         )
         scores_all_df.to_csv(Path(cache_dir) / "overall_benchmark.csv", index=False)
 
-        with open(f"{cache_dir}/nebs_further_apps/nebs_cache/all_group_data.pkl", "rb") as f:
-            all_group_data = pickle.load(f)
-        #assets_dir = next(iter(all_group_data.values()))[2]
-        #assets_dir = "assets"
+        # with open(f"{cache_dir}/nebs_further_apps/nebs_cache/all_group_data.pkl", "rb") as f:
+        #     all_group_data = pickle.load(f)
+
+        
         assets_dir = os.path.abspath("assets")
         from mlipx.dash_utils import run_app
         print("Serving assets from:", assets_dir)
@@ -204,7 +206,7 @@ class FullBenchmark(zntrack.Node):
         mol_crystal_layout, mol_crystal_callback_fn = MolecularCrystalBenchmark.launch_dashboard(full_benchmark=True)
         mol_layout, mol_callback_fn = MolecularBenchmark.launch_dashboard(full_benchmark=True)
         # Add further applications layout and callback
-        further_layout, further_callback_fn = FutherApplications.launch_dashboard(full_benchmark=True)
+        further_layout, further_callback_fn = FurtherApplications.launch_dashboard(full_benchmark=True)
         neb_further_layout, neb_further_callback_fn = NEBFutherApplications.launch_dashboard(full_benchmark=True)
 
 
@@ -236,21 +238,8 @@ class FullBenchmark(zntrack.Node):
         def render_tab(tab_name):
             return tab_layouts[tab_name]
 
-        # # --- Scroll to anchor on request (clientside) ---
-        # app_summary.clientside_callback(
-        #     """
-        #     function(targetId) {
-        #         if (!targetId) return;
-        #         const el = document.getElementById(targetId);
-        #         if (el) {
-        #             el.scrollIntoView({ behavior: "smooth" });
-        #         }
-        #         return '';
-        #     }
-        #     """,
-        #     dash.Output("scroll-anchor", "children"),
-        #     dash.Input("scroll-target", "data")
-        # )
+
+    
 
         # --- Keep overall summary in sync with Bulk‑Crystal weighting (cached version) ---
         @app_summary.callback(
@@ -302,27 +291,6 @@ class FullBenchmark(zntrack.Node):
                     return name
             raise dash.exceptions.PreventUpdate
 
-        # # --- Add callbacks for subtest jump buttons to scroll to section ---
-        # jump_inputs = []
-        # jump_id_map = {}
-        # for cat, subtests in BENCHMARK_STRUCTURE.items():
-        #     for sub in subtests:
-        #         btn_id = f"jump-{cat.lower().replace(' ', '-')}-{sub.lower().replace(' ', '-')}"
-        #         target_id = BENCHMARK_TABLE_IDS[sub]
-        #         jump_inputs.append(dash.Input(btn_id, "n_clicks"))
-        #         jump_id_map[btn_id] = target_id
-
-        # @app_summary.callback(
-        #     dash.Output("scroll-target", "data"),
-        #     jump_inputs,
-        #     prevent_initial_call=True
-        # )
-        # def scroll_to_section(*args):
-        #     ctx = dash.callback_context
-        #     if not ctx.triggered:
-        #         raise dash.exceptions.PreventUpdate
-        #     btn_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        #     return jump_id_map.get(btn_id, None)
 
         if return_app == True:
             return app_summary
@@ -391,15 +359,11 @@ class FullBenchmark(zntrack.Node):
             dcc.Tabs(
                 id="tabs",
                 value="Overall Benchmark",
-                #persistence=True,
-                #persistence_type="session",
                 children=[
                     dcc.Tab(label=tab, value=tab) for tab in tab_layouts
                 ]
             ),
             html.Div(id="tab-content"),
-            #dcc.Store(id="scroll-target"),
-            #html.Div(id="scroll-anchor")
         ], style={
             "backgroundColor": "white",
             "padding": "20px",
