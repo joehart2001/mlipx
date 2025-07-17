@@ -179,7 +179,7 @@ class MolecularDynamics(zntrack.Node):
     """
 
     model: NodeWithCalculator = zntrack.deps()
-    thermostat_barostat_config: t.Union[LangevinConfig, NPTConfig] = zntrack.deps()
+    thermostat_barostat_config: t.Union[LangevinConfig, NPTConfig, NPT_MTK_Config] = zntrack.deps()
     data: list[ase.Atoms] = zntrack.deps(None)
     data_path: pathlib.Path = zntrack.params(None)
     data_id: int = zntrack.params(-1)
