@@ -53,7 +53,7 @@ class SurfaceBenchmark(zntrack.Node):
     """ Node to combine all molecular benchmarks
     """
     # inputs
-    OC157_list: List[GMTKN55Benchmark] = zntrack.deps()
+    OC157_list: List[OC157Benchmark] = zntrack.deps()
 
 
     def run(self):
