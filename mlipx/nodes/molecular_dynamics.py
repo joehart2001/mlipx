@@ -105,58 +105,58 @@ class NPTConfig:
         )
 
 
-    @dataclasses.dataclass
-    class NPT_MTK_Config:
-        """Configure an NPT barostat using the Nose-Hoover MTK integrator.
+@dataclasses.dataclass
+class NPT_MTK_Config:
+    """Configure an NPT barostat using the Nose-Hoover MTK integrator.
 
-        Parameters
-        ----------
-        timestep : float
-            The time step in fs.
-        temperature : float
-            The target temperature in Kelvin.
-        pressure : float
-            External pressure in GPa (default: 0.0).
-        tdamp : float
-            Thermostat time constant in fs (typically 100x timestep).
-        pdamp : float
-            Barostat time constant in fs (typically 1000x timestep).
-        tchain : int
-            Number of thermostat chain variables.
-        pchain : int
-            Number of barostat chain variables.
-        tloop : int
-            Number of thermostat substeps.
-        ploop : int
-            Number of barostat substeps.
-        extra_kwargs : dict
-            Extra arguments passed to the integrator.
-        """
-        timestep: float
-        temperature: float
-        pressure: float = 1
-        tdamp: float = 100
-        pdamp: float = 1000
-        tchain: int = 3
-        pchain: int = 3
-        tloop: int = 1
-        ploop: int = 1
-        extra_kwargs: dict = dataclasses.field(default_factory=dict)
+    Parameters
+    ----------
+    timestep : float
+        The time step in fs.
+    temperature : float
+        The target temperature in Kelvin.
+    pressure : float
+        External pressure in GPa (default: 0.0).
+    tdamp : float
+        Thermostat time constant in fs (typically 100x timestep).
+    pdamp : float
+        Barostat time constant in fs (typically 1000x timestep).
+    tchain : int
+        Number of thermostat chain variables.
+    pchain : int
+        Number of barostat chain variables.
+    tloop : int
+        Number of thermostat substeps.
+    ploop : int
+        Number of barostat substeps.
+    extra_kwargs : dict
+        Extra arguments passed to the integrator.
+    """
+    timestep: float
+    temperature: float
+    pressure: float = 1
+    tdamp: float = 100
+    pdamp: float = 1000
+    tchain: int = 3
+    pchain: int = 3
+    tloop: int = 1
+    ploop: int = 1
+    extra_kwargs: dict = dataclasses.field(default_factory=dict)
 
-        def get_molecular_dynamics(self, atoms):
-            return IsotropicMTKNPT(
-                atoms,
-                timestep=self.timestep * ase.units.fs,
-                temperature_K=self.temperature,
-                pressure_au=self.pressure * ase.units.GPa,
-                tdamp=self.tdamp * ase.units.fs,
-                pdamp=self.pdamp * ase.units.fs,
-                tchain=self.tchain,
-                pchain=self.pchain,
-                tloop=self.tloop,
-                ploop=self.ploop,
-                **self.extra_kwargs,
-            )
+    def get_molecular_dynamics(self, atoms):
+        return IsotropicMTKNPT(
+            atoms,
+            timestep=self.timestep * ase.units.fs,
+            temperature_K=self.temperature,
+            pressure_au=self.pressure * ase.units.GPa,
+            tdamp=self.tdamp * ase.units.fs,
+            pdamp=self.pdamp * ase.units.fs,
+            tchain=self.tchain,
+            pchain=self.pchain,
+            tloop=self.tloop,
+            ploop=self.ploop,
+            **self.extra_kwargs,
+        )
 
         
 class MolecularDynamics(zntrack.Node):
