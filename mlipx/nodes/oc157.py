@@ -403,7 +403,7 @@ class OC157Benchmark(zntrack.Node):
     @staticmethod
     def benchmark_precompute(
         node_dict: dict[str, "OC157Benchmark"],
-        cache_dir: str = "app_cache/molecular_benchmark/oc157_cache/",
+        cache_dir: str = "app_cache/surface_benchmark/oc157_cache/",
         normalise_to_model: t.Optional[str] = None,
     ):
         from scipy.stats import pearsonr
@@ -439,10 +439,12 @@ class OC157Benchmark(zntrack.Node):
             .merge(pd.DataFrame(rmsd_dict.items(), columns=["Model", "RMSD (meV)"]), on="Model")
             .merge(pd.DataFrame(pearsons_dict.items(), columns=["Model", "Pearson r"]), on="Model")
         )
+        
+        mae_df["Score"] = mae_df["MAE (meV)"] + (1 - mae_df["Ranking Accuracy"]) / 2
 
-        mae_df["Score"] = mae_df[["MAE (meV)", "Ranking Accuracy"]].apply(
-            lambda row: row["MAE (meV)"] / (row["Ranking Accuracy"] + 1e-8), axis=1
-        )
+        # mae_df["Score"] = mae_df[["MAE (meV)", "Ranking Accuracy"]].apply(
+        #     lambda row: row["MAE (meV)"] / (row["Ranking Accuracy"] + 1e-8), axis=1
+        # )
 
         if normalise_to_model is not None:
             mae_df["Score"] = mae_df["Score"] / mae_df[mae_df["Model"] == normalise_to_model]["Score"].values[0]
@@ -453,12 +455,14 @@ class OC157Benchmark(zntrack.Node):
         mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
         rel_all_df.to_pickle(os.path.join(cache_dir, "rel_energy_df.pkl"))
         dft_df.to_pickle(os.path.join(cache_dir, "dft_df.pkl"))
+        
+        return
 
 
 
     @staticmethod
     def launch_dashboard(
-        cache_dir="app_cache/molecular_benchmark/oc157_cache",
+        cache_dir="app_cache/surface_benchmark/oc157_cache",
         app: dash.Dash | None = None,
         ui=None,
     ):
@@ -504,7 +508,7 @@ class OC157Benchmark(zntrack.Node):
                     "RMSD (meV)": "Root Mean Square Deviation (meV)",
                     "Ranking Accuracy": "Accuracy in ranking stability across triplets",
                     "Pearson r": "Pearson correlation coefficient",
-                    "Score": "MAE / Ranking Accuracy",
+                    "Score": "Avg of MAE and 1 - Ranking Accuracy (lower is better)",
                     "Rank": "Model rank based on score (lower is better)"
                 }
             )

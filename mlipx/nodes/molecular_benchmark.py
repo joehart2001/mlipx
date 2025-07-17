@@ -145,7 +145,7 @@ class MolecularBenchmark(zntrack.Node):
             gmtkn55=wtmad_df_GMTKN55,
             diatomics=stats_df_HD,
             wiggle150=wig150_mae_df,
-            normalise_to_model="my-best-model",
+            normalise_to_model=normalise_to_model,
             weights={"gmtkn55": 1.0, "diatomics": 0.5, "wiggle150": 0.5},
         )
         # benchmark_score_df = benchmark_score_df.round(3).sort_values(by='Avg MAE \u2193').reset_index(drop=True)

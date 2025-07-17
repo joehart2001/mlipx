@@ -34,6 +34,7 @@ from ase.io.trajectory import Trajectory
 from plotly.io import write_image
 from ase.io import read
 from tqdm import tqdm
+from copy import deepcopy
 
 from scipy.stats import gaussian_kde
 
@@ -63,10 +64,9 @@ class S24Benchmark(zntrack.Node):
     model: NodeWithCalculator = zntrack.deps()
     model_name: str = zntrack.params()
 
-    oc_rel_energy_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "oc157_rel_energies.csv")
-    ref_rel_energy_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "oc157_ref_rel_energies.csv")
-    oc_mae_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "oc157_mae.json")
-    oc_ranks_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "oc157_rank_accuracy.json")
+    pred_energy_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s24_pred_energies.csv")
+    ref_energy_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s24_ref_energies.csv")
+    s24_mae_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s24_mae.json")
     
 
     def run(self):
@@ -74,9 +74,262 @@ class S24Benchmark(zntrack.Node):
         import copy
 
         calc = self.model.get_calculator()
-        base_dir = get_benchmark_data("OC_Dataset.zip") / "OC_Dataset"
+        data = get_benchmark_data("s24.zip") / "s24/s24_data.extxyz"
+        atoms_list = read(data, ":")
 
-    
-    
-    
-    
+        def compute_absorption_energy(surface_e, mol_surf_e, molecule_e):
+            """Compute adsorption energy given surface, molecule+surface, and molecule energies."""
+            return mol_surf_e - (surface_e + molecule_e)
+
+        ref = {}
+        pred = {}
+
+        for i in tqdm(range(0, len(atoms_list), 3), desc=f"Processing Triplets for model: {self.model_name}"):
+            surface = atoms_list[i]
+            mol_surface = atoms_list[i + 1]
+            molecule = atoms_list[i + 2]
+            surface_formula = surface.get_chemical_formula()
+            molecule_formula = molecule.get_chemical_formula()
+
+            dft_surface_energy = surface.get_potential_energy()
+            dft_mol_surface_energy = mol_surface.get_potential_energy()
+            dft_molecule_energy = molecule.get_potential_energy()
+            dft_abs_energy = compute_absorption_energy(dft_surface_energy, dft_mol_surface_energy, dft_molecule_energy)
+
+            surface.calc = deepcopy(calc)
+            mol_surface.calc = deepcopy(calc)
+            molecule.calc = deepcopy(calc)
+
+            surface_energy = surface.get_potential_energy()
+            mol_surface_energy = mol_surface.get_potential_energy()
+            molecule_energy = molecule.get_potential_energy()
+
+            calc_abs_energy = compute_absorption_energy(surface_energy, mol_surface_energy, molecule_energy)
+
+            pred[f"{surface_formula}-{molecule_formula}"] = calc_abs_energy
+            ref[f"{surface_formula}-{molecule_formula}"] = dft_abs_energy
+
+        mae = np.mean([abs(pred[key] - ref[key]) for key in pred.keys() if key in ref])
+
+        # Save pred and ref as DataFrames with a system col, as CSV
+        self.pred_energy_output.parent.mkdir(parents=True, exist_ok=True)
+        pred_df = pd.DataFrame.from_dict(pred, orient="index", columns=["Predicted Adsorption Energy (eV)"])
+        pred_df.index.name = "System"
+        ref_df = pd.DataFrame.from_dict(ref, orient="index", columns=["Reference Adsorption Energy (eV)"])
+        ref_df.index.name = "System"
+        pred_df.to_csv(self.pred_energy_output, index=True)
+        ref_df.to_csv(self.ref_energy_output, index=True)
+        with open(self.s24_mae_output, "w") as f:
+            json.dump(mae, f)
+            
+            
+            
+    @property
+    def pred_energy(self) -> Dict[str, float]:
+        """Predicted adsorption energies."""
+        df = pd.read_csv(self.pred_energy_output, index_col="System")
+        return dict(zip(df.index, df["Predicted Adsorption Energy (eV)"]))
+
+    @property
+    def ref_energy(self) -> Dict[str, float]:
+        """Reference adsorption energies."""
+        df = pd.read_csv(self.ref_energy_output, index_col="System")
+        return dict(zip(df.index, df["Reference Adsorption Energy (eV)"]))
+    @property
+    def get_mae(self) -> Dict[str, float]:
+        """Mean Absolute Error for S24 benchmark."""
+        with open(self.s24_mae_output, "r") as f:
+            return json.load(f)
+        
+        
+        
+        
+        
+        
+        
+    @staticmethod
+    def benchmark_precompute(
+        node_dict: dict[str, "S24Benchmark"],
+        cache_dir: str = "app_cache/surface_benchmark/s24_cache/",
+        normalise_to_model: t.Optional[str] = None,
+    ):
+        from scipy.stats import pearsonr
+
+        mae_dict = {}
+        
+        pred_dict = {}
+        ref_dict = {}
+        mae_dict = {}
+
+
+        for model_name, node in node_dict.items():
+            pred_dict[model_name] = node.pred_energy
+            ref_dict[model_name] = node.ref_energy
+            mae_dict[model_name] = node.get_mae
+            
+        print("pred_dict", pred_dict)
+        print("ref_dict", ref_dict)
+        
+        pred_df = pd.DataFrame(pred_dict).T
+        ref_df = pd.DataFrame(ref_dict).T
+
+        mae_df = pd.DataFrame.from_dict(mae_dict, orient="index", columns=["MAE (meV)"])
+        mae_df.index.name = "Model"
+        mae_df.reset_index(inplace=True)
+            
+        mae_df["Score"] = mae_df["MAE (meV)"]
+        
+        if normalise_to_model is not None:
+            mae_df["Score"] = mae_df["Score"] / mae_df[mae_df["Model"] == normalise_to_model]["Score"].values[0]
+        
+        mae_df['Rank'] = mae_df['Score'].rank(ascending=True)
+        
+        mae_df = mae_df.round(3)
+
+
+
+        os.makedirs(cache_dir, exist_ok=True)
+        mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+        pred_df.to_pickle(os.path.join(cache_dir, "pred_df.pkl"))
+        ref_df.to_pickle(os.path.join(cache_dir, "ref_df.pkl"))
+
+
+
+
+
+
+    @staticmethod
+    def launch_dashboard(
+        cache_dir="app_cache/surface_benchmark/s24_cache",
+        app: dash.Dash | None = None,
+        ui=None,
+    ):
+        """Launch the S24 dashboard or register it into an existing Dash app."""
+        
+        from mlipx.dash_utils import run_app
+        mae_df = pd.read_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+        pred_df = pd.read_pickle(os.path.join(cache_dir, "pred_df.pkl"))
+        ref_df = pd.read_pickle(os.path.join(cache_dir, "ref_df.pkl"))
+        
+        print("pred_df", pred_df)
+        print("ref_df", ref_df)
+        print("mae_df", mae_df)
+        
+        layout = S24Benchmark.build_layout(mae_df)
+
+        def callback_fn(app_instance):
+            S24Benchmark.register_callbacks(
+                app_instance,
+                pred_df=pred_df,
+                ref_df=ref_df
+            )
+
+        if app is None:
+            app = dash.Dash(__name__)
+            app.layout = layout
+            callback_fn(app)
+            return run_app(app, ui=ui)
+        else:
+            return layout, callback_fn
+
+
+    @staticmethod
+    def build_layout(mae_df):
+        return html.Div([
+            dash_table_interactive(
+                df=mae_df.round(3),
+                id="s24-mae-table",
+                benchmark_info="Benchmark info:",
+                title="S24 Dataset",
+                extra_components=[
+                    html.Div(id="s24-model-plot"),
+                ],
+                tooltip_header={
+                    "Model": "Name of the MLIP",
+                    "MAE (meV)": "Mean Absolute Error (meV)",
+                    "Score": "MAE (normalised)",
+                    "Rank": "Model rank based on score (lower is better)"
+                }
+            )
+        ])
+        
+        
+        
+        
+            
+            
+            
+    @staticmethod
+    def register_callbacks(
+        app, 
+        pred_df: pd.DataFrame,
+        ref_df: pd.DataFrame
+    ): 
+        from sklearn.metrics import mean_absolute_error, mean_squared_error
+        from scipy.stats import pearsonr
+
+        @app.callback(
+            Output("s24-model-plot", "children"),
+            Input("s24-mae-table", "active_cell"),
+            State("s24-mae-table", "data"),
+        )
+        def update_s24_plot(active_cell, table_data):
+
+            if not active_cell:
+                raise PreventUpdate
+
+            row = active_cell["row"]
+            clicked_model = table_data[row]["Model"]
+            col = active_cell["column_id"]
+            
+            if col == "Model":
+                return None
+
+            if clicked_model not in pred_df.index or clicked_model not in ref_df.index:
+                raise PreventUpdate
+
+            # Get prediction and reference dicts
+            pred = pred_df.loc[clicked_model].dropna()
+            ref = ref_df.loc[clicked_model].dropna()
+
+            # Align keys
+            common_keys = list(set(pred.index) & set(ref.index))
+            pred_vals = [pred[k] for k in common_keys]
+            ref_vals = [ref[k] for k in common_keys]
+
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(
+                    x=ref_vals,
+                    y=pred_vals,
+                    mode="markers",
+                    marker=dict(size=6, opacity=0.7),
+                    text=[f"System: {k}<br>DFT: {ref[k]:.3f} eV<br>Pred: {pred[k]:.3f} eV" for k in common_keys],
+                    hoverinfo="text",
+                    name=clicked_model
+                )
+            )
+            fig.add_trace(go.Scatter(
+                x=[min(ref_vals), max(ref_vals)], y=[min(ref_vals), max(ref_vals)],
+                mode="lines",
+                line=dict(dash="dash", color="black", width=1),
+                showlegend=False
+            ))
+
+            mae = mean_absolute_error(ref_vals, pred_vals)
+
+            fig.update_layout(
+                title=f"{clicked_model} vs DFT Adsorption Energies",
+                xaxis_title="DFT Adsorption Energy [eV]",
+                yaxis_title=f"{clicked_model} Prediction [eV]",
+                annotations=[
+                    dict(
+                        text=f"N = {len(ref_vals)}<br>MAE = {mae:.3f} eV",
+                        xref="paper", yref="paper",
+                        x=0.01, y=0.99, showarrow=False,
+                        align="left", bgcolor="white", font=dict(size=10)
+                    )
+                ]
+            )
+
+            return dcc.Graph(figure=fig)

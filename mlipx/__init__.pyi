@@ -51,6 +51,8 @@ from .nodes.oc157 import OC157Benchmark
 from .nodes.wiggle150 import Wiggle150
 from .nodes.further_applications import FurtherApplications
 from .nodes.further_applications_neb import NEBFutherApplications
+from .nodes.surface_benchmark import SurfaceBenchmark
+from .nodes.S24_benchmark import S24Benchmark
 from .project import Project
 from .version import __version__
 
@@ -114,5 +116,7 @@ __all__ = [
     "NEBFutherApplications",
     "NPTConfig",
     "NPT_MTK_Config",
+    "S24Benchmark",
+    "SurfaceBenchmark",
     "__version__",
 ]

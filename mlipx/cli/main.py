@@ -695,12 +695,17 @@ def cohesive_compare(
 
 @app.command()
 def elasticity_compare(
-    nodes: Annotated[list[str], typer.Argument(help="Path(s) to elasticity nodes")],
-    glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to elasticity nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
 
     ):
+    
+    nodes = [
+        "*Elasticity*",
+    ]
+    glob = True
     
     # Load all node names from zntrack.json
     fs = dvc.api.DVCFileSystem()

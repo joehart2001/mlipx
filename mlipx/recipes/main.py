@@ -858,3 +858,45 @@ def further_applications_benchmark(
         steps=steps,
         temperature=temperature,
     )
+    
+@app.command()
+def s24(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run s24 benchmark."""
+    if models is not None:
+        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipe(
+        "s24_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+    )
+    
+@app.command()
+def surface_benchmark(
+    initialize: bool = False,
+    repro: bool = False,
+    datapath: str | None = None,
+    material_ids: str | None = None,
+    smiles: str | None = None,
+    models: t.Annotated[str | None, typer.Option()] = None,
+):
+    """Run surface benchmark."""
+    if models is not None:
+        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+    handle_recipeception(
+        "surface_benchmark.py.jinja2",
+        initialize=initialize,
+        repro=repro,
+        datapath=datapath,
+        material_ids=material_ids,
+        smiles=smiles,
+    )

@@ -6,30 +6,25 @@
 {% if build is not defined %}
 {% set build = false %}
 {% endif %}
-
 {% if standalone %}
 import mlipx
 import zntrack
 from models import MODELS
 from pathlib import Path
-from ase.data import chemical_symbols
 
 project = zntrack.Project()
-
 {% endif %}
 
 
 {% set standalone = false %}
-{% include "GMTKN55_benchmark.py.jinja2" %}
-{% include "homonuclear_diatomics_benchmark.py.jinja2" %}
-{% include "wiggle150.py.jinja2" %}
+{% include "oc157_benchmark.py.jinja2" %}
+{% include "s24_benchmark.py.jinja2" %}
 
 
-with project.group('mol-benchmark'):
-    mol_benchmark = mlipx.MolecularBenchmark(
-        GMTKN55_list = GMTKN55_node_list,
-        diatomic_list = diatomic_list,
-        wiggle150_list = wiggle150_node_list,
+with project.group('surface-benchmark'):
+    surface_benchmark = mlipx.SurfaceBenchmark(
+        OC157_list = oc157_list,
+        S24_list = s24_list,
     )
 
 
