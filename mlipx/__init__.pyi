@@ -53,6 +53,9 @@ from .nodes.further_applications import FurtherApplications
 from .nodes.further_applications_neb import NEBFutherApplications
 from .nodes.surface_benchmark import SurfaceBenchmark
 from .nodes.S24_benchmark import S24Benchmark
+from .nodes.ghost_atom_benchmark import GhostAtomBenchmark
+from .nodes.slab_energy_extensivity import SlabExtensivityBenchmark
+from .nodes.physicality_benchmark import PhysicalityBenchmark
 from .project import Project
 from .version import __version__
 
@@ -118,5 +121,8 @@ __all__ = [
     "NPT_MTK_Config",
     "S24Benchmark",
     "SurfaceBenchmark",
+    "GhostAtomBenchmark",
+    "SlabExtensivityBenchmark",
+    "PhysicalityBenchmark",
     "__version__",
 ]

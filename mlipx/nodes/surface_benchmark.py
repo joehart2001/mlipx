@@ -7,7 +7,6 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from plotly.express.colors import qualitative
 import zntrack
 from ase import Atoms, units
 import subprocess
@@ -30,22 +29,14 @@ from dash import dash_table
 import socket
 import time
 from typing import List, Dict, Any, Optional
-
-
 import mlipx
 from mlipx import OC157Benchmark, S24Benchmark
-
-
-
 import os
-import plotly.express as px
 import dash
 from dash import dcc, html, Input, Output, State, MATCH
 import base64
 import csv
 import warnings
-warnings.filterwarnings("ignore", category=DeprecationWarning)
-
 
 
 

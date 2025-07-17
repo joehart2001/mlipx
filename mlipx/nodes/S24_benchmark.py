@@ -166,9 +166,6 @@ class S24Benchmark(zntrack.Node):
             pred_dict[model_name] = node.pred_energy
             ref_dict[model_name] = node.ref_energy
             mae_dict[model_name] = node.get_mae
-            
-        print("pred_dict", pred_dict)
-        print("ref_dict", ref_dict)
         
         pred_df = pd.DataFrame(pred_dict).T
         ref_df = pd.DataFrame(ref_dict).T
@@ -182,7 +179,7 @@ class S24Benchmark(zntrack.Node):
         if normalise_to_model is not None:
             mae_df["Score"] = mae_df["Score"] / mae_df[mae_df["Model"] == normalise_to_model]["Score"].values[0]
         
-        mae_df['Rank'] = mae_df['Score'].rank(ascending=True)
+        mae_df['Rank'] = mae_df['Score'].rank(ascending=True, method="min")
         
         mae_df = mae_df.round(3)
 
@@ -211,9 +208,6 @@ class S24Benchmark(zntrack.Node):
         pred_df = pd.read_pickle(os.path.join(cache_dir, "pred_df.pkl"))
         ref_df = pd.read_pickle(os.path.join(cache_dir, "ref_df.pkl"))
         
-        print("pred_df", pred_df)
-        print("ref_df", ref_df)
-        print("mae_df", mae_df)
         
         layout = S24Benchmark.build_layout(mae_df)
 
