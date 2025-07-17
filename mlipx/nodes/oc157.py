@@ -476,7 +476,7 @@ class OC157Benchmark(zntrack.Node):
         layout = OC157Benchmark.build_layout(mae_df)
 
         def callback_fn(app_instance):
-            OC157Benchmark.register_oc157_callbacks(
+            OC157Benchmark.register_callbacks(
                 app_instance,
                 rel_df_all=rel_df_all,
                 dft_df=dft_df,
@@ -522,7 +522,7 @@ class OC157Benchmark(zntrack.Node):
             
     # ---- OC157 interactive callbacks ----
     @staticmethod
-    def register_oc157_callbacks(
+    def register_callbacks(
         app, 
         rel_df_all, 
         dft_df

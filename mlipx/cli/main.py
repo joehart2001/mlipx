@@ -1661,3 +1661,124 @@ def get_neb_further_apps_dict(
 
 
 
+@app.command()
+def s24_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    """Precompute surface benchmark data."""
+    
+    nodes = [
+        "*S24Benchmark*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_s24")
+    
+    from mlipx import S24Benchmark
+    S24Benchmark.benchmark_precompute(
+        node_dict=node_objects,
+        normalise_to_model=normalise_to_model,
+    )
+    
+
+@app.command()
+def s24_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import S24Benchmark
+    if return_app == True:
+        return S24Benchmark.launch_dashboard(
+            ui=ui,
+            return_app=return_app,
+        )
+    else:
+        S24Benchmark.launch_dashboard(
+            ui=ui,
+        )
+    
+    
+    
+
+@app.command()
+def surface_benchmark_precompute(
+    #nodes: Annotated[list[str], typer.Argument(help="Path(s) to surface benchmark nodes")],
+    #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    nodes = [
+        "*OC157Benchmark*",
+        "*S24Benchmark*",
+    ]
+    glob = True
+    
+    
+    import fnmatch
+    import dvc.api
+    import json
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+        
+    
+    OC157_nodes = [node for node in all_nodes if "OC157Benchmark" in node]
+    S24_nodes = [node for node in all_nodes if "S24Benchmark" in node]
+    
+    OC157_node_objects = load_node_objects(nodes, glob, models, OC157_nodes, split_str="_oc157")
+    S24_node_objects = load_node_objects(nodes, glob, models, S24_nodes, split_str="_s24")
+    
+    OC157_dict = load_nodes_model(OC157_node_objects, models, split_str="_oc157")
+    S24_dict = load_nodes_model(S24_node_objects, models, split_str="_s24")
+    
+
+    from mlipx import SurfaceBenchmark
+    SurfaceBenchmark.benchmark_precompute(
+        OC157_data=OC157_dict,
+        S24_data=S24_dict,
+        normalise_to_model=normalise_to_model,
+    )
+    
+
+@app.command()
+def surface_benchmark_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import SurfaceBenchmark
+    if return_app == True:
+        return SurfaceBenchmark.launch_dashboard(
+            ui=ui,
+            return_app=return_app,
+        )
+    else:
+        SurfaceBenchmark.launch_dashboard(
+            ui=ui,
+        )
+    
+
+
+    
+    
+    
+    
