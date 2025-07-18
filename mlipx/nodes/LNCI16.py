@@ -81,6 +81,7 @@ class LNCI16Benchmark(zntrack.Node):
 
 
 
+
     @staticmethod
     def benchmark_precompute(
         node_dict: dict[str, "LNCI16Benchmark"],
@@ -88,24 +89,36 @@ class LNCI16Benchmark(zntrack.Node):
         normalise_to_model: Optional[str] = None,
     ):
         os.makedirs(cache_dir, exist_ok=True)
-        df_list = []
+        mae_dict = {}
+        pred_dfs = []
+
+        ref_df = list(node_dict.values())[0].get_ref
+
         for model_name, node in node_dict.items():
-            df = node.get_results.copy()
-            df["Model"] = model_name  # ensure model name column
-            df_list.append(df)
+            mae_dict[model_name] = node.get_mae
+            pred_df = node.get_pred.rename(columns={f"E_{model_name} (eV)": "E_model (eV)"})
+            merged = pd.merge(pred_df, ref_df, on="Index")
+            merged["Model"] = model_name
+            merged["Error (eV)"] = merged["E_model (eV)"] - merged["E_ref (eV)"]
+            merged["Error (kcal/mol)"] = merged["Error (eV)"] / 0.04336414
+            pred_dfs.append(merged)
 
-        full_df = pd.concat(df_list, ignore_index=True)
+        mae_df = pd.DataFrame.from_dict(mae_dict, orient="index", columns=["MAE (kcal/mol)"]).reset_index()
+        mae_df = mae_df.rename(columns={"index": "Model"})
 
-        full_df["Score"] = full_df["Delta (meV)"].abs()
+        pred_full_df = pd.concat(pred_dfs, ignore_index=True)
+
+        mae_df["Score"] = mae_df["MAE (kcal/mol)"]
 
         if normalise_to_model:
-            norm_value = full_df.loc[full_df["Model"] == normalise_to_model, "Score"].values[0]
-            full_df["Score"] /= norm_value
+            norm_value = mae_df.loc[mae_df["Model"] == normalise_to_model, "Score"].values[0]
+            mae_df["Score"] /= norm_value
 
-        full_df["Rank"] = full_df["Score"].rank(ascending=True, method="min")
+        mae_df["Rank"] = mae_df["Score"].rank(ascending=True, method="min")
 
-        full_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
-
+        mae_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
+        pred_full_df.to_pickle(os.path.join(cache_dir, "predictions_df.pkl"))
+        
 
 
     @staticmethod
@@ -117,15 +130,21 @@ class LNCI16Benchmark(zntrack.Node):
         from mlipx.dash_utils import run_app
 
         results_df = pd.read_pickle(os.path.join(cache_dir, "results_df.pkl"))
+        pred_df = pd.read_pickle(os.path.join(cache_dir, "predictions_df.pkl"))
 
         layout = LNCI16Benchmark.build_layout(results_df)
+
+        def callback_fn(app_instance):
+            LNCI16Benchmark.register_callbacks(app_instance, pred_df)
 
         if app is None:
             app = dash.Dash(__name__)
             app.layout = layout
+            callback_fn(app)
             return run_app(app, ui=ui)
         else:
-            return layout, lambda _: None
+            return layout, callback_fn
+
 
     @staticmethod
     def build_layout(results_df):
@@ -133,17 +152,81 @@ class LNCI16Benchmark(zntrack.Node):
             dash_table_interactive(
                 df=results_df.round(3),
                 id="LNCI16-table",
-                benchmark_info="",
+                benchmark_info="Benchmark info:",
                 title="LNCI16 Benchmark",
                 tooltip_header={
                     "Model": "Name of the MLIP model",
                     "Score": "Absolute value of Delta (meV); normalized if specified",
                     "Rank": "Ranking of model by Score (lower is better)"
-                }
+                },
+                extra_components=[
+                    html.Div(id="LNCI16-plot"),
+                ]
             )
         ])
         
         
     @staticmethod
-    def register_callbacks(app, results_df):
-        pass
+    def register_callbacks(
+        app, 
+        pred_df
+    ):
+        
+        @app.callback(
+            Output("LNCI16-plot", "children"),
+            Input("LNCI16-table", "active_cell"),
+            State("LNCI16-table", "data"),
+        )
+        def update_LNCI16_plot(active_cell, table_data):
+            if not active_cell:
+                raise PreventUpdate
+
+            row = active_cell["row"]
+            clicked_model = table_data[row]["Model"]
+            col = active_cell["column_id"]
+
+            if col == "Model":
+                return None
+
+            df = pred_df.copy()
+            df = df[df["Model"] == clicked_model]
+            
+            fig = go.Figure()
+            fig.add_trace(
+                go.Scatter(
+                    x=df["E_ref (eV)"],
+                    y=df["E_model (eV)"],
+                    mode="markers",
+                    marker=dict(size=6, opacity=0.7),
+                    text=[
+                        f"Index: {i}<br>DFT: {e_ref:.3f} eV<br>{clicked_model}: {e_model:.3f} eV"
+                        for i, e_ref, e_model in zip(df["Index"], df["E_ref (eV)"], df["E_model (eV)"])
+                    ],
+                    hoverinfo="text",
+                    name=clicked_model
+                )
+            )
+            fig.add_trace(go.Scatter(
+                x=[-10, 10], y=[-10, 10],
+                mode="lines",
+                line=dict(dash="dash", color="black", width=1),
+                showlegend=False
+            ))
+
+            mae = df["Error (kcal/mol)"].abs().mean()
+
+            fig.update_layout(
+                title=f"{clicked_model} vs DFT Interaction Energies",
+                xaxis_title="DFT Energy [eV]",
+                yaxis_title=f"{clicked_model} Energy [eV]",
+                annotations=[
+                    dict(
+                        text=f"N = {len(df)}<br>MAE = {mae:.2f} kcal/mol",
+                        xref="paper", yref="paper",
+                        x=0.01, y=0.99, showarrow=False,
+                        align="left", bgcolor="white", font=dict(size=10)
+                    )
+                ]
+            )
+
+            return dcc.Graph(figure=fig)

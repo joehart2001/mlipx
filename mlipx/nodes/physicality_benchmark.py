@@ -60,7 +60,7 @@ class PhysicalityBenchmark(zntrack.Node):
     def run(self):
         pass
         
-        
+
         
     @staticmethod
     def benchmark_precompute(

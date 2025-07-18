@@ -56,6 +56,9 @@ from .nodes.S24_benchmark import S24Benchmark
 from .nodes.ghost_atom_benchmark import GhostAtomBenchmark
 from .nodes.slab_energy_extensivity import SlabExtensivityBenchmark
 from .nodes.physicality_benchmark import PhysicalityBenchmark
+from .nodes.S30L import S30LBenchmark
+from .nodes.LNCI16 import LNCI16Benchmark
+from .nodes.supramolecular_complex_benchmark import SupramolecularComplexBenchmark
 from .project import Project
 from .version import __version__
 
@@ -124,5 +127,8 @@ __all__ = [
     "GhostAtomBenchmark",
     "SlabExtensivityBenchmark",
     "PhysicalityBenchmark",
+    "S30LBenchmark",
+    "LNCI16Benchmark",
+    "SupramolecularComplexBenchmark",
     "__version__",
 ]

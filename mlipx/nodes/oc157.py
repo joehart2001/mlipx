@@ -364,6 +364,7 @@ class OC157Benchmark(zntrack.Node):
             clicked_model = table_data[row]["Model"]
             col = active_cell["column_id"]
             
+            
             if col == "Model":
                 return None
 
