@@ -166,7 +166,7 @@ class GhostAtomBenchmark(zntrack.Node):
 
         # Collect results into DataFrame
         df = pd.DataFrame({
-            "model": [self.model_name],
+            "Model": [self.model_name],
             "test1 max ΔF": [max_dF_test3],
             "test2 mean ΔF": [mean_dF_test6],
             "test2 std ΔF": [std_dF_test6],
@@ -191,15 +191,15 @@ class GhostAtomBenchmark(zntrack.Node):
         df_list = []
         for model_name, node in node_dict.items():
             df = node.get_results.copy()
-            df["model"] = model_name  # ensure model name column
+            #df["Model"] = model_name  # ensure model name column
             df_list.append(df)
             
         full_df = pd.concat(df_list, ignore_index=True)
         
-        full_df["Score"] = full_df["test2 mean dF"]
+        full_df["Score"] = full_df["test2 mean ΔF"]
         
         if normalise_to_model:
-            norm_value = full_df.loc[full_df["model"] == normalise_to_model, "Score"].values[0]
+            norm_value = full_df.loc[full_df["Model"] == normalise_to_model, "Score"].values[0]
             full_df["Score"] /= norm_value
         
         full_df["Rank"] = full_df["Score"].rank(ascending=True, method="min")
@@ -245,7 +245,7 @@ class GhostAtomBenchmark(zntrack.Node):
                 benchmark_info="Evaluates force sensitivity to ghost atoms (test 1) and randomly placed H atoms (test 2).",
                 title="Ghost Atom Benchmark",
                 tooltip_header={
-                    "model": "Name of the MLIP model",
+                    "Model": "Name of the MLIP model",
                     "test1 max ΔF": "Max ΔF (eV/Å) on solute atoms due to ghost atoms placed far away",
                     "test2 mean ΔF": "Mean ΔF (eV/Å) on solute atoms from random H-atom placements",
                     "test2 std ΔF": "Standard deviation of ΔF for random H-atom placements",
@@ -258,5 +258,5 @@ class GhostAtomBenchmark(zntrack.Node):
         
         
     @staticmethod
-    def register_callbacks(app: dash.Dash, results_df: pd.DataFrame):
+    def register_callbacks(app, results_df):
         pass

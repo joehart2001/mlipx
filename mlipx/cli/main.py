@@ -1781,4 +1781,52 @@ def surface_benchmark_launch_dashboard(
     
     
     
+@app.command()
+def physicality_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    nodes = [
+        "*GhostAtomBenchmark*",
+        "*SlabExtensivityBenchmark*",
+    ]
+    glob = True
     
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+        
+    
+    ghost_atom_nodes = [node for node in all_nodes if "GhostAtomBenchmark" in node]
+    slab_extensivity_nodes = [node for node in all_nodes if "SlabExtensivityBenchmark" in node]
+    
+    ghost_atom_node_objects = load_node_objects(nodes, glob, models, ghost_atom_nodes, split_str="_ghost-atom")
+    slab_extensivity_node_objects = load_node_objects(nodes, glob, models, slab_extensivity_nodes, split_str="_slab-extensivity")
+    
+    ghost_atom_dict = load_nodes_model(ghost_atom_node_objects, models, split_str="_ghost-atom")
+    slab_extensivity_dict = load_nodes_model(slab_extensivity_node_objects, models, split_str="_slab-extensivity")
+    
+    
+    
+    from mlipx import PhysicalityBenchmark
+    PhysicalityBenchmark.benchmark_precompute(
+        ghost_atom_data=ghost_atom_dict,
+        slab_extensivity_data=slab_extensivity_dict,
+        normalise_to_model=normalise_to_model,
+    )
+    
+@app.command()
+def physicality_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import PhysicalityBenchmark
+    return PhysicalityBenchmark.launch_dashboard(
+        ui=ui,
+    )

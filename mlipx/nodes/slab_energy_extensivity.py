@@ -200,5 +200,5 @@ class SlabExtensivityBenchmark(zntrack.Node):
         
         
     @staticmethod
-    def register_callbacks(app: dash.Dash, results_df: pd.DataFrame):
+    def register_callbacks(app, results_df):
         pass

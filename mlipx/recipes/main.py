@@ -420,486 +420,486 @@ def adsorption(
     )
 
 
-@app.command()
-def phonons(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    n_materials: int | None = None,
-    material_ids: str | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run phonon calculations."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "phonons.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-        n_materials=n_materials,
-    )
+# @app.command()
+# def phonons(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     n_materials: int | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run phonon calculations."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "phonons.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#         n_materials=n_materials,
+#     )
     
     
-@app.command()
-def phonons_all(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    n_phonons: int | None = None,
-    n_phonons_start: int | None = None,
-    small: bool = False,
-    medium: bool = False,
-    n_jobs: int | None = -1,
-    check_completed: bool | None = None,
-    generate_displacements: bool = False,
-    material_ids: str | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-    ref: bool = False,
-    threading: bool = False,
-    ray: bool = False,
-    mp_ids_done: str | None = None,
-):
-    """Run phonon calculations."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "phonons_all.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-        n_phonons=n_phonons,
-        n_phonons_start=n_phonons_start,
-        small=small,
-        medium=medium,
-        check_completed=check_completed,
-        generate_displacements=generate_displacements,
-        n_jobs=n_jobs,
-        ref=ref,
-        threading=threading,
-        ray=ray,
-        mp_ids_done=mp_ids_done,
-    )
+# @app.command()
+# def phonons_all(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     n_phonons: int | None = None,
+#     n_phonons_start: int | None = None,
+#     small: bool = False,
+#     medium: bool = False,
+#     n_jobs: int | None = -1,
+#     check_completed: bool | None = None,
+#     generate_displacements: bool = False,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+#     ref: bool = False,
+#     threading: bool = False,
+#     ray: bool = False,
+#     mp_ids_done: str | None = None,
+# ):
+#     """Run phonon calculations."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "phonons_all.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#         n_phonons=n_phonons,
+#         n_phonons_start=n_phonons_start,
+#         small=small,
+#         medium=medium,
+#         check_completed=check_completed,
+#         generate_displacements=generate_displacements,
+#         n_jobs=n_jobs,
+#         ref=ref,
+#         threading=threading,
+#         ray=ray,
+#         mp_ids_done=mp_ids_done,
+#     )
     
     
     
-@app.command()
-def gmtkn55(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run GMTKN55 benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "GMTKN55_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-    )
+# @app.command()
+# def gmtkn55(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run GMTKN55 benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "GMTKN55_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#     )
     
-@app.command()
-def wiggle150(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run WIGGLE150 benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "wiggle150.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-    )
-    
-
-@app.command()
-def cohesive_energies(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run cohesive energies benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "cohesive_energies.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-    )
+# @app.command()
+# def wiggle150(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run WIGGLE150 benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "wiggle150.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#     )
     
 
-@app.command()
-def elasticity(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    small: bool = False,
-    medium: bool = False,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-    n_jobs: int | None = -1,
-):
-    """Run elasticity benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "elasticity.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        n_materials=n_materials,
-        smiles=smiles,
-        n_jobs=n_jobs,
-    )
-
-
-@app.command()
-def bulk_crystal(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    n_phonons: int | None = None,
-    small: bool = False,
-    medium: bool = False,
-    n_jobs: int | None = -1,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run bulk crystal benchmark."""
-    if models is not None:
-        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipeception(
-        "bulk_crystal_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-        n_materials=n_materials,
-        n_phonons=n_phonons,
-        small=small,
-        medium=medium,
-        n_jobs=n_jobs,
-    )
+# @app.command()
+# def cohesive_energies(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run cohesive energies benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "cohesive_energies.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#     )
     
 
-@app.command()
-def lattice_constants(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run lattice constants benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "lattice_constants.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        n_materials=n_materials,
-        smiles=smiles,
-    )
-    
-@app.command()
-def atomisation_energy(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run atomisation energy benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "atomisation_energy.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        n_materials=n_materials,
-        smiles=smiles,
-    )
+# @app.command()
+# def elasticity(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     small: bool = False,
+#     medium: bool = False,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+#     n_jobs: int | None = -1,
+# ):
+#     """Run elasticity benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "elasticity.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         n_materials=n_materials,
+#         smiles=smiles,
+#         n_jobs=n_jobs,
+#     )
+
+
+# @app.command()
+# def bulk_crystal(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     n_phonons: int | None = None,
+#     small: bool = False,
+#     medium: bool = False,
+#     n_jobs: int | None = -1,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run bulk crystal benchmark."""
+#     if models is not None:
+#         render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipeception(
+#         "bulk_crystal_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#         n_materials=n_materials,
+#         n_phonons=n_phonons,
+#         small=small,
+#         medium=medium,
+#         n_jobs=n_jobs,
+#     )
     
 
-@app.command()
-def x23(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run X23 benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "X23_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        n_materials=n_materials,
-        smiles=smiles,
-    )
+# @app.command()
+# def lattice_constants(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run lattice constants benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "lattice_constants.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         n_materials=n_materials,
+#         smiles=smiles,
+#     )
     
-    
-@app.command()
-def DMC_ICE(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run DMC ICE benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "DMC_ICE_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        n_materials=n_materials,
-        smiles=smiles,
-    )
-    
-
-@app.command()
-def molecular_crystal(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run molecular crystal benchmark."""
-    if models is not None:
-        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipeception(
-        "molecular_crystal_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-        n_materials=n_materials,
-    )
-    
-@app.command()
-def full_benchmark(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    n_phonons: int | None = None,
-    small: bool = False,
-    medium: bool = False,
-    steps: int = 1000,
-    temperature: int = 300,
-    n_jobs: int | None = -1,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run full benchmark."""
-    if models is not None:
-        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipeception(
-        "full_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-        n_materials=n_materials,
-        n_phonons=n_phonons,
-        small=small,
-        medium=medium,
-        steps=steps,
-        temperature=temperature,
-        n_jobs=n_jobs,
-    )
-    
+# @app.command()
+# def atomisation_energy(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run atomisation energy benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "atomisation_energy.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         n_materials=n_materials,
+#         smiles=smiles,
+#     )
     
 
-@app.command()
-def homonuclear_diatomics_benchmark(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    het_diatomics: bool = False,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-    completed_traj_dir: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run homonuclear diatomics calculations."""
-    if models is not None:
-        models_lst = models.split(",")
-        orcashell = ""
-        if "orca" in models_lst:
-            if "MLIPX_ORCA" not in os.environ:
-                orcashell = typer.prompt("Enter the path to the Orca executable")
-            else:
-                orcashell = None
+# @app.command()
+# def x23(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run X23 benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "X23_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         n_materials=n_materials,
+#         smiles=smiles,
+#     )
+    
+    
+# @app.command()
+# def DMC_ICE(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run DMC ICE benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "DMC_ICE_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         n_materials=n_materials,
+#         smiles=smiles,
+#     )
+    
 
-        render_template(
-            CWD / "models.py.jinja2",
-            "models.py",
-            models=models_lst,
-            orcashell=orcashell,
-        )
+# @app.command()
+# def molecular_crystal(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run molecular crystal benchmark."""
+#     if models is not None:
+#         render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipeception(
+#         "molecular_crystal_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#         n_materials=n_materials,
+#     )
+    
+# @app.command()
+# def full_benchmark(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     n_phonons: int | None = None,
+#     small: bool = False,
+#     medium: bool = False,
+#     steps: int = 1000,
+#     temperature: int = 300,
+#     n_jobs: int | None = -1,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run full benchmark."""
+#     if models is not None:
+#         render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipeception(
+#         "full_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#         n_materials=n_materials,
+#         n_phonons=n_phonons,
+#         small=small,
+#         medium=medium,
+#         steps=steps,
+#         temperature=temperature,
+#         n_jobs=n_jobs,
+#     )
+    
+    
 
-    handle_recipe(
-        "homonuclear_diatomics_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-        het_diatomics=het_diatomics,
-        completed_traj_dir=completed_traj_dir,
-    )
+# @app.command()
+# def homonuclear_diatomics_benchmark(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     het_diatomics: bool = False,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+#     completed_traj_dir: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run homonuclear diatomics calculations."""
+#     if models is not None:
+#         models_lst = models.split(",")
+#         orcashell = ""
+#         if "orca" in models_lst:
+#             if "MLIPX_ORCA" not in os.environ:
+#                 orcashell = typer.prompt("Enter the path to the Orca executable")
+#             else:
+#                 orcashell = None
+
+#         render_template(
+#             CWD / "models.py.jinja2",
+#             "models.py",
+#             models=models_lst,
+#             orcashell=orcashell,
+#         )
+
+#     handle_recipe(
+#         "homonuclear_diatomics_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#         het_diatomics=het_diatomics,
+#         completed_traj_dir=completed_traj_dir,
+#     )
     
     
-@app.command()
-def oc157(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    n_materials: int | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run oc157 benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "oc157_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        n_materials=n_materials,
-        smiles=smiles,
-    )
+# @app.command()
+# def oc157(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     n_materials: int | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run oc157 benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "oc157_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         n_materials=n_materials,
+#         smiles=smiles,
+#     )
     
     
     
-@app.command()
-def further_applications_benchmark(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-    steps: int = 1000,
-    temperature: int = 300,
-):
-    """Run further applications benchmark."""
-    if models is not None:
-        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipeception(
-        "further_applications_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-        steps=steps,
-        temperature=temperature,
-    )
+# @app.command()
+# def further_applications_benchmark(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+#     steps: int = 1000,
+#     temperature: int = 300,
+# ):
+#     """Run further applications benchmark."""
+#     if models is not None:
+#         render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipeception(
+#         "further_applications_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#         steps=steps,
+#         temperature=temperature,
+#     )
     
-@app.command()
-def s24(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run s24 benchmark."""
-    if models is not None:
-        render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipe(
-        "s24_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-    )
+# @app.command()
+# def s24(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run s24 benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "s24_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#     )
     
-@app.command()
-def surface_benchmark(
-    initialize: bool = False,
-    repro: bool = False,
-    datapath: str | None = None,
-    material_ids: str | None = None,
-    smiles: str | None = None,
-    models: t.Annotated[str | None, typer.Option()] = None,
-):
-    """Run surface benchmark."""
-    if models is not None:
-        render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
-    handle_recipeception(
-        "surface_benchmark.py.jinja2",
-        initialize=initialize,
-        repro=repro,
-        datapath=datapath,
-        material_ids=material_ids,
-        smiles=smiles,
-    )
+# @app.command()
+# def surface_benchmark(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run surface benchmark."""
+#     if models is not None:
+#         render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipeception(
+#         "surface_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#     )
     
 
 # @app.command()
@@ -967,8 +967,11 @@ def surface_benchmark(
 #     )
 
 
+# ------ new automated definitions for benchmarks ------
+# need to be careful with benchmarks which take additional arguments
 
-def create_benchmark_command(template_file: str, category: str | None = None):
+def create_benchmark_command(template_file: str, category_benchmark: bool = False):
+    # comand includes all possible arguments for the benchmarks (each benchmark doesn't have all of these)
     def command(
         initialize: bool = False,
         repro: bool = False,
@@ -976,13 +979,66 @@ def create_benchmark_command(template_file: str, category: str | None = None):
         material_ids: str | None = None,
         smiles: str | None = None,
         models: t.Annotated[str | None, typer.Option()] = None,
+        steps: int = 1000,
+        temperature: int = 300,
+        n_jobs: int = -1,
+        n_materials: int | None = None,
+        n_phonons: int | None = None,
+        n_phonons_start: int | None = None,
+        small: bool = False,
+        medium: bool = False,
+        resume_trajectory_path: str | None = None,
+        ensemble: str | None = None,
+        check_completed: bool | None = None,
+        generate_displacements: bool = False,
+        ref: bool = False,
+        threading: bool = False,
+        ray: bool = False,
+        mp_ids_done: str | None = None,
+        het_diatomics: bool = False,
+        completed_traj_dir: str | None = None,
+        slab_config: str | None = None,
+        slab_material_id: str | None = None,
+        use_janus: bool = False,
+        all_images: bool = False,
     ):
         """Run a benchmark."""
         if models is not None:
-            renderer = render_templateception if category else render_template
+            renderer = render_templateception if category_benchmark else render_template
             renderer(CWD / "models.py.jinja2", "models.py", models=models.split(","))
 
-        handler = handle_recipeception if category else handle_recipe
+        # Parse slab_config if present
+        if slab_config is not None:
+            slab_config_parsed = json.loads(slab_config)
+        else:
+            slab_config_parsed = None
+
+        handler = handle_recipeception if category_benchmark else handle_recipe
+        # Collect all arguments for handler, using locals()
+        kwargs = dict(
+            steps=steps,
+            temperature=temperature,
+            n_jobs=n_jobs,
+            n_materials=n_materials,
+            n_phonons=n_phonons,
+            n_phonons_start=n_phonons_start,
+            small=small,
+            medium=medium,
+            resume_trajectory_path=resume_trajectory_path,
+            ensemble=ensemble,
+            check_completed=check_completed,
+            generate_displacements=generate_displacements,
+            ref=ref,
+            threading=threading,
+            ray=ray,
+            mp_ids_done=mp_ids_done,
+            het_diatomics=het_diatomics,
+            completed_traj_dir=completed_traj_dir,
+            slab_config=slab_config_parsed,
+            slab_material_id=slab_material_id,
+            use_janus=use_janus,
+            all_images=all_images,
+        )
         handler(
             template_file,
             initialize=initialize,
@@ -990,29 +1046,75 @@ def create_benchmark_command(template_file: str, category: str | None = None):
             datapath=datapath,
             material_ids=material_ids,
             smiles=smiles,
+            **kwargs,
         )
     return command
 
 
 
 BENCHMARKS = {
-    "ghost-atom-benchmark": {
-        "template": "ghost_atom_benchmark.py.jinja2",
+    "md": {"template": "md.py.jinja2"},
+    "further-applications-benchmark": {
+        "template": "further_applications_benchmark.py.jinja2",
+        "category_benchmark": True,
     },
-    "slab-extensivity-benchmark": {
-        "template": "slab_extensivity_benchmark.py.jinja2",
+    
+    "neb": {"template": "neb.py.jinja2"},
+    
+    "phonons": {"template": "phonons.py.jinja2"},
+    "phonons-all": {"template": "phonons_all.py.jinja2"},
+    "elasticity": {"template": "elasticity.py.jinja2"},
+    "lattice-constants": {"template": "lattice_constants.py.jinja2"},
+    "atomisation-energy": {"template": "atomisation_energy.py.jinja2"},
+    "bulk-crystal": {
+        "template": "bulk_crystal_benchmark.py.jinja2",
+        "category_benchmark": True, # This triggers `render_templateception` and `handle_recipeception`
     },
+    
+    "gmtkn55": {"template": "GMTKN55_benchmark.py.jinja2"},
+    "homonuclear-diatomics-benchmark": {
+        "template": "homonuclear_diatomics_benchmark.py.jinja2"
+    },
+    "wiggle150": {"template": "wiggle150.py.jinja2"},
+    "molecular-benchmark": {
+        "template": "molecular_benchmark.py.jinja2",
+        "category_benchmark": True,
+    },
+
+
+    "x23": {"template": "X23_benchmark.py.jinja2"},
+    "dmc-ice": {"template": "DMC_ICE_benchmark.py.jinja2"},
+    "molecular-crystal": {
+        "template": "molecular_crystal_benchmark.py.jinja2",
+        "category_benchmark": True,
+    },
+
+    "oc157": {"template": "oc157_benchmark.py.jinja2"},
+    "s24": {"template": "s24_benchmark.py.jinja2"},
+    "surface-benchmark": {
+        "template": "surface_benchmark.py.jinja2",
+        "category_benchmark": True,
+    },
+    
+    "ghost-atom-benchmark": {"template": "ghost_atom_benchmark.py.jinja2"},
+    "slab-extensivity-benchmark": {"template": "slab_extensivity_benchmark.py.jinja2"},
     "physicality-benchmark": {
         "template": "physicality_benchmark.py.jinja2",
-        "category": "physicality_group",  # This triggers `render_templateception` and `handle_recipeception`
+        "category_benchmark": True,
+    },
+    
+    "full-benchmark": {
+        "template": "full_benchmark.py.jinja2",
+        "category_benchmark": True,
     },
 }
-
 
 for name, config in BENCHMARKS.items():
     app.command(name=name)(
         create_benchmark_command(
             template_file=config["template"],
-            category=config.get("category")  # None means single benchmark
+            category_benchmark=config.get("category_benchmark", False)
         )
     )
+    
+    
