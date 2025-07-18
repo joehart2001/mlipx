@@ -900,3 +900,119 @@ def surface_benchmark(
         material_ids=material_ids,
         smiles=smiles,
     )
+    
+
+# @app.command()
+# def ghost_atom_benchmark(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run ghost atom benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "ghost_atom_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#     )
+    
+# @app.command()
+# def slab_extensivity_benchmark(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run slab extensivity benchmark."""
+#     if models is not None:
+#         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipe(
+#         "slab_extensivity_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#     )
+    
+    
+# @app.command()
+# def physicality_benchmark(
+#     initialize: bool = False,
+#     repro: bool = False,
+#     datapath: str | None = None,
+#     material_ids: str | None = None,
+#     smiles: str | None = None,
+#     models: t.Annotated[str | None, typer.Option()] = None,
+# ):
+#     """Run physicality benchmark."""
+#     if models is not None:
+#         render_templateception(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+#     handle_recipeception(
+#         "physicality_benchmark.py.jinja2",
+#         initialize=initialize,
+#         repro=repro,
+#         datapath=datapath,
+#         material_ids=material_ids,
+#         smiles=smiles,
+#     )
+
+
+
+def create_benchmark_command(template_file: str, category: str | None = None):
+    def command(
+        initialize: bool = False,
+        repro: bool = False,
+        datapath: str | None = None,
+        material_ids: str | None = None,
+        smiles: str | None = None,
+        models: t.Annotated[str | None, typer.Option()] = None,
+    ):
+        """Run a benchmark."""
+        if models is not None:
+            renderer = render_templateception if category else render_template
+            renderer(CWD / "models.py.jinja2", "models.py", models=models.split(","))
+
+        handler = handle_recipeception if category else handle_recipe
+        handler(
+            template_file,
+            initialize=initialize,
+            repro=repro,
+            datapath=datapath,
+            material_ids=material_ids,
+            smiles=smiles,
+        )
+    return command
+
+
+
+BENCHMARKS = {
+    "ghost-atom-benchmark": {
+        "template": "ghost_atom_benchmark.py.jinja2",
+    },
+    "slab-extensivity-benchmark": {
+        "template": "slab_extensivity_benchmark.py.jinja2",
+    },
+    "physicality-benchmark": {
+        "template": "physicality_benchmark.py.jinja2",
+        "category": "physicality_group",  # This triggers `render_templateception` and `handle_recipeception`
+    },
+}
+
+
+for name, config in BENCHMARKS.items():
+    app.command(name=name)(
+        create_benchmark_command(
+            template_file=config["template"],
+            category=config.get("category")  # None means single benchmark
+        )
+    )

@@ -1,0 +1,28 @@
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+
+project = zntrack.Project()
+{% endif %}
+
+
+slab_dict = {}
+slab_list = []
+for model_name, model in MODELS.items():
+    with project.group(model_name, "slab-extensivity"):
+        slab = mlipx.SlabExtensivityBenchmark(
+                model=model,
+                model_name=model_name,
+        )
+        slab_dict[model_name] = slab
+        slab_list.append(slab)
+    
+
+{% if standalone %}
+project.build()
+{% endif %}
