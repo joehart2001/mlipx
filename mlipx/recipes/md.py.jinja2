@@ -72,10 +72,11 @@ raise ValueError("Invalid ensemble: {{ ensemble }}. Choose NVT or NPT.")
 t_ramp = mlipx.TemperatureRampModifier(end_temperature=temp_end, total_steps=steps)
 print(f"Temperature ramping from {temperature} K to {temp_end} K over {steps} steps.")
 print(f"Running {{ ensemble }} MD for {steps} steps with a temperature ramp from {temperature} K to {temp_end} K with {len(frames)} initial configurations.")
-
 {% else %}
 t_ramp = None
 print(f"Running {{ ensemble }} MD for {steps} steps at {temperature} K with {len(frames)} initial configurations.")
+{% endif %}
+
 
 MD_dict = {}
 MD_list = []
