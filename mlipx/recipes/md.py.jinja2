@@ -90,7 +90,7 @@ for model_name, model in MODELS.items():
                 thermostat_barostat_config=thermostat_barostat_config,
                 data=data.frames,
                 #observers=[force_check],
-                modifiers=[t_ramp],
+                modifiers=[t_ramp] if t_ramp is not none else [],
                 steps=steps,
                 print_energy_every=1000,
                 resume_trajectory_path=resume_trajectory_path,

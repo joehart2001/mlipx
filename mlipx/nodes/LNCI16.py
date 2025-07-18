@@ -55,6 +55,7 @@ class LNCI16Benchmark(zntrack.Node):
 
     lnci16_results_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lnci16_pred.csv")
     lnci16_mae_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lnci16_mae.json")
+    lnci16_complex_atoms_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lnci16_complex_atoms.xyz")
 
     def run(self):
 
@@ -179,6 +180,7 @@ class LNCI16Benchmark(zntrack.Node):
             else:
                 logging.warning(f"  Calculator {model_name} may not support charge handling")
             results = []
+            complex_atoms_list = []
             for system_name in tqdm(LNCI16_REFERENCE_ENERGIES.keys(), desc="LNCI16"):
                 try:
                     # Load system structures
@@ -201,12 +203,12 @@ class LNCI16Benchmark(zntrack.Node):
                     results.append({
                         'system': system_name,
                         'E_int_ref_kcal': E_int_ref_kcal,
-                        'E_int_ref_eV': E_int_ref_eV,
-                        'E_int_model_eV': E_int_model,
+                        #'E_int_ref_eV': E_int_ref_eV,
+                        #'E_int_model_eV': E_int_model,
                         'E_int_model_kcal': E_int_model * EV_TO_KCAL,
-                        'error_eV': error_eV,
+                        #'error_eV': error_eV,
                         'error_kcal': error_kcal,
-                        'relative_error_pct': (error_eV / E_int_ref_eV) * 100,
+                        #'relative_error_pct': (error_eV / E_int_ref_eV) * 100,
                         'complex_atoms': len(complex_atoms),
                         'host_atoms': len(host_atoms),
                         'guest_atoms': len(guest_atoms),
@@ -215,12 +217,23 @@ class LNCI16Benchmark(zntrack.Node):
                         'guest_charge': guest_atoms.info['charge'],
                         'is_charged': complex_atoms.info['charge'] != 0,
                     })
+                    complex_atoms.info['model'] = model_name
+                    complex_atoms.info['E_int_model_kcal'] = E_int_model * EV_TO_KCAL
+                    complex_atoms.info['E_int_ref_kcal'] = E_int_ref_kcal
+                    complex_atoms.info['error_kcal'] = error_kcal
+                    complex_atoms.info['system'] = system_name
+                    complex_atoms.info['charged'] = complex_atoms.info['charge'] != 0
+                    complex_atoms.info['complex_charge'] = complex_atoms.info['charge']
+                    complex_atoms.info['host_charge'] = host_atoms.info['charge']
+                    complex_atoms.info['guest_charge'] = guest_atoms.info['charge']
+
+                    complex_atoms_list.append(complex_atoms)
                     logging.info(f"  {system_name}: E_int = {E_int_model:.6f} eV "
                                 f"(ref: {E_int_ref_eV:.6f} eV, error: {error_kcal:.2f} kcal/mol)")
                 except Exception as e:
                     logging.error(f"Error processing {system_name}: {e}")
                     continue
-            return pd.DataFrame(results)
+            return pd.DataFrame(results), complex_atoms_list
 
         def validate_lnci16_dataset():
             """Validate that all LNCI16 systems can be loaded"""
@@ -284,10 +297,14 @@ class LNCI16Benchmark(zntrack.Node):
         
         
         
-        results = benchmark_lnci16(calc, self.model_name)
+        results, complex_atoms_list = benchmark_lnci16(calc, self.model_name)
 
         # Save the entire results DataFrame to lnci16_results_path as CSV
         results.to_csv(self.lnci16_results_path, index=False)
+        
+        # Save the complex atoms as an xyz file
+        write(self.lnci16_complex_atoms_path, complex_atoms_list)
+
 
         # Compute MAE from the "error_kcal" column and save as JSON
         mae = results["error_kcal"].abs().mean()
@@ -296,7 +313,7 @@ class LNCI16Benchmark(zntrack.Node):
 
 
     @property
-    def get_pred(self) -> pd.DataFrame:
+    def get_results(self) -> pd.DataFrame:
         """Load predicted data from CSV file."""
         return pd.read_csv(self.lnci16_results_path)
 
@@ -306,6 +323,11 @@ class LNCI16Benchmark(zntrack.Node):
         with open(self.lnci16_mae_path, "r") as f:
             data = json.load(f)
         return data
+    
+    @property
+    def get_complex_atoms(self) -> List[Atoms]:
+        """Load complex atoms from xyz file."""
+        return read(self.lnci16_complex_atoms_path, index=":")
 
 
 
@@ -319,17 +341,22 @@ class LNCI16Benchmark(zntrack.Node):
         os.makedirs(cache_dir, exist_ok=True)
         mae_dict = {}
         pred_dfs = []
-
-        ref_df = list(node_dict.values())[0].get_ref
+        
+        # save images for WEAS viewer
+        complex_atoms = list(node_dict.values())[0].get_complex_atoms
+        save_dir = os.path.abspath(f"assets/LNCI16/")
+        os.makedirs(save_dir, exist_ok=True)
+        write(os.path.join(save_dir, "complex_atoms.xyz"), complex_atoms)
 
         for model_name, node in node_dict.items():
             mae_dict[model_name] = node.get_mae
-            pred_df = node.get_pred.rename(columns={f"E_{model_name} (eV)": "E_model (eV)"})
-            merged = pd.merge(pred_df, ref_df, on="Index")
-            merged["Model"] = model_name
-            merged["Error (eV)"] = merged["E_model (eV)"] - merged["E_ref (eV)"]
-            merged["Error (kcal/mol)"] = merged["Error (eV)"] / 0.04336414
-            pred_dfs.append(merged)
+            pred_df = node.get_results.rename(columns={
+                "E_int_model_kcal": "E_model (kcal)",
+                "E_int_ref_kcal": "E_ref (kcal)",
+            })
+            pred_df["Model"] = model_name
+            pred_df["Error (kcal/mol)"] = pred_df["E_model (kcal)"] - pred_df["E_ref (kcal)"]
+            pred_dfs.append(pred_df)
 
         mae_df = pd.DataFrame.from_dict(mae_dict, orient="index", columns=["MAE (kcal/mol)"]).reset_index()
         mae_df = mae_df.rename(columns={"index": "Model"})
@@ -344,8 +371,8 @@ class LNCI16Benchmark(zntrack.Node):
 
         mae_df["Rank"] = mae_df["Score"].rank(ascending=True, method="min")
 
-        mae_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
-        pred_full_df.to_pickle(os.path.join(cache_dir, "predictions_df.pkl"))
+        mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
+        pred_full_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
         
 
 
@@ -357,16 +384,19 @@ class LNCI16Benchmark(zntrack.Node):
     ):
         from mlipx.dash_utils import run_app
 
+        mae_df = pd.read_pickle(os.path.join(cache_dir, "mae_df.pkl"))
         results_df = pd.read_pickle(os.path.join(cache_dir, "results_df.pkl"))
-        pred_df = pd.read_pickle(os.path.join(cache_dir, "predictions_df.pkl"))
 
-        layout = LNCI16Benchmark.build_layout(results_df)
+        layout = LNCI16Benchmark.build_layout(mae_df)
 
         def callback_fn(app_instance):
-            LNCI16Benchmark.register_callbacks(app_instance, pred_df)
+            LNCI16Benchmark.register_callbacks(app_instance, results_df)
 
         if app is None:
-            app = dash.Dash(__name__)
+            assets_dir = os.path.abspath("assets")
+            print("Serving assets from:", assets_dir)
+            app = dash.Dash(__name__, assets_folder=assets_dir)
+
             app.layout = layout
             callback_fn(app)
             return run_app(app, ui=ui)
@@ -388,20 +418,32 @@ class LNCI16Benchmark(zntrack.Node):
                     "Rank": "Ranking of model by Score (lower is better)"
                 },
                 extra_components=[
-                    html.Div(id="LNCI16-plot"),
+                    html.Div(
+                        children=[
+                            html.Div(
+                                "Click on the points to see the structure!",
+                                style={
+                                    "color": "red",
+                                    "fontWeight": "bold",
+                                    "marginBottom": "10px"
+                                }
+                            ),
+                            dcc.Graph(id="LNCI16-plot")
+                        ],
+                        id="LNCI16-plot-container",
+                        style={"display": "none"},
+                    ),
+                    html.Div(id="weas-viewer-LNCI16", style={'marginTop': '20px'}),
                 ]
             )
         ])
         
         
     @staticmethod
-    def register_callbacks(
-        app, 
-        pred_df
-    ):
-        
+    def register_callbacks(app, results_df):
         @app.callback(
-            Output("LNCI16-plot", "children"),
+            Output("LNCI16-plot", "figure"),
+            Output("LNCI16-plot-container", "style"),
             Input("LNCI16-table", "active_cell"),
             State("LNCI16-table", "data"),
         )
@@ -416,37 +458,47 @@ class LNCI16Benchmark(zntrack.Node):
             if col == "Model":
                 return None
 
-            df = pred_df.copy()
-            df = df[df["Model"] == clicked_model]
-            
+            df = results_df.copy()
+            df = df[results_df["Model"] == clicked_model]
+
             fig = go.Figure()
             fig.add_trace(
                 go.Scatter(
-                    x=df["E_ref (eV)"],
-                    y=df["E_model (eV)"],
+                    x=df["E_ref (kcal)"],
+                    y=df["E_model (kcal)"],
                     mode="markers",
                     marker=dict(size=6, opacity=0.7),
                     text=[
-                        f"Index: {i}<br>DFT: {e_ref:.3f} eV<br>{clicked_model}: {e_model:.3f} eV"
-                        for i, e_ref, e_model in zip(df["Index"], df["E_ref (eV)"], df["E_model (eV)"])
+                        f"System: {sys}<br>Ref: {eref:.2f} kcal/mol<br>Model: {emod:.2f} kcal/mol<br>Error: {err:.2f} kcal/mol<br>Charged: {charged}<br>Atoms: C={ca}, H={ha}, G={ga}"
+                        for sys, eref, emod, err, charged, ca, ha, ga in zip(
+                            df["system"],
+                            df["E_ref (kcal)"],
+                            df["E_model (kcal)"],
+                            df["error_kcal"],
+                            df["is_charged"],
+                            df["complex_atoms"],
+                            df["host_atoms"],
+                            df["guest_atoms"],
+                        )
                     ],
                     hoverinfo="text",
                     name=clicked_model
                 )
             )
             fig.add_trace(go.Scatter(
-                x=[-10, 10], y=[-10, 10],
+                x=[df["E_ref (kcal)"].min(), df["E_ref (kcal)"].max()],
+                y=[df["E_ref (kcal)"].min(), df["E_ref (kcal)"].max()],
                 mode="lines",
                 line=dict(dash="dash", color="black", width=1),
                 showlegend=False
             ))
 
-            mae = df["Error (kcal/mol)"].abs().mean()
+            mae = df["error_kcal"].abs().mean()
 
             fig.update_layout(
-                title=f"{clicked_model} vs DFT Interaction Energies",
-                xaxis_title="DFT Energy [eV]",
-                yaxis_title=f"{clicked_model} Energy [eV]",
+                title=f"{clicked_model} vs Reference Interaction Energies",
+                xaxis_title="Reference Energy [kcal/mol]",
+                yaxis_title=f"{clicked_model} Energy [kcal/mol]",
                 annotations=[
                     dict(
                         text=f"N = {len(df)}<br>MAE = {mae:.2f} kcal/mol",
@@ -457,4 +509,127 @@ class LNCI16Benchmark(zntrack.Node):
                 ]
             )
 
-            return dcc.Graph(figure=fig)
+            return fig, {"display": "block"}
+
+        # WEAS viewer callback for LNCI16
+        @app.callback(
+            Output("weas-viewer-LNCI16", "children"),
+            Output("weas-viewer-LNCI16", "style"),
+            Input("LNCI16-plot", "clickData"),
+        )
+        def update_weas_viewer(clickData):
+            import dash
+            if clickData is None:
+                raise dash.exceptions.PreventUpdate
+            # Load complex_atoms from file
+            from ase.io import read
+            import os
+            complex_atoms = read(os.path.abspath("assets/LNCI16/complex_atoms.xyz"), index=":")
+            system_name = clickData["points"][0].get("text", "").split("<br>")[0].split(": ")[1]
+            atoms = next((a for a in complex_atoms if a.info.get("system") == system_name), None)
+            if atoms is None:
+                raise dash.exceptions.PreventUpdate
+            index = complex_atoms.index(atoms)
+            filename = "/assets/LNCI16/complex_atoms.xyz"
+
+            def generate_weas_html(filename, current_frame):
+                return f"""
+                <!doctype html>
+                <html lang="en">
+                <head>
+                    <meta charset="utf-8">
+                    <title>WEAS Viewer</title>
+                </head>
+                <body>
+                    <div id="viewer" style="position: relative; width: 100%; height: 500px; border: 1px solid #ccc;"></div>
+                    <div id="debug" style="margin-top: 10px; padding: 10px; background: #f0f0f0; font-family: monospace; display: none;"></div>
+                    <script type="module">
+                        async function fetchFile(filename) {{
+                            try {{
+                                const response = await fetch(filename);
+                                if (!response.ok) {{
+                                    throw new Error(`Failed to load file: ${{filename}} - ${{response.status}}`);
+                                }}
+                                const text = await response.text();
+                                console.log('File content:', text);
+                                document.getElementById("debug").innerHTML = 
+                                    `<strong>File content (first 500 chars):</strong><br><pre>${{text.substring(0, 500)}}</pre>`;
+                                document.getElementById("debug").style.display = 'block';
+                                return text;
+                            }} catch (error) {{
+                                console.error('Error fetching file:', error);
+                                throw error;
+                            }}
+                        }}
+                        function validateXYZ(content) {{
+                            const lines = content.trim().split('\\n');
+                            if (lines.length < 2) {{
+                                throw new Error('XYZ file too short');
+                            }}
+                            const numAtoms = parseInt(lines[0]);
+                            if (isNaN(numAtoms)) {{
+                                throw new Error('First line must be number of atoms');
+                            }}
+                            if (lines.length < numAtoms + 2) {{
+                                throw new Error(`Expected ${{numAtoms + 2}} lines, got ${{lines.length}}`);
+                            }}
+                            for (let i = 2; i < numAtoms + 2; i++) {{
+                                const parts = lines[i].trim().split(/\\s+/);
+                                if (parts.length < 4) {{
+                                    throw new Error(`Line ${{i+1}}: Expected element + 3 coordinates, got ${{parts.length}} parts`);
+                                }}
+                            }}
+                            return true;
+                        }}
+                        try {{
+                            const {{ WEAS, parseXYZ }} = await import('https://unpkg.com/weas/dist/index.mjs');
+                            const domElement = document.getElementById("viewer");
+                            const editor = new WEAS({{
+                                domElement,
+                                viewerConfig: {{ 
+                                    _modelStyle: 2,
+                                    backgroundColor: [1, 1, 1, 1]
+                                }},
+                                guiConfig: {{ 
+                                    buttons: {{ enabled: false }} 
+                                }}
+                            }});
+                            const structureData = await fetchFile("{filename}");
+                            validateXYZ(structureData);
+                            const atoms = parseXYZ(structureData)[{current_frame}];
+                            editor.avr.atoms = atoms;
+                            editor.avr.modelStyle = 1;
+                            editor.avr.currentFrame = {index};
+                            editor.render();
+                            document.getElementById("debug").style.display = 'none';
+                        }} catch (error) {{
+                            console.error('Error initializing WEAS:', error);
+                            document.getElementById("viewer").innerHTML = 
+                                `<div style="padding: 20px; color: red;">
+                                    <strong>Error loading structure:</strong><br>
+                                    ${{error.message}}
+                                    <br><br>
+                                    <small>Check the browser console for more details.</small>
+                                </div>`;
+                        }}
+                    </script>
+                </body>
+                </html>
+                """
+            html_content = generate_weas_html(filename, current_frame=index)
+            from dash import html as dash_html
+            return (
+                dash_html.Div([
+                    dash_html.H4(f"System: {system_name}", style={'textAlign': 'center'}),
+                    dash_html.Iframe(
+                        srcDoc=html_content,
+                        style={
+                            "height": "550px",
+                            "width": "100%",
+                            "border": "1px solid #ddd",
+                            "borderRadius": "5px"
+                        }
+                    )
+                ]),
+                {"marginTop": "20px"}
+            )
