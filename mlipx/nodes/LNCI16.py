@@ -12,7 +12,7 @@ from ase import Atoms, units
 from ase.build import bulk, surface
 from ase.io import write, read
 import subprocess
-
+from ase.units import Bohr
 import warnings
 from pathlib import Path
 from typing import Any, Callable
@@ -42,42 +42,270 @@ import base64
 import csv
 import warnings
 from copy import deepcopy
+from mlipx.benchmark_download_utils import get_benchmark_data
+import logging
 
 
 
 class LNCI16Benchmark(zntrack.Node):
-    """ 
-    """
+    """ """
 
     model: NodeWithCalculator = zntrack.deps()
     model_name: str = zntrack.params()
 
-    #slab_energy_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "slab_energy_extensivity.csv")
-    
-    
+    lnci16_results_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lnci16_pred.csv")
+    lnci16_mae_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "lnci16_mae.json")
+
     def run(self):
 
         calc = self.model.get_calculator()
+
+        base_dir = get_benchmark_data("LNCI16_data.zip") / "LNCI16_data/benchmark-LNCI16-main"
+
+
+        LNCI16_REFERENCE_ENERGIES = {
+            "BpocBenz": -6.81,
+            "BpocMeOH": -6.19,
+            "BNTube": -14.32,
+            "GramA": -36.30,
+            "DHComplex": -57.57,
+            "DNA": -363.30,
+            "SH3": -25.65,
+            "TYK2": -72.31,
+            "FXa": -70.73,
+            "2xHB238": -74.92,
+            "FullGraph": -74.13,
+            "DithBrCap": -45.63,
+            "BrCap": -21.12,
+            "MolMus": -62.58,
+            "Rotax": -55.89,
+            "Nylon": -566.23,
+        }
+
+        # System charges from Table 1
+        LNCI16_CHARGES = {
+            "BpocBenz": 0,
+            "BpocMeOH": 0,
+            "BNTube": 0,
+            "GramA": 0,
+            "DHComplex": 0,
+            "DNA": 0,
+            "SH3": 0,
+            "TYK2": +1,
+            "FXa": -2,
+            "2xHB238": 0,
+            "FullGraph": 0,
+            "DithBrCap": 0,
+            "BrCap": 0,
+            "MolMus": 0,
+            "Rotax": 0,
+            "Nylon": 0,
+        }
+        
+        KCAL_TO_EV = 0.04336414
+        EV_TO_KCAL = 1.0 / KCAL_TO_EV
         
         
+        def interaction_energy(frags: Dict[str, Atoms], calc: Calculator) -> float:
+            frags["complex"].calc = calc
+            e_complex = frags["complex"].get_potential_energy()
+            frags["host"].calc = calc
+            e_host = frags["host"].get_potential_energy()
+            frags["guest"].calc = calc
+            e_guest = frags["guest"].get_potential_energy()
+            return e_complex - e_host - e_guest
+
+        # ------------------------------------------------------------
+        # File I/O functions for LNCI16 format
+        # ------------------------------------------------------------
+        def read_turbomole_xyz(filepath: Path) -> Atoms:
+            """Read Turbomole format xyz file (coordinates in atomic units)"""
+            atoms = read(filepath, format='xyz')
+            return atoms
+
+        def read_charge_file(filepath: Path) -> float:
+            """Read charge from .CHRG file"""
+            if not filepath.exists():
+                return 0.0
+            
+            try:
+                with open(filepath, 'r') as f:
+                    charge_str = f.read().strip()
+                    charge = float(charge_str)
+                    
+                logging.debug(f"Read charge {charge} from {filepath}")
+                return charge
+            except Exception as e:
+                logging.warning(f"Failed to read charge from {filepath}: {e}")
+                return 0.0
+
+        def load_lnci16_system(system_name: str) -> Dict[str, Atoms]:
+            """Load complex, host, and guest structures for a LNCI16 system"""
+            system_dir = base_dir / system_name
+            if not system_dir.exists():
+                raise FileNotFoundError(f"System directory not found: {system_dir}")
+            # Load structures
+            complex_atoms = read_turbomole_xyz(system_dir / "complex" / "struc.xyz")
+            host_atoms = read_turbomole_xyz(system_dir / "host" / "struc.xyz")
+            guest_atoms = read_turbomole_xyz(system_dir / "guest" / "struc.xyz")
+            # Read charges
+            complex_charge = read_charge_file(system_dir / "complex" / ".CHRG")
+            host_charge = read_charge_file(system_dir / "host" / ".CHRG")
+            guest_charge = read_charge_file(system_dir / "guest" / ".CHRG")
+            # Set charges in atoms info
+            complex_atoms.info['charge'] = complex_charge
+            host_atoms.info['charge'] = host_charge
+            guest_atoms.info['charge'] = guest_charge
+            # Add system identifier
+            complex_atoms.info['system'] = system_name
+            host_atoms.info['system'] = system_name
+            guest_atoms.info['system'] = system_name
+            return {
+                "complex": complex_atoms,
+                "host": host_atoms,
+                "guest": guest_atoms,
+            }
+
+        # ------------------------------------------------------------
+        # Benchmarking functions
+        # ------------------------------------------------------------
+        def benchmark_lnci16(calc: Calculator, model_name: str) -> pd.DataFrame:
+            """Benchmark LNCI16 dataset"""
+            logging.info(f"Benchmarking LNCI16 with {model_name}...")
+            # Check if calculator supports charges
+            supports_charges = any(hasattr(calc, attr) for attr in ['set_charge', 'charge', 'total_charge_key'])
+            if supports_charges:
+                logging.info(f"  Calculator {model_name} supports charge handling")
+            else:
+                logging.warning(f"  Calculator {model_name} may not support charge handling")
+            results = []
+            for system_name in tqdm(LNCI16_REFERENCE_ENERGIES.keys(), desc="LNCI16"):
+                try:
+                    # Load system structures
+                    frags = load_lnci16_system(system_name)
+                    complex_atoms = frags["complex"]
+                    host_atoms = frags["host"]
+                    guest_atoms = frags["guest"]
+                    # Log charge information for charged systems
+                    if complex_atoms.info['charge'] != 0:
+                        logging.info(f"  Processing charged system {system_name} "
+                                f"(charge = {complex_atoms.info['charge']:+.0f})")
+                    # Compute interaction energy
+                    E_int_model = interaction_energy(frags, calc)
+                    # Reference energy in kcal/mol, convert to eV
+                    E_int_ref_kcal = LNCI16_REFERENCE_ENERGIES[system_name]
+                    E_int_ref_eV = E_int_ref_kcal * KCAL_TO_EV
+                    # Calculate errors
+                    error_eV = E_int_model - E_int_ref_eV
+                    error_kcal = error_eV * EV_TO_KCAL
+                    results.append({
+                        'system': system_name,
+                        'E_int_ref_kcal': E_int_ref_kcal,
+                        'E_int_ref_eV': E_int_ref_eV,
+                        'E_int_model_eV': E_int_model,
+                        'E_int_model_kcal': E_int_model * EV_TO_KCAL,
+                        'error_eV': error_eV,
+                        'error_kcal': error_kcal,
+                        'relative_error_pct': (error_eV / E_int_ref_eV) * 100,
+                        'complex_atoms': len(complex_atoms),
+                        'host_atoms': len(host_atoms),
+                        'guest_atoms': len(guest_atoms),
+                        'complex_charge': complex_atoms.info['charge'],
+                        'host_charge': host_atoms.info['charge'],
+                        'guest_charge': guest_atoms.info['charge'],
+                        'is_charged': complex_atoms.info['charge'] != 0,
+                    })
+                    logging.info(f"  {system_name}: E_int = {E_int_model:.6f} eV "
+                                f"(ref: {E_int_ref_eV:.6f} eV, error: {error_kcal:.2f} kcal/mol)")
+                except Exception as e:
+                    logging.error(f"Error processing {system_name}: {e}")
+                    continue
+            return pd.DataFrame(results)
+
+        def validate_lnci16_dataset():
+            """Validate that all LNCI16 systems can be loaded"""
+            
+            logging.info("Validating LNCI16 dataset...")
+            
+            missing_systems = []
+            loaded_systems = []
+            
+            for system_name in LNCI16_REFERENCE_ENERGIES.keys():
+                try:
+                    complex_atoms, host_atoms, guest_atoms = load_lnci16_system(system_name)
+                    
+                    # Basic validation
+                    assert len(complex_atoms) > 0, f"Empty complex for {system_name}"
+                    assert len(host_atoms) > 0, f"Empty host for {system_name}"
+                    assert len(guest_atoms) > 0, f"Empty guest for {system_name}"
+                    
+                    # Check charge consistency (should sum to complex charge)
+                    expected_charge = host_atoms.info['charge'] + guest_atoms.info['charge']
+                    actual_charge = complex_atoms.info['charge']
+                    reference_charge = LNCI16_CHARGES.get(system_name, 0)
+                    
+                    if abs(expected_charge - actual_charge) > 1e-6:
+                        logging.warning(f"{system_name}: Charge inconsistency - "
+                                    f"expected {expected_charge}, got {actual_charge}")
+                    
+                    if abs(actual_charge - reference_charge) > 1e-6:
+                        logging.warning(f"{system_name}: Reference charge mismatch - "
+                                    f"loaded {actual_charge}, reference {reference_charge}")
+                    
+                    loaded_systems.append(system_name)
+                    
+                    # Log charge information
+                    charge_info = ""
+                    if actual_charge != 0:
+                        charge_info = f", charge = {actual_charge:+.0f}"
+                    
+                    logging.info(f"  ✓ {system_name}: {len(complex_atoms)} atoms{charge_info}")
+                    if host_atoms.info['charge'] != 0 or guest_atoms.info['charge'] != 0:
+                        logging.info(f"    → Host: {len(host_atoms)} atoms, charge = {host_atoms.info['charge']:+.0f}")
+                        logging.info(f"    → Guest: {len(guest_atoms)} atoms, charge = {guest_atoms.info['charge']:+.0f}")
+                    
+                except Exception as e:
+                    logging.error(f"  ✗ {system_name}: {e}")
+                    missing_systems.append(system_name)
+            
+            if missing_systems:
+                logging.error(f"Missing systems: {missing_systems}")
+                return False
+            
+            # Summary of charged systems
+            charged_systems = [name for name in LNCI16_CHARGES.keys() if LNCI16_CHARGES[name] != 0]
+            if charged_systems:
+                logging.info(f"\nCharged systems in LNCI16: {charged_systems}")
+                for sys in charged_systems:
+                    logging.info(f"  {sys}: {LNCI16_CHARGES[sys]:+d}")
+            
+            logging.info(f"\nSuccessfully validated {len(loaded_systems)} systems")
+            return True
+        
+        
+        
+        results = benchmark_lnci16(calc, self.model_name)
+
+        # Save the entire results DataFrame to lnci16_results_path as CSV
+        results.to_csv(self.lnci16_results_path, index=False)
+
+        # Compute MAE from the "error_kcal" column and save as JSON
+        mae = results["error_kcal"].abs().mean()
+        with open(self.lnci16_mae_path, "w") as f:
+            json.dump(mae, f)
 
 
-        # # Prepare dataframe and write to CSV
-        # df = pd.DataFrame([{
-        #     "Model": self.model_name,
-        #     "E1 (eV)": e1,
-        #     "E2 (eV)": e2,
-        #     "E12 (eV)": e12,
-        #     "Delta (meV)": delta_meV
-        # }])
-        # df.to_csv(self.slab_energy_output, index=False)
+    @property
+    def get_pred(self) -> pd.DataFrame:
+        """Load predicted data from CSV file."""
+        return pd.read_csv(self.lnci16_results_path)
 
-
-
-    # @property
-    # def get_results(self):
-    #     """Load results from CSV file."""
-    #     return pd.read_csv(self.slab_energy_output)
+    @property
+    def get_mae(self):
+        """Load MAE from JSON file."""
+        with open(self.lnci16_mae_path, "r") as f:
+            data = json.load(f)
+        return data
 
 
 

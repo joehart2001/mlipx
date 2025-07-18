@@ -67,9 +67,14 @@ raise ValueError("Invalid ensemble: {{ ensemble }}. Choose NVT or NPT.")
 {% endif %}
 
 #force_check = mlipx.MaximumForceObserver(f_max=100)
-#t_ramp = mlipx.TemperatureRampModifier(end_temperature=400, total_steps=100)
 
+{% if temp_end is not None %}
+t_ramp = mlipx.TemperatureRampModifier(end_temperature=temp_end, total_steps=steps)
+print(f"Temperature ramping from {temperature} K to {temp_end} K over {steps} steps.")
+print(f"Running {{ ensemble }} MD for {steps} steps with a temperature ramp from {temperature} K to {temp_end} K with {len(frames)} initial configurations.")
 
+{% else %}
+t_ramp = None
 print(f"Running {{ ensemble }} MD for {steps} steps at {temperature} K with {len(frames)} initial configurations.")
 
 MD_dict = {}
@@ -83,7 +88,7 @@ for model_name, model in MODELS.items():
                 thermostat_barostat_config=thermostat_barostat_config,
                 data=data.frames,
                 #observers=[force_check],
-                #modifiers=[t_ramp],
+                modifiers=[t_ramp],
                 steps=steps,
                 print_energy_every=1000,
                 resume_trajectory_path=resume_trajectory_path,
