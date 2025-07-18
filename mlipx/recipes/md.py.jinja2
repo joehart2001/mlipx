@@ -69,6 +69,7 @@ raise ValueError("Invalid ensemble: {{ ensemble }}. Choose NVT or NPT.")
 #force_check = mlipx.MaximumForceObserver(f_max=100)
 
 {% if temp_end is not none %}
+temp_end = {{ temp_end }}
 t_ramp = mlipx.TemperatureRampModifier(end_temperature=temp_end, total_steps=steps)
 print(f"Temperature ramping from {temperature} K to {temp_end} K over {steps} steps.")
 print(f"Running {{ ensemble }} MD for {steps} steps with a temperature ramp from {temperature} K to {temp_end} K with {len(frames)} initial configurations.")
