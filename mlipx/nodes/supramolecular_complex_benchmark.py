@@ -53,8 +53,8 @@ class SupramolecularComplexBenchmark(zntrack.Node):
     """ Node to combine all molecular benchmarks
     """
     # inputs
-    OC157_list: List[OC157Benchmark] = zntrack.deps()
-    S24_list: List[S24Benchmark] = zntrack.deps()
+    S30L_list: List[] = zntrack.deps()
+    LNCI16_list: List[] = zntrack.deps()
 
 
     def run(self):

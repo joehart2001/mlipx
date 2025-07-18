@@ -52,7 +52,6 @@ def category_weighted_benchmark_score(
 
     df = pd.DataFrame.from_dict(scores, orient="index").reset_index().rename(columns={"index": "Model"})
 
-    print(df)
 
     if normalise_to_model:
         norm_val = df.loc[df["Model"] == normalise_to_model, "Avg MAE \u2193"].values[0]
