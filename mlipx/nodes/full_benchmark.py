@@ -86,10 +86,9 @@ class FullBenchmark(zntrack.Node):
     mol_benchmark: List[MolecularBenchmark] = zntrack.deps()
     further_apps_benchmark: List[FurtherApplications] = zntrack.deps()
     neb_further_apps_benchmark: List[NEBFutherApplications] = zntrack.deps()
+    surface_benchmark: List[SurfaceBenchmark] = zntrack.deps()
+    supramolecular_complex_benchmark: List[SupramolecularComplexBenchmark] = zntrack.deps()
     
-    # outputs
-    # nwd: ZnTrack's node working directory for saving files
-
     
     def run(self):
         pass
@@ -119,14 +118,21 @@ class FullBenchmark(zntrack.Node):
         Wiggle150_data: List[Wiggle150] | Dict[str, Wiggle150],
         MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics] = None,
         NEB_data: List[NEB2] | Dict[str, NEB2] = None,
+        OC157_data: List[OC157Benchmark] | Dict[str, OC157Benchmark],
+        S24_data: List[S24Benchmark] | Dict[str, S24Benchmark],
+        S30L_data: List[S30LBenchmark] | Dict[str, S30LBenchmark],
+        LNCI16_data: List[LNCI16Benchmark] | Dict[str, LNCI16Benchmark],
+        protein_ligand_data: List[mlipx.ProteinLigandBenchmark] | Dict[str, mlipx.ProteinLigandBenchmark],
         report: bool = False,
         normalise_to_model: Optional[str] = None,
     ):
         # Create directory
         cache_dir = Path("app_cache/")
         cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        n_benchmarks = 7
 
-        print("Precomputing Bulk Crystal Benchmark (1/4)...")
+        print(f"Precomputing Bulk Crystal Benchmark (1/{n_benchmarks})...")
         BulkCrystalBenchmark.benchmark_precompute(
             elasticity_data=elasticity_data,
             lattice_const_data=lattice_const_data,
@@ -138,7 +144,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
 
-        print("Precomputing Molecular Crystal Benchmark (2/4)...")
+        print(f"Precomputing Molecular Crystal Benchmark (2/{n_benchmarks})...")
         MolecularCrystalBenchmark.benchmark_precompute(
             X23_data=X23_data,
             DMC_ICE_data=DMC_ICE_data,
@@ -147,7 +153,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
 
-        print("Precomputing Molecular Benchmark (3/4)...")
+        print(f"Precomputing Molecular Benchmark (3/{n_benchmarks})...")
         MolecularBenchmark.benchmark_precompute(
             GMTKN55_data=GMTKN55_data,
             HD_data=HD_data,
@@ -157,7 +163,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
-        print("Precomputing Further Applications Benchmark (4/4)...")
+        print(f"Precomputing Water MD Benchmark (4/{n_benchmarks})...")
         FurtherApplications.benchmark_precompute(
             MD_data=MD_data,
             cache_dir=str(cache_dir / "further_applications_benchmark"),
@@ -165,12 +171,31 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
+        print(f"Precomputing NEB Benchmark (5/{n_benchmarks})...")
         NEBFutherApplications.benchmark_precompute(
             neb_data=NEB_data,
             cache_dir=str(cache_dir / "nebs_further_apps"),
             report=report,
             normalise_to_model=normalise_to_model,
         )
+        
+        print(f"Precomputing Surface Benchmark (6/{n_benchmarks})...")
+        SurfaceBenchmark.benchmark_precompute(
+            OC157_data=OC157_data,
+            S24_data=S24_data,
+            cache_dir=str(cache_dir / "surface_benchmark"),
+            normalise_to_model=normalise_to_model,
+        )
+        
+        print(f"Precomputing Supramolecular Complex Benchmark (7/{n_benchmarks})...")
+        SupramolecularComplexBenchmark.benchmark_precompute(
+            S30L_data=S30L_data,
+            LNCI16_data=LNCI16_data,
+            protein_ligand_data=protein_ligand_data,
+            cache_dir=str(cache_dir / "supramolecular_complexes"),
+            normalise_to_model=normalise_to_model,
+        )
+
 
 
 

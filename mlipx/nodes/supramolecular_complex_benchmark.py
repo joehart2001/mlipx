@@ -33,7 +33,7 @@ from typing import List, Dict, Any, Optional
 
 
 import mlipx
-from mlipx import LNCI16Benchmark, S30LBenchmark
+from mlipx import LNCI16Benchmark, S30LBenchmark, ProteinLigandBenchmark
 
 
 
@@ -55,7 +55,7 @@ class SupramolecularComplexBenchmark(zntrack.Node):
     # inputs
     S30L_list: List[S30LBenchmark] = zntrack.deps()
     LNCI16_list: List[LNCI16Benchmark] = zntrack.deps()
-
+    protein_ligand_list: List[mlipx.ProteinLigandBenchmark] = zntrack.deps()
 
     def run(self):
         pass
@@ -68,6 +68,7 @@ class SupramolecularComplexBenchmark(zntrack.Node):
     def benchmark_precompute(
         S30L_data: List[S30LBenchmark] | Dict[str, S30LBenchmark],
         LNCI16_data: List[LNCI16Benchmark] | Dict[str, LNCI16Benchmark],
+        protein_ligand_data: List[mlipx.ProteinLigandBenchmark] | Dict[str, mlipx.ProteinLigandBenchmark],
         cache_dir: str = "app_cache/supramolecular_complexes/",
         report: bool = False,
         normalise_to_model: Optional[str] = None,
@@ -91,6 +92,11 @@ class SupramolecularComplexBenchmark(zntrack.Node):
             key_extractor=lambda node: node.name.split("_LNCI16Benchmark")[0],
             value_extractor=lambda node: node
         )
+        protein_ligand_dict = process_data(
+            protein_ligand_data,
+            key_extractor=lambda node: node.name.split("_ProteinLigandBenchmark")[0],
+            value_extractor=lambda node: node
+        )
         
         os.makedirs(cache_dir, exist_ok=True)
         S30LBenchmark.benchmark_precompute(
@@ -99,6 +105,10 @@ class SupramolecularComplexBenchmark(zntrack.Node):
         )
         LNCI16Benchmark.benchmark_precompute(
             node_dict=LNCI16_dict,
+            normalise_to_model=normalise_to_model,
+        )
+        ProteinLigandBenchmark.benchmark_precompute(
+            node_dict=protein_ligand_dict,
             normalise_to_model=normalise_to_model,
         )
         
@@ -110,22 +120,29 @@ class SupramolecularComplexBenchmark(zntrack.Node):
         # LNCI16
         LNCI16_mae_df = pd.read_pickle(os.path.join(cache_dir, "LNCI16_cache/mae_df.pkl"))
         LNCI16_results_df = pd.read_pickle(os.path.join(cache_dir, "LNCI16_cache/results_df.pkl"))        
+        # protein-ligand
+        protein_mae_df = pd.read_pickle(os.path.join(cache_dir, "PLA15_PLA547_cache/mae_df.pkl"))
+        protein_plf547_df = pd.read_pickle(os.path.join(cache_dir, "PLA15_PLA547_cache/plf547_predictions_df.pkl"))
+        protein_pla15_df = pd.read_pickle(os.path.join(cache_dir, "PLA15_PLA547_cache/pla15_predictions_df.pkl"))
         
-        
+                
         from mlipx.data_utils import category_weighted_benchmark_score
 
         benchmark_score_df = category_weighted_benchmark_score(
             S30L=S30L_mae_df,
             LNCI16=LNCI16_mae_df,
+            protein_ligand=protein_mae_df,
             normalise_to_model=normalise_to_model,
-            weights={"S30L": 1.0, "LNCI16": 1.0},
+            weights={"S30L": 1.0, "LNCI16": 1.0, "protein-ligand": 1.0},
         )
         
         benchmark_score_df.to_pickle(f"{cache_dir}/benchmark_score.pkl")
         
         callback_fn = SupramolecularComplexBenchmark.callback_fn_from_cache(
-
-            
+            S30L_pred_df=S30L_pred_df,
+            LNCI16_results_df=LNCI16_results_df,
+            protein_pla15_df=protein_pla15_df,
+            protein_plf547_df=protein_plf547_df,
             normalise_to_model=normalise_to_model,
         )
         
@@ -138,7 +155,7 @@ class SupramolecularComplexBenchmark(zntrack.Node):
     
     @staticmethod
     def launch_dashboard(
-        cache_dir="app_cache/physicality_benchmark/",
+        cache_dir="app_cache/supramolecular_complexes/",
         ui=None,
         full_benchmark: bool = False,
         normalise_to_model: Optional[str] = None,
@@ -156,27 +173,36 @@ class SupramolecularComplexBenchmark(zntrack.Node):
         # LNCI16
         LNCI16_mae_df = pd.read_pickle(os.path.join(cache_dir, "LNCI16_cache/mae_df.pkl"))
         LNCI16_results_df = pd.read_pickle(os.path.join(cache_dir, "LNCI16_cache/results_df.pkl"))
+        # protein-ligand
+        protein_mae_df = pd.read_pickle(os.path.join(cache_dir, "PLA15_PLA547_cache/mae_df.pkl"))
+        protein_plf547_df = pd.read_pickle(os.path.join(cache_dir, "PLA15_PLA547_cache/plf547_predictions_df.pkl"))
+        protein_pla15_df = pd.read_pickle(os.path.join(cache_dir, "PLA15_PLA547_cache/pla15_predictions_df.pkl"))
         
         # supramolecular benchmark
         benchmark_score_df = pd.read_pickle(f"{cache_dir}/benchmark_score.pkl")
 
         callback_fn = SupramolecularComplexBenchmark.callback_fn_from_cache(
-            S30L_mae_df=S30L_mae_df,
-            LNCI16_mae_df=LNCI16_mae_df,
+            S30L_pred_df=S30L_pred_df,
+            LNCI16_results_df=LNCI16_results_df,
+            protein_pla15_df=protein_pla15_df,
+            protein_plf547_df=protein_plf547_df,
             normalise_to_model=normalise_to_model,
         )
 
-        app = dash.Dash(__name__, suppress_callback_exceptions=True)
-
+        assets_dir = os.path.abspath("assets")
+        print("Serving assets from:", assets_dir)
+        app = dash.Dash(__name__, assets_folder=assets_dir)
+        
         layout = combine_apps(
             benchmark_score_df=benchmark_score_df,
-            benchmark_title="Physicality Benchmark",
+            benchmark_title="Supramolecular Complexes Benchmark",
             apps_or_layouts_list=[
                 S30LBenchmark.build_layout(S30L_mae_df),
-                LNCI16Benchmark.build_layout(LNCI16_results_df),
+                LNCI16Benchmark.build_layout(LNCI16_mae_df),
+                ProteinLigandBenchmark.build_layout(protein_mae_df)
             ],
             benchmark_table_info=f"Scores normalised to: {normalise_to_model}" if normalise_to_model else "",
-            id="physicality-benchmark-score-table",
+            id="supramolecular-complex-benchmark-score-table",
             static_coloured_table=True,
         )
         
@@ -194,13 +220,17 @@ class SupramolecularComplexBenchmark(zntrack.Node):
     
     @staticmethod
     def callback_fn_from_cache(
-        S30L_mae_df,
-        LNCI16_mae_df,
+        S30L_pred_df,
+        LNCI16_results_df,
+        protein_pla15_df,
+        protein_plf547_df,
         normalise_to_model=None,
     ):
         from mlipx import S30LBenchmark, LNCI16Benchmark
 
         def callback_fn(app):
-            S30LBenchmark.register_callbacks(app, S30L_mae_df)
-            LNCI16Benchmark.register_callbacks(app, LNCI16_mae_df)
+            S30LBenchmark.register_callbacks(app, S30L_pred_df)
+            LNCI16Benchmark.register_callbacks(app, LNCI16_results_df)
+            ProteinLigandBenchmark.register_callbacks(app, protein_pla15_df, protein_plf547_df)
+            
         return callback_fn

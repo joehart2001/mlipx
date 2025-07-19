@@ -59,6 +59,7 @@ from .nodes.physicality_benchmark import PhysicalityBenchmark
 from .nodes.S30L import S30LBenchmark
 from .nodes.LNCI16 import LNCI16Benchmark
 from .nodes.supramolecular_complex_benchmark import SupramolecularComplexBenchmark
+from .nodes.protein_ligand_PLF547_PLA15 import ProteinLigandBenchmark
 from .project import Project
 from .version import __version__
 
@@ -131,5 +132,6 @@ __all__ = [
     "LNCI16Benchmark",
     "SupramolecularComplexBenchmark",
     "PressureRampModifier",
+    "ProteinLigandBenchmark",
     "__version__",
 ]

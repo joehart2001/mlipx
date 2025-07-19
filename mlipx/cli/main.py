@@ -1843,6 +1843,7 @@ def supramolecular_precompute(
     nodes = [
         "*S30LBenchmark*",
         "*LNCI16Benchmark*",
+        "*ProteinLigandBenchmark*"
     ]
     glob = True
     
@@ -1853,16 +1854,35 @@ def supramolecular_precompute(
         
     S30L_nodes = [node for node in all_nodes if "S30LBenchmark" in node]
     LNCI16_nodes = [node for node in all_nodes if "LNCI16Benchmark" in node]
+    ProteinLigand_nodes = [node for node in all_nodes if "ProteinLigandBenchmark" in node]
     
     S30L_node_objects = load_node_objects(nodes, glob, models, S30L_nodes, split_str="_S30LBenchmark")
     LNCI16_node_objects = load_node_objects(nodes, glob, models, LNCI16_nodes, split_str="_LNCI16Benchmark")
+    ProteinLigand_node_objects = load_node_objects(nodes, glob, models, ProteinLigand_nodes, split_str="_ProteinLigandBenchmark")
     
     S30L_dict = load_nodes_model(S30L_node_objects, models, split_str="_S30LBenchmark")
     LNCI16_dict = load_nodes_model(LNCI16_node_objects, models, split_str="_LNCI16Benchmark")
+    protein_ligand_data = load_nodes_model(ProteinLigand_node_objects, models, split_str="_ProteinLigandBenchmark")
     
     from mlipx import SupramolecularComplexBenchmark
     SupramolecularComplexBenchmark.benchmark_precompute(
         S30L_data=S30L_dict,
         LNCI16_data=LNCI16_dict,
+        protein_ligand_data=protein_ligand_data,
         normalise_to_model=normalise_to_model,
+    )
+    
+@app.command()
+def supramolecular_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import SupramolecularComplexBenchmark
+    return SupramolecularComplexBenchmark.launch_dashboard(
+        ui=ui,
     )

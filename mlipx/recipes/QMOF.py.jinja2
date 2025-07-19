@@ -1,0 +1,22 @@
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+
+project = zntrack.Project()
+{% endif %}
+
+
+
+{% if n_mofs %}
+n_mofs = {{ n_mofs }}
+{% else %}
+n_mofs = None
+{% endif %}
+
+print(f"Using {n_mofs} MOFs for QMOF benchmark" if n_mofs else "Using all MOFs for QMOF benchmark")
+
