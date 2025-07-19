@@ -37,6 +37,8 @@ class TemperatureRampModifier(DynamicsModifier):
                 self.start_temperature = temp / units.kB
             elif temp := getattr(thermostat, "temperature", None):
                 self.start_temperature = temp / units.kB
+            elif temp := getattr(thermostat, "_temperature_au", None):
+                self.start_temperature = temp / units.kB
             else:
                 raise AttributeError("No temperature attribute found in thermostat.")
 
@@ -52,7 +54,11 @@ class TemperatureRampModifier(DynamicsModifier):
             elif hasattr(thermostat, "temp"):
                 thermostat.temp = new_temperature * units.kB
             else:
-                raise AttributeError("Thermostat does not support temperature update.")
+                # last resort for e.g. IsotropicMTKNPT
+                if hasattr(thermostat, "_temperature_au"):
+                    thermostat._temperature_au = new_temperature * units.kB
+                else:
+                    raise AttributeError("Thermostat does not support temperature update.")
 
 
 
