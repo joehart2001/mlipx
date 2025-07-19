@@ -32,9 +32,7 @@ class TemperatureRampModifier(DynamicsModifier):
     interval: int = 1
 
     def modify(self, thermostat, step):
-        # we use the thermostat, so we can also modify e.g. temperature
         if self.start_temperature is None:
-            # different thermostats call the temperature attribute differently
             if temp := getattr(thermostat, "temp", None):
                 self.start_temperature = temp / units.kB
             elif temp := getattr(thermostat, "temperature", None):
@@ -47,7 +45,14 @@ class TemperatureRampModifier(DynamicsModifier):
             1 - percentage
         ) * self.start_temperature + percentage * self.end_temperature
         if step % self.interval == 0:
-            thermostat.set_temperature(temperature_K=new_temperature)
+            if hasattr(thermostat, "set_temperature"):
+                thermostat.set_temperature(temperature_K=new_temperature)
+            elif hasattr(thermostat, "temperature"):
+                thermostat.temperature = new_temperature * units.kB
+            elif hasattr(thermostat, "temp"):
+                thermostat.temp = new_temperature * units.kB
+            else:
+                raise AttributeError("Thermostat does not support temperature update.")
 
 
 
@@ -75,7 +80,6 @@ class PressureRampModifier(DynamicsModifier):
 
     def modify(self, thermostat_barostat, step):
         if self.start_pressure is None:
-            # attempt to read current pressure from barostat
             if pressure := getattr(thermostat_barostat, "pressure", None):
                 self.start_pressure = pressure  # assumed already in bar
             else:
@@ -89,5 +93,7 @@ class PressureRampModifier(DynamicsModifier):
         if step % self.interval == 0:
             if hasattr(thermostat_barostat, "set_pressure"):
                 thermostat_barostat.set_pressure(pressure_bar=new_pressure)
+            elif hasattr(thermostat_barostat, "set_stress"):
+                thermostat_barostat.set_stress(new_pressure)
             else:
-                raise AttributeError("Barostat does not support set_pressure method.")
+                raise AttributeError("Barostat does not support pressure update via set_pressure or set_stress.")
