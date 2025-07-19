@@ -38,6 +38,12 @@ temperature = {{ temperature }}
 temperature = 300
 {% endif %}
 
+{% if pressure %}
+pressure = {{ pressure }}
+{% else %}
+pressure = 1.0
+{% endif %}
+
 
 {% if resume_trajectory_path %}
 resume_trajectory_path = "{{ resume_trajectory_path }}"
@@ -54,7 +60,7 @@ thermostat_barostat_config = mlipx.NPTConfig(timestep=1, temperature=temperature
 thermostat_barostat_config = mlipx.NPT_MTK_Config(
     timestep=1,
     temperature=temperature,
-    pressure=1.0,
+    pressure=pressure,
     tdamp=100.0,
     pdamp=1000.0,
     tchain=3,
@@ -68,6 +74,7 @@ raise ValueError("Invalid ensemble: {{ ensemble }}. Choose NVT or NPT.")
 
 #force_check = mlipx.MaximumForceObserver(f_max=100)
 
+# Temperature ramp modifier
 {% if temp_end is not none %}
 temp_end = {{ temp_end }}
 t_ramp = mlipx.TemperatureRampModifier(end_temperature=temp_end, total_steps=steps)
@@ -76,6 +83,15 @@ print(f"Running {{ ensemble }} MD for {steps} steps with a temperature ramp from
 {% else %}
 t_ramp = None
 print(f"Running {{ ensemble }} MD for {steps} steps at {temperature} K with {len(frames)} initial configurations.")
+{% endif %}
+
+# Pressure ramp modifier
+{% if pressure_end is not none %}
+pressure_end = {{ pressure_end }}
+p_ramp = mlipx.PressureRampModifier(end_pressure=pressure_end, total_steps=steps)
+print(f"Pressure ramping to {pressure_end} bar over {steps} steps.")
+{% else %}
+p_ramp = None
 {% endif %}
 
 
@@ -90,7 +106,7 @@ for model_name, model in MODELS.items():
                 thermostat_barostat_config=thermostat_barostat_config,
                 data=data.frames,
                 #observers=[force_check],
-                modifiers=[t_ramp] if t_ramp is not None else [],
+                modifiers=[m for m in [t_ramp, p_ramp] if m is not None],
                 steps=steps,
                 print_energy_every=1000,
                 resume_trajectory_path=resume_trajectory_path,

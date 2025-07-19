@@ -48,3 +48,46 @@ class TemperatureRampModifier(DynamicsModifier):
         ) * self.start_temperature + percentage * self.end_temperature
         if step % self.interval == 0:
             thermostat.set_temperature(temperature_K=new_temperature)
+
+
+
+
+@dataclasses.dataclass
+class PressureRampModifier(DynamicsModifier):
+    """Ramp the pressure from start_pressure to end_pressure.
+
+    Attributes
+    ----------
+    start_pressure: float, optional
+        Pressure to start from (in bar). If None, attempts to use current pressure of the barostat.
+    end_pressure: float
+        Target pressure (in bar).
+    interval: int
+        Frequency (in steps) of pressure updates.
+    total_steps: int
+        Total number of MD steps for the ramp.
+    """
+
+    end_pressure: float
+    total_steps: int
+    start_pressure: t.Optional[float] = None
+    interval: int = 1
+
+    def modify(self, thermostat_barostat, step):
+        if self.start_pressure is None:
+            # attempt to read current pressure from barostat
+            if pressure := getattr(thermostat_barostat, "pressure", None):
+                self.start_pressure = pressure  # assumed already in bar
+            else:
+                raise AttributeError("No pressure attribute found in barostat.")
+
+        percentage = step / (self.total_steps - 1)
+        new_pressure = (
+            1 - percentage
+        ) * self.start_pressure + percentage * self.end_pressure
+
+        if step % self.interval == 0:
+            if hasattr(thermostat_barostat, "set_pressure"):
+                thermostat_barostat.set_pressure(pressure_bar=new_pressure)
+            else:
+                raise AttributeError("Barostat does not support set_pressure method.")
