@@ -14,7 +14,7 @@ from .nodes.invariances import (
     TranslationalInvariance,
 )
 from .nodes.io import LoadDataFile
-from .nodes.modifier import TemperatureRampModifier
+from .nodes.modifier import TemperatureRampModifier, PressureRampModifier
 from .nodes.molecular_dynamics import LangevinConfig, MolecularDynamics, NPTConfig, NPT_MTK_Config
 from .nodes.mp_api import MPRester
 from .nodes.nebs import NEBinterpolate, NEBs, NEB2
@@ -130,5 +130,6 @@ __all__ = [
     "S30LBenchmark",
     "LNCI16Benchmark",
     "SupramolecularComplexBenchmark",
+    "PressureRampModifier",
     "__version__",
 ]
