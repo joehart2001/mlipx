@@ -11,9 +11,9 @@ project = zntrack.Project()
 {% endif %}
 
 frames = []
-{% if datapath %}
-with project.group("initialize"):
-    for path in {{ datapath }}:
+{% if md_datapath %}
+with project.group("md-initialize"):
+    for path in {{ md_datapath }}:
         frames.append(mlipx.LoadDataFile(path=path))
 {% endif %}{% if material_ids %}
 with project.group("initialize"):
