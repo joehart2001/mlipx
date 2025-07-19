@@ -64,6 +64,7 @@ class SupramolecularComplexBenchmark(zntrack.Node):
 
 
         
+
     @staticmethod
     def benchmark_precompute(
         S30L_data: List[S30LBenchmark] | Dict[str, S30LBenchmark],

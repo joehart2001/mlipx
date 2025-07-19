@@ -1679,6 +1679,8 @@ def s24_precompute(
         all_nodes = list(json.load(f).keys())
     
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_s24")
+    benchmark_node_dict = load_nodes_model(node_objects, models, split_str="_s24")
+
     
     from mlipx import S24Benchmark
     S24Benchmark.benchmark_precompute(
@@ -1886,3 +1888,100 @@ def supramolecular_launch_dashboard(
     return SupramolecularComplexBenchmark.launch_dashboard(
         ui=ui,
     )
+    
+    
+    
+@app.command()
+def qmof_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    nodes = [
+        "*QMOFBenchmark*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+    
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_QMOFBenchmark")
+    benchmark_node_dict = load_nodes_model(node_objects, models, split_str="_QMOFBenchmark")
+
+    from mlipx import QMOFBenchmark
+    QMOFBenchmark.benchmark_precompute(
+        node_dict=benchmark_node_dict,
+        normalise_to_model=normalise_to_model,
+    )
+    
+
+@app.command()
+def qmof_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import QMOFBenchmark
+    if return_app == True:
+        return QMOFBenchmark.launch_dashboard(
+            ui=ui,
+            return_app=return_app,
+        )
+    else:
+        QMOFBenchmark.launch_dashboard(
+            ui=ui,
+        )
+        
+        
+        
+        
+@app.command()
+def mof_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    nodes = [
+        "*QMOFBenchmark*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+        
+    QMOF_nodes = [node for node in all_nodes if "QMOFBenchmark" in node]
+
+    QMOF_node_objects = load_node_objects(nodes, glob, models, QMOF_nodes, split_str="_QMOFBenchmark")
+
+    QMOF_dict = load_nodes_model(QMOF_node_objects, models, split_str="_QMOFBenchmark")
+    
+    from mlipx import MOFBenchmark
+    MOFBenchmark.benchmark_precompute(
+        QMOF_data=QMOF_dict,
+        normalise_to_model=normalise_to_model,
+    )
+    
+@app.command()
+def mof_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import MOFBenchmark
+    return MOFBenchmark.launch_dashboard(
+        ui=ui,
+    )
+    
+    
+    

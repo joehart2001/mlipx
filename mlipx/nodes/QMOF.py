@@ -100,7 +100,7 @@ class QMOFBenchmark(zntrack.Node):
             f"{self.model_name} energy (eV/atom)": [mlip_e[k] / num_atoms[k] for k in mlip_e.keys()],
         })
         
-        mae = (all_results_df[f"{self.model_name} energy"] - all_results_df["ref energy"]).abs().mean()
+        mae = (all_results_df[f"{self.model_name} energy (eV/atom)"] - all_results_df["ref energy (eV/atom)"]).abs().mean()
 
         all_results_df.to_csv(self.qmof_results_path, index=False)
 
@@ -133,7 +133,7 @@ class QMOFBenchmark(zntrack.Node):
     ):
         os.makedirs(cache_dir, exist_ok=True)
         mae_dict = {}
-        pred_dfs = []
+        results_dfs = []
 
         # save images for WEAS viewer
         mofs = list(node_dict.values())[0].get_mofs
@@ -141,25 +141,25 @@ class QMOFBenchmark(zntrack.Node):
         os.makedirs(save_dir, exist_ok=True)
         write(os.path.join(save_dir, "mofs.xyz"), mofs)
         
-        ref_df = list(node_dict.values())[0].get_ref
-
         for model_name, node in node_dict.items():
-            results_df = node.get_results
+            results_df = node.get_results[
+                ["qmof_id", f"{model_name} energy (eV/atom)", "ref energy (eV/atom)"]
+            ].copy()
+            results_df = results_df.rename(columns={
+                f"{model_name} energy (eV/atom)": "E_model (eV/atom)",
+                "ref energy (eV/atom)": "E_ref (eV/atom)"
+            })
+            results_df["Model"] = model_name
+            results_dfs.append(results_df)
+            
             mae = node.get_mae
             mae_dict[model_name] = mae
 
-            # Save predictions DataFrame
-            results_df["Model"] = model_name
-            pred_dfs.append(results_df)
 
-
-
-        mae_df = pd.DataFrame.from_dict(mae_dict, orient="index", columns=["MAE (kcal/mol)"]).reset_index()
+        mae_df = pd.DataFrame.from_dict(mae_dict, orient="index", columns=["MAE (eV/atom)"]).reset_index()
         mae_df = mae_df.rename(columns={"index": "Model"})
 
-        pred_full_df = pd.concat(pred_dfs, ignore_index=True)
-
-        mae_df["Score"] = mae_df["MAE (kcal/mol)"]
+        mae_df["Score"] = mae_df["MAE (eV/atom)"]
 
         if normalise_to_model:
             norm_value = mae_df.loc[mae_df["Model"] == normalise_to_model, "Score"].values[0]
@@ -168,25 +168,25 @@ class QMOFBenchmark(zntrack.Node):
         mae_df["Rank"] = mae_df["Score"].rank(ascending=True, method="min")
 
         mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
-        pred_full_df.to_pickle(os.path.join(cache_dir, "predictions_df.pkl"))
+        results_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
         
 
 
     @staticmethod
     def launch_dashboard(
-        cache_dir: str = "app_cache/supramolecular_complexes/S30L_cache/",
+        cache_dir: str = "app_cache/MOF/QMOF_cache/",
         app: dash.Dash | None = None,
         ui=None,
     ):
         from mlipx.dash_utils import run_app
 
         mae_df = pd.read_pickle(os.path.join(cache_dir, "mae_df.pkl"))
-        pred_df = pd.read_pickle(os.path.join(cache_dir, "predictions_df.pkl"))
+        results_df = pd.read_pickle(os.path.join(cache_dir, "results_df.pkl"))
 
-        layout = S30LBenchmark.build_layout(mae_df)
+        layout = QMOFBenchmark.build_layout(mae_df)
 
         def callback_fn(app_instance):
-            S30LBenchmark.register_callbacks(app_instance, pred_df)
+            QMOFBenchmark.register_callbacks(app_instance, results_df)
 
         if app is None:
             assets_dir = os.path.abspath("assets")
@@ -205,9 +205,9 @@ class QMOFBenchmark(zntrack.Node):
         return html.Div([
             dash_table_interactive(
                 df=mae_df.round(3),
-                id="S30L-table",
-                benchmark_info="Benchmark info: Interaction energies for host-guest complexes in S30L.",
-                title="S30L Benchmark",
+                id="QMOF-table",
+                benchmark_info="Benchmark info: ",
+                title="QMOF Benchmark",
                 tooltip_header={
                     "Model": "Name of the MLIP model",
                     "Score": "Absolute value of Delta (meV); normalized if specified",
@@ -224,12 +224,12 @@ class QMOFBenchmark(zntrack.Node):
                                     "marginBottom": "10px"
                                 }
                             ),
-                            dcc.Graph(id="S30L-plot")
+                            dcc.Graph(id="QMOF-plot")
                         ],
-                        id="S30L-plot-container",
+                        id="QMOF-plot-container",
                         style={"display": "none"},
                     ),
-                    html.Div(id="weas-viewer-S30L", style={'marginTop': '20px'}),
+                    html.Div(id="weas-viewer-QMOF", style={'marginTop': '20px'}),
                 ]
             )
         ])
@@ -243,10 +243,10 @@ class QMOFBenchmark(zntrack.Node):
         from mlipx.dash_utils import weas_viewer_callback
 
         @app.callback(
-            Output("S30L-plot", "figure"),
-            Output("S30L-plot-container", "style"),
-            Input("S30L-table", "active_cell"),
-            State("S30L-table", "data"),
+            Output("QMOF-plot", "figure"),
+            Output("QMOF-plot-container", "style"),
+            Input("QMOF-table", "active_cell"),
+            State("QMOF-table", "data"),
         )
         def update_s30l_plot(active_cell, table_data):
             if not active_cell:
@@ -265,14 +265,14 @@ class QMOFBenchmark(zntrack.Node):
             fig = go.Figure()
             fig.add_trace(
                 go.Scatter(
-                    x=df["E_ref (eV)"],
-                    y=df["E_model (eV)"],
+                    x=df["E_ref (eV/atom)"],
+                    y=df["E_model (eV/atom)"],
                     mode="markers",
                     marker=dict(size=6, opacity=0.7),
-                    customdata=df["Index"],  # ← clean value
+                    customdata=df["qmof_id"],  # ← fixed value
                     text=[
-                        f"Index: {i}<br>DFT: {e_ref:.3f} eV<br>{clicked_model}: {e_model:.3f} eV"
-                        for i, e_ref, e_model in zip(df["Index"], df["E_ref (eV)"], df["E_model (eV)"])
+                        f"qmof_id: {i}<br>DFT: {e_ref:.3f} eV/atom<br>{clicked_model}: {e_model:.3f} eV/atom"
+                        for i, e_ref, e_model in zip(df["qmof_id"], df["E_ref (eV/atom)"], df["E_model (eV/atom)"])
                     ],
                     hoverinfo="text",
                     name=clicked_model
@@ -285,15 +285,15 @@ class QMOFBenchmark(zntrack.Node):
                 showlegend=False
             ))
 
-            mae = df["Error (kcal/mol)"].abs().mean()
+            mae = (df["E_model (eV/atom)"] - df["E_ref (eV/atom)"]).abs().mean()
 
             fig.update_layout(
                 title=f"{clicked_model} vs DFT Interaction Energies",
-                xaxis_title="DFT Energy [eV]",
-                yaxis_title=f"{clicked_model} Energy [eV]",
+                xaxis_title="DFT Energy [eV/atom]",
+                yaxis_title=f"{clicked_model} Energy [eV/atom]",
                 annotations=[
                     dict(
-                        text=f"N = {len(df)}<br>MAE = {mae:.2f} kcal/mol",
+                        text=f"N = {len(df)}<br>MAE = {mae:.2f} (ev/atom)",
                         xref="paper", yref="paper",
                         x=0.01, y=0.99, showarrow=False,
                         align="left", bgcolor="white", font=dict(size=10)
@@ -304,16 +304,16 @@ class QMOFBenchmark(zntrack.Node):
             return fig, {"display": "block"}
 
         @app.callback(
-            Output("weas-viewer-S30L", "children"),
-            Output("weas-viewer-S30L", "style"),
-            Input("S30L-plot", "clickData"),
+            Output("weas-viewer-QMOF", "children"),
+            Output("weas-viewer-QMOF", "style"),
+            Input("QMOF-plot", "clickData"),
         )
         def update_weas_viewer(clickData):
             if not clickData:
                 raise PreventUpdate
             return weas_viewer_callback(
                 clickData,
-                "assets/S30L/complex_atoms.xyz",
-                mode="index",
-                index_key="pointIndex"
+                "assets/QMOF/mofs.xyz",
+                mode="info",
+                info_key="qmof_id",
             )
