@@ -985,7 +985,9 @@ def create_benchmark_command(template_file: str, category_benchmark: bool = Fals
         pressure: int | None = None,
         pressure_end: int | None = None,
         n_jobs: int = -1,
-        n_materials: int | None = None,
+        n_jobs_phonons: int | None = None,
+        n_jobs_elasticity: int | None = None,
+        n_materials_elasticity: int | None = None,
         n_phonons: int | None = None,
         n_phonons_start: int | None = None,
         small: bool = False,
@@ -994,16 +996,17 @@ def create_benchmark_command(template_file: str, category_benchmark: bool = Fals
         ensemble: str | None = None,
         check_completed: bool | None = None,
         generate_displacements: bool = False,
-        ref: bool = False,
+        ref_phonons: bool = False,
         threading: bool = False,
         ray: bool = False,
         mp_ids_done: str | None = None,
         het_diatomics: bool = False,
-        completed_traj_dir: str | None = None,
+        HD_completed_traj_dir: str | None = None,
         slab_config: str | None = None,
         slab_material_id: str | None = None,
         use_janus: bool = False,
         all_images: bool = False,
+        n_mofs: int | None = None,
     ):
         """Run a benchmark."""
         if models is not None:
@@ -1025,7 +1028,9 @@ def create_benchmark_command(template_file: str, category_benchmark: bool = Fals
             pressure=pressure,
             pressure_end=pressure_end,
             n_jobs=n_jobs,
-            n_materials=n_materials,
+            n_jobs_phonons=n_jobs_phonons,
+            n_jobs_elasticity=n_jobs_elasticity,
+            n_materials_elasticity=n_materials_elasticity,
             n_phonons=n_phonons,
             n_phonons_start=n_phonons_start,
             small=small,
@@ -1034,16 +1039,17 @@ def create_benchmark_command(template_file: str, category_benchmark: bool = Fals
             ensemble=ensemble,
             check_completed=check_completed,
             generate_displacements=generate_displacements,
-            ref=ref,
+            ref_phonons=ref_phonons,
             threading=threading,
             ray=ray,
             mp_ids_done=mp_ids_done,
             het_diatomics=het_diatomics,
-            completed_traj_dir=completed_traj_dir,
+            HD_completed_traj_dir=HD_completed_traj_dir,
             slab_config=slab_config_parsed,
             slab_material_id=slab_material_id,
             use_janus=use_janus,
             all_images=all_images,
+            n_mofs=n_mofs,
         )
         handler(
             template_file,
@@ -1111,8 +1117,18 @@ BENCHMARKS = {
     
     "S30L": {"template": "S30L.py.jinja2"},
     "LNCI16": {"template": "LNCI16.py.jinja2"},
+    "protein-benchmark": {
+        "template": "PLA15_PLF547_protein_ligand.py.jinja2",
+        "category_benchmark": True,
+    },
     "supramolecular_complex_benchmark": {
         "template": "supramolecular_complex_benchmark.py.jinja2",
+        "category_benchmark": True,
+    },
+    
+    "qmof-benchmark": {"template": "QMOF.py.jinja2"},
+    "mof-benchmark": {
+        "template": "MOF_benchmark.py.jinja2",
         "category_benchmark": True,
     },
     

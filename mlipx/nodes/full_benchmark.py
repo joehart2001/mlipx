@@ -33,9 +33,11 @@ from typing import List, Dict, Any, Optional
 
 
 import mlipx
-from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, MolecularBenchmark, HomonuclearDiatomics
-from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, FurtherApplications, NEBFutherApplications, NEB2, Wiggle150
-
+from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, MolecularBenchmark, FurtherApplications
+from mlipx import NEBFutherApplications, SurfaceBenchmark, SupramolecularComplexBenchmark, PhysicalityBenchmark, MOFBenchmark
+from mlipx import OC157Benchmark, S24Benchmark, S30LBenchmark, LNCI16Benchmark, ProteinLigandBenchmark
+from mlipx import PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, HomonuclearDiatomics
+from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, NEB2, Wiggle150
 
 
 import os
@@ -88,6 +90,8 @@ class FullBenchmark(zntrack.Node):
     neb_further_apps_benchmark: List[NEBFutherApplications] = zntrack.deps()
     surface_benchmark: List[SurfaceBenchmark] = zntrack.deps()
     supramolecular_complex_benchmark: List[SupramolecularComplexBenchmark] = zntrack.deps()
+    physicality_benchmark: List[PhysicalityBenchmark] = zntrack.deps()
+    mof_benchmark: List[MOFBenchmark] = zntrack.deps()
     
     
     def run(self):
@@ -116,13 +120,16 @@ class FullBenchmark(zntrack.Node):
         GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
         HD_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
         Wiggle150_data: List[Wiggle150] | Dict[str, Wiggle150],
-        MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics] = None,
-        NEB_data: List[NEB2] | Dict[str, NEB2] = None,
+        MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
+        NEB_data: List[NEB2] | Dict[str, NEB2],
         OC157_data: List[OC157Benchmark] | Dict[str, OC157Benchmark],
         S24_data: List[S24Benchmark] | Dict[str, S24Benchmark],
         S30L_data: List[S30LBenchmark] | Dict[str, S30LBenchmark],
         LNCI16_data: List[LNCI16Benchmark] | Dict[str, LNCI16Benchmark],
         protein_ligand_data: List[mlipx.ProteinLigandBenchmark] | Dict[str, mlipx.ProteinLigandBenchmark],
+        ghost_atom_data: List[mlipx.GhostAtomBenchmark] | Dict[str, mlipx.GhostAtomBenchmark],
+        slab_extensivity_data: List[mlipx.SlabBenchmark] | Dict[str, mlipx.SlabBenchmark],
+        QMOF_data: List[QMOFBenchmark] | Dict[str, QMOFBenchmark],
         report: bool = False,
         normalise_to_model: Optional[str] = None,
     ):
@@ -130,9 +137,9 @@ class FullBenchmark(zntrack.Node):
         cache_dir = Path("app_cache/")
         cache_dir.mkdir(parents=True, exist_ok=True)
         
-        n_benchmarks = 7
+        n_categories = 7
 
-        print(f"Precomputing Bulk Crystal Benchmark (1/{n_benchmarks})...")
+        print(f"Precomputing Bulk Crystal Benchmark (1/{n_categories})...")
         BulkCrystalBenchmark.benchmark_precompute(
             elasticity_data=elasticity_data,
             lattice_const_data=lattice_const_data,
@@ -144,7 +151,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
 
-        print(f"Precomputing Molecular Crystal Benchmark (2/{n_benchmarks})...")
+        print(f"Precomputing Molecular Crystal Benchmark (2/{n_categories})...")
         MolecularCrystalBenchmark.benchmark_precompute(
             X23_data=X23_data,
             DMC_ICE_data=DMC_ICE_data,
@@ -153,7 +160,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
 
-        print(f"Precomputing Molecular Benchmark (3/{n_benchmarks})...")
+        print(f"Precomputing Molecular Benchmark (3/{n_categories})...")
         MolecularBenchmark.benchmark_precompute(
             GMTKN55_data=GMTKN55_data,
             HD_data=HD_data,
@@ -163,7 +170,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
-        print(f"Precomputing Water MD Benchmark (4/{n_benchmarks})...")
+        print(f"Precomputing Water MD Benchmark (4/{n_categories})...")
         FurtherApplications.benchmark_precompute(
             MD_data=MD_data,
             cache_dir=str(cache_dir / "further_applications_benchmark"),
@@ -171,7 +178,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
-        print(f"Precomputing NEB Benchmark (5/{n_benchmarks})...")
+        print(f"Precomputing NEB Benchmark (5/{n_categories})...")
         NEBFutherApplications.benchmark_precompute(
             neb_data=NEB_data,
             cache_dir=str(cache_dir / "nebs_further_apps"),
@@ -179,7 +186,7 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
-        print(f"Precomputing Surface Benchmark (6/{n_benchmarks})...")
+        print(f"Precomputing Surface Benchmark (6/{n_categories})...")
         SurfaceBenchmark.benchmark_precompute(
             OC157_data=OC157_data,
             S24_data=S24_data,
@@ -187,12 +194,27 @@ class FullBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
         
-        print(f"Precomputing Supramolecular Complex Benchmark (7/{n_benchmarks})...")
+        print(f"Precomputing Supramolecular Complex Benchmark (7/{n_categories})...")
         SupramolecularComplexBenchmark.benchmark_precompute(
             S30L_data=S30L_data,
             LNCI16_data=LNCI16_data,
             protein_ligand_data=protein_ligand_data,
             cache_dir=str(cache_dir / "supramolecular_complexes"),
+            normalise_to_model=normalise_to_model,
+        )
+        
+        print(f"Precomputing Physicality Benchmark (8/{n_categories})...")
+        PhysicalityBenchmark.benchmark_precompute(
+            ghost_atom_data=ghost_atom_data,
+            slab_extensivity_data=slab_extensivity_data,
+            cache_dir=str(cache_dir / "physicality_benchmark"),
+            normalise_to_model=normalise_to_model,
+        )
+        
+        print(f"Precomputing MOF Benchmark (9/{n_categories})...")
+        MOFBenchmark.benchmark_precompute(
+            QMOF_data=QMOF_data,
+            cache_dir=str(cache_dir / "MOF"),
             normalise_to_model=normalise_to_model,
         )
 
@@ -210,11 +232,23 @@ class FullBenchmark(zntrack.Node):
         bulk_df = pd.read_pickle(Path(cache_dir) / "bulk_crystal_benchmark" / "benchmark_score.pkl")
         mol_crystal_df = pd.read_pickle(Path(cache_dir) / "molecular_crystal_benchmark" / "benchmark_score.pkl")
         molecular_df = pd.read_pickle(Path(cache_dir) / "molecular_benchmark" / "benchmark_score.pkl")
+        water_md_df = pd.read_pickle(Path(cache_dir) / "further_applications_benchmark" / "benchmark_score.pkl")
+        nebs_df = pd.read_pickle(Path(cache_dir) / "nebs_further_apps" / "benchmark_score.pkl")
+        surface_df = pd.read_pickle(Path(cache_dir) / "surface_benchmark" / "benchmark_score.pkl")
+        supramolecular_df = pd.read_pickle(Path(cache_dir) / "supramolecular_complexes" / "benchmark_score.pkl")
+        physicality_df = pd.read_pickle(Path(cache_dir) / "physicality_benchmark" / "benchmark_score.pkl")
+        mof_df = pd.read_pickle(Path(cache_dir) / "MOF" / "benchmark_score.pkl")
 
         scores_all_df = FullBenchmark.get_overall_score_df(
             (bulk_df, "Bulk Crystal"),
             (mol_crystal_df, "Molecular Crystal"),
             (molecular_df, "Molecular"),
+            (water_md_df, "Water MD"),
+            (nebs_df, "NEBs"),
+            (surface_df, "Surfaces"),
+            (supramolecular_df, "Supramolecular Complexes"),
+            (physicality_df, "Physicality"),
+            (mof_df, "MOF"),
         )
         scores_all_df.to_csv(Path(cache_dir) / "overall_benchmark.csv", index=False)
 
@@ -230,10 +264,12 @@ class FullBenchmark(zntrack.Node):
         bulk_crystal_layout, bulk_crystal_callback_fn = BulkCrystalBenchmark.launch_dashboard(full_benchmark=True)
         mol_crystal_layout, mol_crystal_callback_fn = MolecularCrystalBenchmark.launch_dashboard(full_benchmark=True)
         mol_layout, mol_callback_fn = MolecularBenchmark.launch_dashboard(full_benchmark=True)
-        # Add further applications layout and callback
         further_layout, further_callback_fn = FurtherApplications.launch_dashboard(full_benchmark=True)
-        neb_further_layout, neb_further_callback_fn = NEBFutherApplications.launch_dashboard(full_benchmark=True)
-
+        neb_further_layout, neb_further_callback_fn = NEBFurtherApplications.launch_dashboard(full_benchmark=True)
+        surface_layout, surface_callback_fn = SurfaceBenchmark.launch_dashboard(full_benchmark=True)
+        supramolecular_layout, supramolecular_callback_fn = SupramolecularComplexBenchmark.launch_dashboard(full_benchmark=True)
+        physicality_layout, physicality_callback_fn = PhysicalityBenchmark.launch_dashboard(full_benchmark=True)
+        mof_layout, mof_callback_fn = MOFBenchmark.launch_dashboard(full_benchmark=True)
 
 
         # Patch layouts removed
@@ -244,6 +280,10 @@ class FullBenchmark(zntrack.Node):
             "Molecular Score": mol_layout,
             "Water MD": further_layout,
             "NEBs": neb_further_layout,
+            "Surfaces": surface_layout,
+            "Supramolecular Complexes": supramolecular_layout,
+            "Physicality": physicality_layout,
+            "MOF": mof_layout,
         }
 
         layout, tab_layouts = FullBenchmark.build_layout(scores_all_df, component_layouts, normalise_to_model)

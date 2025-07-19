@@ -1,0 +1,27 @@
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+from pathlib import Path
+
+project = zntrack.Project()
+{% endif %}
+
+
+{% set standalone = false %}
+{% include "neb.py.jinja2" %}
+
+
+with project.group('neb-further-applications-benchmark'):
+    further_apps_benchmark = mlipx.NEBFutherApplications(
+        NEB_list = neb_node_list,
+    )
+
+
+{% if standalone %}
+project.build()
+{% endif %}

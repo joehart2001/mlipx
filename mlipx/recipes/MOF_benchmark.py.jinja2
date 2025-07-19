@@ -17,16 +17,13 @@ project = zntrack.Project()
 
 
 {% set standalone = false %}
-{% include "S30L.py.jinja2" %}
-{% include "LNCI16.py.jinja2" %}
-{% include "PLA15_PLF547_protein_ligand.py.jinja2" %}
+{% include "QMOF.py.jinja2" %}
 
 
-with project.group('supramolecular-complex-benchmark'):
-    supramolecular_complex_benchmark = mlipx.SupramolecularComplexBenchmark(
-        S30L_list=S30L_node_list,
-        LNCI16_list=LNCI16_node_list,
-        protein_ligand_list=protein_ligand_list,
+
+with project.group('MOF-benchmark'):
+    supramolecular_complex_benchmark = mlipx.MOFBenchmark(
+        QMOF_list=QMOF_node_list,
     )
 
 

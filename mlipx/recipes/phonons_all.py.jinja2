@@ -49,8 +49,8 @@ print(f"Using {len(mp_ids)} mp-ids")
 
 
 
-{% if n_jobs %}
-n_jobs = {{ n_jobs }}
+{% if n_jobs_phonons %}
+n_jobs = {{ n_jobs_phonons }}
 if n_jobs == 1:
     print("No parallelisation, running in serial")
 else:
@@ -86,7 +86,7 @@ ray = False
 
 
 
-{% if ref == True %}
+{% if ref_phonons == True %}
 
 with project.group("phonons-dispersion-ref"):
     phonon_ref_node = mlipx.PhononAllRef(

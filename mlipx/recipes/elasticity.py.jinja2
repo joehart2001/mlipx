@@ -15,15 +15,15 @@ n_materials = 100
 {% elif medium %}
 n_materials = 1000
 
-{% elif n_materials %}
-n_materials = {{ n_materials }}
+{% elif n_materials_elasticity %}
+n_materials = {{ n_materials_elasticity }}
 {% else %}
 n_materials = None # none means all
 print(f"Elasticity benchmark on whole dataset (12,122 materials)")
 {% endif %}
 
-{% if n_jobs %}
-n_jobs = {{ n_jobs }}
+{% if n_jobs_elasticity %}
+n_jobs = {{ n_jobs_elasticity }}
 if n_jobs == 1:
     print("No parallelisation, running in serial")
 else:
