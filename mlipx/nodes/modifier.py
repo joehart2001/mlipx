@@ -95,6 +95,8 @@ class PressureRampModifier(DynamicsModifier):
         new_pressure = (
             1 - percentage
         ) * self.start_pressure + percentage * self.end_pressure
+        
+        new_pressure = new_pressure * 0.0001  # 1 bar = 0.0001 GPa
 
         if step % self.interval == 0:
             if hasattr(thermostat_barostat, "set_pressure"):
