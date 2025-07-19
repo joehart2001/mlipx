@@ -56,10 +56,10 @@ class S30LBenchmark(zntrack.Node):
     s30l_ref_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s30l_ref.csv")
     s30l_pred_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s30l_pred.csv")
     s30l_mae_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s30l_mae.json")
+    s30l_complex_atoms_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s30l_complex_atoms.xyz")
     
     
     def run(self):
-
 
         def _read_charge(folder: Path) -> float:
             for f in folder.iterdir():
@@ -114,6 +114,7 @@ class S30LBenchmark(zntrack.Node):
         refs = parse_references(ref_file)
 
         rows = []
+        complex_atoms_list = []
         for idx in tqdm(range(1, 31), desc=f"Benchmarking {self.model_name}"):
             fragments = load_complex(idx, base_dir)
             e_model = interaction_energy(fragments, calc)
@@ -128,13 +129,18 @@ class S30LBenchmark(zntrack.Node):
                     "n_atoms": len(fragments["complex"]),
                 }
             )
+            fragments["complex"].info["Index"] = idx
+            complex_atoms_list.append(fragments["complex"])
+            
 
         df = pd.DataFrame(rows)
 
         ref_df = df[["Index", "E_ref (eV)"]]
         model_df = df[["Index", f"E_{self.model_name} (eV)"]].copy()
-
         mae = df["Error (kcal/mol)"].abs().mean()
+
+        # Save complex structures for visualization
+        write(self.s30l_complex_atoms_path, complex_atoms_list)
 
         ref_df.to_csv(self.s30l_ref_path, index=False)
         model_df.to_csv(self.s30l_pred_path, index=False)
@@ -159,6 +165,10 @@ class S30LBenchmark(zntrack.Node):
             data = json.load(f)
         return data
 
+    @property
+    def get_complex_atoms(self) -> List[Atoms]:
+        """Load complex atoms from xyz file."""
+        return read(self.s30l_complex_atoms_path, index=":")
 
 
 
@@ -172,6 +182,12 @@ class S30LBenchmark(zntrack.Node):
         mae_dict = {}
         pred_dfs = []
 
+        # save images for WEAS viewer
+        complex_atoms = list(node_dict.values())[0].get_complex_atoms
+        save_dir = os.path.abspath(f"assets/S30L/")
+        os.makedirs(save_dir, exist_ok=True)
+        write(os.path.join(save_dir, "complex_atoms.xyz"), complex_atoms)
+        
         ref_df = list(node_dict.values())[0].get_ref
 
         for model_name, node in node_dict.items():
@@ -196,7 +212,7 @@ class S30LBenchmark(zntrack.Node):
 
         mae_df["Rank"] = mae_df["Score"].rank(ascending=True, method="min")
 
-        mae_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
+        mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
         pred_full_df.to_pickle(os.path.join(cache_dir, "predictions_df.pkl"))
         
 
@@ -209,16 +225,19 @@ class S30LBenchmark(zntrack.Node):
     ):
         from mlipx.dash_utils import run_app
 
-        results_df = pd.read_pickle(os.path.join(cache_dir, "results_df.pkl"))
+        mae_df = pd.read_pickle(os.path.join(cache_dir, "mae_df.pkl"))
         pred_df = pd.read_pickle(os.path.join(cache_dir, "predictions_df.pkl"))
 
-        layout = S30LBenchmark.build_layout(results_df)
+        layout = S30LBenchmark.build_layout(mae_df)
 
         def callback_fn(app_instance):
             S30LBenchmark.register_callbacks(app_instance, pred_df)
 
         if app is None:
-            app = dash.Dash(__name__)
+            assets_dir = os.path.abspath("assets")
+            print("Serving assets from:", assets_dir)
+            app = dash.Dash(__name__, assets_folder=assets_dir)
+            
             app.layout = layout
             callback_fn(app)
             return run_app(app, ui=ui)
@@ -227,10 +246,10 @@ class S30LBenchmark(zntrack.Node):
 
 
     @staticmethod
-    def build_layout(results_df):
+    def build_layout(mae_df):
         return html.Div([
             dash_table_interactive(
-                df=results_df.round(3),
+                df=mae_df.round(3),
                 id="S30L-table",
                 benchmark_info="Benchmark info: Interaction energies for host-guest complexes in S30L.",
                 title="S30L Benchmark",
@@ -240,7 +259,22 @@ class S30LBenchmark(zntrack.Node):
                     "Rank": "Ranking of model by Score (lower is better)"
                 },
                 extra_components=[
-                    html.Div(id="S30L-plot"),
+                    html.Div(
+                        children=[
+                            html.Div(
+                                "Click on the points to see the structure!",
+                                style={
+                                    "color": "red",
+                                    "fontWeight": "bold",
+                                    "marginBottom": "10px"
+                                }
+                            ),
+                            dcc.Graph(id="S30L-plot")
+                        ],
+                        id="S30L-plot-container",
+                        style={"display": "none"},
+                    ),
+                    html.Div(id="weas-viewer-S30L", style={'marginTop': '20px'}),
                 ]
             )
         ])
@@ -248,12 +282,14 @@ class S30LBenchmark(zntrack.Node):
         
     @staticmethod
     def register_callbacks(
-        app, 
+        app,
         pred_df
     ):
-        
+        from mlipx.dash_utils import weas_viewer_callback
+
         @app.callback(
-            Output("S30L-plot", "children"),
+            Output("S30L-plot", "figure"),
+            Output("S30L-plot-container", "style"),
             Input("S30L-table", "active_cell"),
             State("S30L-table", "data"),
         )
@@ -266,11 +302,11 @@ class S30LBenchmark(zntrack.Node):
             col = active_cell["column_id"]
 
             if col == "Model":
-                return None
+                return dash.no_update, {"display": "none"}
 
             df = pred_df.copy()
             df = df[df["Model"] == clicked_model]
-            
+
             fig = go.Figure()
             fig.add_trace(
                 go.Scatter(
@@ -278,6 +314,7 @@ class S30LBenchmark(zntrack.Node):
                     y=df["E_model (eV)"],
                     mode="markers",
                     marker=dict(size=6, opacity=0.7),
+                    customdata=df["Index"],  # ← clean value
                     text=[
                         f"Index: {i}<br>DFT: {e_ref:.3f} eV<br>{clicked_model}: {e_model:.3f} eV"
                         for i, e_ref, e_model in zip(df["Index"], df["E_ref (eV)"], df["E_model (eV)"])
@@ -309,4 +346,19 @@ class S30LBenchmark(zntrack.Node):
                 ]
             )
 
-            return dcc.Graph(figure=fig)
+            return fig, {"display": "block"}
+
+        @app.callback(
+            Output("weas-viewer-S30L", "children"),
+            Output("weas-viewer-S30L", "style"),
+            Input("S30L-plot", "clickData"),
+        )
+        def update_weas_viewer(clickData):
+            if not clickData:
+                raise PreventUpdate
+            return weas_viewer_callback(
+                clickData,
+                "assets/S30L/complex_atoms.xyz",
+                mode="index",
+                index_key="pointIndex"
+            )

@@ -20,11 +20,13 @@ from typing import List, Union
 
 # ----
 
+
 def reserve_free_port():
     s = socket.socket()
-    s.bind(('', 0))
+    s.bind(("", 0))
     port = s.getsockname()[1]
     return s, port
+
 
 def run_app(app, ui, port: Optional[int] = None):
     if port:
@@ -47,23 +49,22 @@ def run_app(app, ui, port: Optional[int] = None):
         return
 
     print(f"Dash app running at {url}")
-            
-            
+
+
 # ------
 
+
 def dash_table_interactive(
-                df: pd.DataFrame, 
-                id: str, 
-                title: str,
-                info: str = "Interactivity info: click on an interactive cell to show plots, click on the models column to collapse",
-                benchmark_info: str = "",
-                extra_components: list = None,
-                interactive: bool = True,
-                static_coloured_table: bool = False,
-                tooltip_header: Optional[Dict[str, str]] = None,
-                
+    df: pd.DataFrame,
+    id: str,
+    title: str,
+    info: str = "Interactivity info: click on an interactive cell to show plots, click on the models column to collapse",
+    benchmark_info: str = "",
+    extra_components: list = None,
+    interactive: bool = True,
+    static_coloured_table: bool = False,
+    tooltip_header: Optional[Dict[str, str]] = None,
 ) -> html.Div:
-    
     """
     df : pd.DataFrame
         DataFrame to display in the table.
@@ -80,45 +81,50 @@ def dash_table_interactive(
                 - A tabbed layout (e.g., scatter plot + Δ table in the lattice constant example)
 
     """
-    
-    
-    
-    
-    return html.Div([
-        html.H2(title, style={"color": "black"}),
-        html.H6(benchmark_info, style={"color": "black", "fontSize": "14px"}),
-        html.P(info, style={"fontSize": "14px", "color": "#555"}) if interactive else None,
-        
 
-        dash_table.DataTable(
-            id=id,
-            columns=[{"name": col, "id": col} for col in df.columns],
-            data=df.to_dict('records'),
-            style_cell={'textAlign': 'center', 'fontSize': '14px'},
-            style_header={'fontWeight': 'bold', 'textDecoration': 'underline', 'textDecorationStyle': 'dotted',
-                          'cursor': 'help', "whiteSpace": "normal"},
-            cell_selectable=interactive,
-            style_data_conditional=colour_table(df, all_cols=True) if static_coloured_table else None,        
-            tooltip_header=tooltip_header,
-            tooltip_delay=100,
-            tooltip_duration=None,
-            # col sorting, doesn't move the selected cell
-            # sort_action="native", # enable column header sort
-            # sort_mode="single", # allow sorting by one column at a time
-            
-        ),
+    return html.Div(
+        [
+            html.H2(title, style={"color": "black"}),
+            html.H6(benchmark_info, style={"color": "black", "fontSize": "14px"}),
+            (
+                html.P(info, style={"fontSize": "14px", "color": "#555"})
+                if interactive
+                else None
+            ),
+            dash_table.DataTable(
+                id=id,
+                columns=[{"name": col, "id": col} for col in df.columns],
+                data=df.to_dict("records"),
+                style_cell={"textAlign": "center", "fontSize": "14px"},
+                style_header={
+                    "fontWeight": "bold",
+                    "textDecoration": "underline",
+                    "textDecorationStyle": "dotted",
+                    "cursor": "help",
+                    "whiteSpace": "normal",
+                },
+                cell_selectable=interactive,
+                style_data_conditional=(
+                    colour_table(df, all_cols=True) if static_coloured_table else None
+                ),
+                tooltip_header=tooltip_header,
+                tooltip_delay=100,
+                tooltip_duration=None,
+                # col sorting, doesn't move the selected cell
+                # sort_action="native", # enable column header sort
+                # sort_mode="single", # allow sorting by one column at a time
+            ),
+            html.Br(),
+            *(extra_components if extra_components else []),
+            # dcc.Store(id='lattice-table-last-clicked'),
+            # html.Div(id="lattice-const-table"),
+        ],
+        style={"backgroundColor": "white", "padding": "20px"},
+    )
 
-        html.Br(),
-        
-        *(extra_components if extra_components else [])
-        # dcc.Store(id='lattice-table-last-clicked'),
-        # html.Div(id="lattice-const-table"),
-        
-    ], style={"backgroundColor": "white", "padding": "20px"})
-    
-    
 
 # --------- combining benchmark utils ------------
+
 
 def process_data(data, key_extractor, value_extractor):
     if isinstance(data, list):
@@ -143,10 +149,8 @@ def process_data(data, key_extractor, value_extractor):
         raise ValueError(f"{data} should be a list or dict")
 
 
-
 def combine_mae_tables(*mae_dfs):
-    """ combine mae tables from different nodes for a summary table
-    """
+    """combine mae tables from different nodes for a summary table"""
     combined_parts = []
 
     for df in mae_dfs:
@@ -165,26 +169,22 @@ def combine_mae_tables(*mae_dfs):
     return combined
 
 
-
 def colour_table(
     benchmark_score_df: pd.DataFrame,
     all_cols: bool = False,
     col_name: str | None = None,
-    
 ) -> List[Dict[str, Any]]:
-    """ Viridis-style colormap for Dash DataTable
-    """
-    
+    """Viridis-style colormap for Dash DataTable"""
+
     cmap = matplotlib.cm.get_cmap("viridis_r")
 
     def rgba_from_val(val, vmin, vmax, cmap):
         norm = (val - vmin) / (vmax - vmin) if vmax != vmin else 0
         rgba = cmap(norm)
         r, g, b = [int(255 * x) for x in rgba[:3]]
-        return f'rgb({r}, {g}, {b})'
+        return f"rgb({r}, {g}, {b})"
 
     style_data_conditional = []
-
 
     if all_cols:
         cols_to_color = benchmark_score_df.select_dtypes(include="number").columns
@@ -200,14 +200,15 @@ def colour_table(
         vmax = benchmark_score_df[col].max()
 
         for val in benchmark_score_df[col]:
-            style_data_conditional.append({
-                'if': {'filter_query': f'{{{col}}} = {val}', 'column_id': col},
-                'backgroundColor': rgba_from_val(val, vmin, vmax, cmap),
-                'color': 'white' if val > (vmin + vmax) / 2 else 'black'
-            })
+            style_data_conditional.append(
+                {
+                    "if": {"filter_query": f"{{{col}}} = {val}", "column_id": col},
+                    "backgroundColor": rgba_from_val(val, vmin, vmax, cmap),
+                    "color": "white" if val > (vmin + vmax) / 2 else "black",
+                }
+            )
 
     return style_data_conditional
-
 
 
 def combine_apps(
@@ -245,24 +246,26 @@ def combine_apps(
         static_coloured_table=static_coloured_table,
     )
     children = []
-    
+
     if shared_stores:
         children.extend(shared_stores)
-        
+
     children.append(html.H1(f"{benchmark_title}", style={"color": "black"}))
     children.append(
-        html.Div([
-            benchmark_score_table,
-            html.Br(),
-            *(weights_components if weights_components else [])
-        ], style={
-            "backgroundColor": "white",
-            "padding": "20px",
-            "border": "2px solid black",
-        })
+        html.Div(
+            [
+                benchmark_score_table,
+                html.Br(),
+                *(weights_components if weights_components else []),
+            ],
+            style={
+                "backgroundColor": "white",
+                "padding": "20px",
+                "border": "2px solid black",
+            },
+        )
     )
-    
-        
+
     # children = [
     #     html.H1(f"{benchmark_title}", style={"color": "black"}),
     #     html.Div([
@@ -280,18 +283,17 @@ def combine_apps(
     for idx, entry in enumerate(apps_or_layouts_list):
         layout = entry.layout if isinstance(entry, Dash) else entry
         children.append(
-            html.Div(layout.children if hasattr(layout, "children") else layout, style={
-                "backgroundColor": "white",
-                "padding": "20px",
-                "border": "2px solid black",
-            })
+            html.Div(
+                layout.children if hasattr(layout, "children") else layout,
+                style={
+                    "backgroundColor": "white",
+                    "padding": "20px",
+                    "border": "2px solid black",
+                },
+            )
         )
 
-    return html.Div(
-        children,
-        style={"backgroundColor": "#f8f8f8"}
-    )
-    
+    return html.Div(children, style={"backgroundColor": "#f8f8f8"})
 
 
 # def combine_apps(
@@ -306,12 +308,12 @@ def combine_apps(
 # ):
 #     """ combines multiple Dash apps into a single app, where the first app is the main app
 #          e.g. used in bulk_crystal_benchmark
-         
+
 #          TODO: potential issue: id='benchmark-score-table' will be duplicated in each benchmark
-         
+
 #          static_coloured_table: use false when you want no colours or when adding a dynamically coloured table
 #     """
-    
+
 #     benchmark_score_table = dash_table_interactive(
 #         df=benchmark_score_df,
 #         id=id,
@@ -323,12 +325,11 @@ def combine_apps(
 #     )
 
 
-
 #     app_layout_dict = {
 #         f"app_{i}": app.layout if hasattr(app, "layout") else app
 #         for i, app in enumerate(apps_list)
 #     }
-    
+
 #     children = [
 #         html.H1(f"{benchmark_title}", style={"color": "black"}),
 #         html.Div(benchmark_score_table, style={
@@ -353,37 +354,31 @@ def combine_apps(
 #     #     children,
 #     #     style={"backgroundColor": "#f8f8f8"}
 #     # )
-    
+
 #     return html.Div(
 #         children,
 #         style={"backgroundColor": "#f8f8f8"}
 #     )
-    
+
 #     #return apps_list[0]
-
-
-
 
 
 # ------- registering callbacks -------
 
 
 # TODO this
-def register_callbacks_table_scatter_table(
-    app, 
-    mae_df, 
-    lat_const_df
-):
-    """ register callbacks for interactive table -> scatter plot and table tabs
+def register_callbacks_table_scatter_table(app, mae_df, lat_const_df):
+    """register callbacks for interactive table -> scatter plot and table tabs
     - mae-score-table is the interactive table
-    - 
+    -
     """
+
     # decorator tells dash the function below is a callback
     @app.callback(
         Output("lattice-const-table", "children"),
         Output("lattice-table-last-clicked", "data"),
         Input("lat-mae-score-table", "active_cell"),
-        State("lattice-table-last-clicked", "data")
+        State("lattice-table-last-clicked", "data"),
     )
     def update_lattice_const_plot(active_cell, last_clicked):
         if active_cell is None:
@@ -398,8 +393,8 @@ def register_callbacks_table_scatter_table(
 
         # Toggle behavior: if the same model is clicked again, collapse
         if last_clicked is not None and (
-            active_cell["row"] == last_clicked.get("row") and
-            active_cell["column_id"] == last_clicked.get("column_id")
+            active_cell["row"] == last_clicked.get("row")
+            and active_cell["column_id"] == last_clicked.get("column_id")
         ):
             return None, None
 
@@ -410,51 +405,67 @@ def register_callbacks_table_scatter_table(
         pred_vals = lat_const_df[model_name]
         formulas = lat_const_df.index.tolist()
 
-        fig = LatticeConstant.create_scatter_plot(ref_vals, pred_vals, model_name, mae_val, formulas)
+        fig = LatticeConstant.create_scatter_plot(
+            ref_vals, pred_vals, model_name, mae_val, formulas
+        )
 
         abs_diff = pred_vals - ref_vals
         pct_diff = 100 * abs_diff / ref_vals
 
-        table_df = pd.DataFrame({
-            "Element": formulas,
-            "DFT (Å)": ref_vals,
-            f"{model_name} (Å)": pred_vals,
-            "Δ": abs_diff.round(3),
-            "Δ/%": pct_diff.round(2)
-        }).round(3)
-
+        table_df = pd.DataFrame(
+            {
+                "Element": formulas,
+                "DFT (Å)": ref_vals,
+                f"{model_name} (Å)": pred_vals,
+                "Δ": abs_diff.round(3),
+                "Δ/%": pct_diff.round(2),
+            }
+        ).round(3)
 
         summary_table = dash_table.DataTable(
             columns=[{"name": i, "id": i} for i in table_df.columns],
-            data=table_df.reset_index(drop=True).to_dict('records'),
-            style_cell={'textAlign': 'center', 'fontSize': '14px'},
-            style_header={'fontWeight': 'bold'},
-            style_table={'overflowX': 'auto'},
+            data=table_df.reset_index(drop=True).to_dict("records"),
+            style_cell={"textAlign": "center", "fontSize": "14px"},
+            style_header={"fontWeight": "bold"},
+            style_table={"overflowX": "auto"},
         )
 
-        return html.Div([
-            dcc.Tabs([
-                dcc.Tab(label="Scatter Plot", children=[dcc.Graph(figure=fig)]),
-                dcc.Tab(label="Δ Table", children=[html.Div(summary_table, style={"padding": "20px"})])
-            ])
-        ]), active_cell
-        
+        return (
+            html.Div(
+                [
+                    dcc.Tabs(
+                        [
+                            dcc.Tab(
+                                label="Scatter Plot", children=[dcc.Graph(figure=fig)]
+                            ),
+                            dcc.Tab(
+                                label="Δ Table",
+                                children=[
+                                    html.Div(summary_table, style={"padding": "20px"})
+                                ],
+                            ),
+                        ]
+                    )
+                ]
+            ),
+            active_cell,
+        )
 
 
 # -------- plotting functions --------
-        
+
 
 def create_scatter_plot(
-    ref_vals: List[float], 
-    pred_vals: List[float], 
-    model_name: str, 
+    ref_vals: List[float],
+    pred_vals: List[float],
+    model_name: str,
     mae: float,
     metric_label: tuple[str] = ("metric", "units"),
     hovertemplate: str | None = None,
     hover_data: tuple[List[str], str] | List[str] | None = None,
 ) -> px.scatter:
     """Create a scatter plot comparing ref vs predicted + mae in legend."""
-    
+
     x_col = "Reference"
     y_col = "Predicted"
     hover_col = "CustomData"
@@ -488,17 +499,19 @@ def create_scatter_plot(
         },
         title=f"{model_name} — {metric_label[0]}",
     )
-    
-    
+
     combined_min = min(min(ref_vals), min(pred_vals))
     combined_max = max(max(ref_vals), max(pred_vals))
 
     fig.add_shape(
         type="line",
-        x0=combined_min, y0=combined_min,
-        x1=combined_max, y1=combined_max,
-        xref='x', yref='y',
-        line=dict(color="black", dash="dash")
+        x0=combined_min,
+        y0=combined_min,
+        x1=combined_max,
+        y1=combined_max,
+        xref="x",
+        yref="y",
+        line=dict(color="black", dash="dash"),
     )
 
     fig.update_layout(
@@ -508,21 +521,26 @@ def create_scatter_plot(
         xaxis=dict(showgrid=True, gridcolor="lightgray", scaleanchor="y", scaleratio=1),
         yaxis=dict(showgrid=True, gridcolor="lightgray"),
     )
-    
+
     if hovertemplate:
         fig.update_traces(hovertemplate=hovertemplate)
     elif custom_data_cols and hover_label:
-        fig.update_traces(hovertemplate="<br>".join([
-            f"{hover_label}: %{{customdata[0]}}",
-            f"Reference: %{{x:.3f}} {metric_label[1]}",
-            f"Predicted: %{{y:.3f}} {metric_label[1]}",
-            "<extra></extra>"
-        ]))
-
-    
+        fig.update_traces(
+            hovertemplate="<br>".join(
+                [
+                    f"{hover_label}: %{{customdata[0]}}",
+                    f"Reference: %{{x:.3f}} {metric_label[1]}",
+                    f"Predicted: %{{y:.3f}} {metric_label[1]}",
+                    "<extra></extra>",
+                ]
+            )
+        )
 
     fig.add_annotation(
-        xref="paper", yref="paper", x=0.02, y=0.98,
+        xref="paper",
+        yref="paper",
+        x=0.02,
+        y=0.98,
         text=f"MAE ({metric_label[1]}): {mae:.3f}",
         showarrow=False,
         align="left",
@@ -531,10 +549,12 @@ def create_scatter_plot(
         borderwidth=1,
         borderpad=4,
         bgcolor="white",
-        opacity=0.8
+        opacity=0.8,
     )
 
     return fig
+
+
 from typing import Callable
 from dash import html, dcc, Input, Output, State, callback_context
 
@@ -550,13 +570,10 @@ WEIGHT_SCHEMAS = {
             "phonon": 1.0,
             "elasticity": 1.0,
             "lattice_const": 0.2,
-        }
+        },
     },
     # Add more schemas here as needed
 }
-
-
-
 
 
 def build_weight_controls(schema_key: str):
@@ -572,41 +589,51 @@ def build_weight_controls(schema_key: str):
 
         weight_controls.append(html.Label(name.replace("_", " ").title()))
         weight_controls.append(
-            html.Div([
-                dcc.Slider(
-                    id=slider_id,
-                    min=0,
-                    max=5,
-                    step=0.1,
-                    value=default,
-                ),
-                dcc.Input(
-                    id=input_id,
-                    type="number",
-                    step=0.1,
-                    value=default,
-                    style={"width": "80px"}
-                )
-            ], style={"display": "flex", "gap": "10px", "alignItems": "center"})
+            html.Div(
+                [
+                    dcc.Slider(
+                        id=slider_id,
+                        min=0,
+                        max=5,
+                        step=0.1,
+                        value=default,
+                    ),
+                    dcc.Input(
+                        id=input_id,
+                        type="number",
+                        step=0.1,
+                        value=default,
+                        style={"width": "80px"},
+                    ),
+                ],
+                style={"display": "flex", "gap": "10px", "alignItems": "center"},
+            )
         )
 
     weight_controls.append(
-        html.Button("Reset Weights", id=schema["reset_button_id"], n_clicks=0, style={"marginTop": "10px"})
+        html.Button(
+            "Reset Weights",
+            id=schema["reset_button_id"],
+            n_clicks=0,
+            style={"marginTop": "10px"},
+        )
     )
 
     return html.Div(weight_controls, style={"margin": "20px"})
 
 
-def register_weight_callbacks(app, schema_key: str, update_table_func: Callable, schema: dict = None):
+def register_weight_callbacks(
+    app, schema_key: str, update_table_func: Callable, schema: dict = None
+):
     """
     Register callbacks for weight controls (sync slider/input, reset, update table) for a given schema.
     update_table_func(weights: dict) -> data for the table
     """
-    
+
     if schema is None:
         schema = WEIGHT_SCHEMAS[schema_key]
-        
-    #schema = WEIGHT_SCHEMAS[schema_key]
+
+    # schema = WEIGHT_SCHEMAS[schema_key]
     store_id = schema["store_id"]
     reset_button_id = schema["reset_button_id"]
 
@@ -623,21 +650,35 @@ def register_weight_callbacks(app, schema_key: str, update_table_func: Callable,
             Input(reset_button_id, "n_clicks"),
             State(store_id, "data"),
         )
-        def sync_slider_input(slider_val, input_val, reset_clicks, store, default_val=default, key=name, _sid=slider_id, _iid=input_id, _rid=reset_button_id):
+        def sync_slider_input(
+            slider_val,
+            input_val,
+            reset_clicks,
+            store,
+            default_val=default,
+            key=name,
+            _sid=slider_id,
+            _iid=input_id,
+            _rid=reset_button_id,
+        ):
             ctx = callback_context
             if not ctx.triggered:
                 val = (store or {}).get(key, default_val)
                 return val, val
-            triggered_id = ctx.triggered[0]['prop_id'].split('.')[0]
+            triggered_id = ctx.triggered[0]["prop_id"].split(".")[0]
             if triggered_id == _rid:
                 return default_val, default_val
-            return (input_val, input_val) if "input" in triggered_id else (slider_val, slider_val)
+            return (
+                (input_val, input_val)
+                if "input" in triggered_id
+                else (slider_val, slider_val)
+            )
 
     # Reset all weights in store
     @app.callback(
         Output(store_id, "data"),
         Input(reset_button_id, "n_clicks"),
-        prevent_initial_call=True
+        prevent_initial_call=True,
     )
     def reset_weights_store(n_clicks):
         return schema["weights"]
@@ -649,3 +690,168 @@ def register_weight_callbacks(app, schema_key: str, update_table_func: Callable,
     )
     def update_table(weights):
         return update_table_func(weights)
+
+
+# --------------------- WEAS VIEWER CALLBACK ---------------------
+
+
+def weas_viewer_callback(
+    clickData,
+    xyz_path,
+    *,
+    mode="info",
+    info_key="system",
+    index_key="x",
+    viewer_id="viewer",
+):
+    """
+    Displays a structure or trajectory using the WEAS 3D viewer based on Dash clickData.
+
+    Args:
+        clickData (dict): The click event data from a Dash/Plotly scatter or line plot.
+            Example: {'points': [{'x': 3, 'customdata': 'System_03', 'text': 'system: System_03'}]}
+        xyz_path (str): Relative path to the `.xyz` file containing structures or trajectory frames.
+            For example: "assets/LNCI16/complex_atoms.xyz" or "assets/model1/group1/System_03/images.xyz"
+        mode (str):
+            - 'info': Match structure by metadata field (e.g., atoms.info["system"] == "System_03").
+            - 'index': Use clickData["points"][0][index_key] to select a structure by its frame index.
+            - 'trajectory': Load full multi-frame .xyz file and display the selected frame.
+        info_key (str): The key used to match atoms.info when mode='info'.
+            Example: if atoms.info["system"] == "System_03", use info_key="system".
+        index_key (str): The field name inside clickData["points"][0] to use for frame selection.
+            For a line plot, this is often "x".
+        viewer_id (str): DOM element ID used in the HTML container for the embedded WEAS viewer.
+
+    Returns:
+        tuple: (Dash HTML Div with an embedded WEAS iframe, style dict for spacing)
+
+    Examples:
+        Mode "info" (select structure by metadata key):
+            >>> @app.callback(
+            ...     Output("viewer-container", "children"),
+            ...     Output("viewer-container", "style"),
+            ...     Input("scatter-plot", "clickData")
+            ... )
+            ... def update_viewer(clickData):
+            ...     return weas_viewer_callback(
+            ...         clickData,
+            ...         "assets/structures.xyz",
+            ...         mode="info",
+            ...         info_key="system"
+            ...     )
+
+        Mode "index" (select structure by index value):
+            >>> @app.callback(
+            ...     Output("viewer-container", "children"),
+            ...     Output("viewer-container", "style"),
+            ...     Input("frame-plot", "clickData")
+            ... )
+            ... def update_viewer(clickData):
+            ...     return weas_viewer_callback(
+            ...         clickData,
+            ...         "assets/frames.xyz",
+            ...         mode="index",
+            ...         index_key="x"
+            ...     )
+
+        Mode "trajectory" (load entire trajectory and show selected frame):
+            >>> @app.callback(
+            ...     Output("viewer-container", "children"),
+            ...     Output("viewer-container", "style"),
+            ...     Input("neb-plot", "clickData")
+            ... )
+            ... def update_viewer(clickData):
+            ...     return weas_viewer_callback(
+            ...         clickData,
+            ...         "assets/my_trajectory.xyz",
+            ...         mode="trajectory",
+            ...         index_key="x"
+            ...     )
+    """
+    import dash
+    from ase.io import read
+    import os
+    from dash import html as dash_html
+
+    if clickData is None:
+        raise dash.exceptions.PreventUpdate
+
+    atoms_list = read(os.path.abspath(xyz_path), index=":")
+    filename = f"/{xyz_path}"
+
+    if mode == "info":
+        label = clickData["points"][0].get("text", "").split("<br>")[0].split(": ")[1]
+        atoms = next((a for a in atoms_list if a.info.get(info_key) == label), None)
+        if atoms is None:
+            raise dash.exceptions.PreventUpdate
+        index = atoms_list.index(atoms)
+        title = label
+    elif mode in ("index", "trajectory"):
+        index = int(clickData["points"][0].get(index_key, 0))
+        if not (0 <= index < len(atoms_list)):
+            raise dash.exceptions.PreventUpdate
+        title = f"Frame {index}"
+    else:
+        raise ValueError(f"Unknown mode: {mode}")
+
+    def generate_weas_html(filename, index, trajectory):
+        return f"""
+        <!doctype html>
+        <html lang="en">
+        <head><meta charset="utf-8"><title>WEAS Viewer</title></head>
+        <body>
+        <div id="{viewer_id}" style="width: 100%; height: 500px; border: 1px solid #ccc;"></div>
+        <script type="module">
+        async function fetchFile(file) {{
+            const r = await fetch(file);
+            if (!r.ok) throw new Error(`Failed to fetch file: ${{r.status}}`);
+            return await r.text();
+        }}
+        function validateXYZ(txt) {{
+            const lines = txt.trim().split("\\n");
+            const n = parseInt(lines[0]);
+            if (isNaN(n) || lines.length < n + 2) throw new Error("Malformed XYZ file");
+        }}
+        try {{
+            const {{ WEAS, parseXYZ }} = await import("https://unpkg.com/weas/dist/index.mjs");
+            const viewer = new WEAS({{
+                domElement: document.getElementById("{viewer_id}"),
+                viewerConfig: {{ _modelStyle: 2, backgroundColor: [1,1,1,1] }},
+                guiConfig: {{ buttons: {{ enabled: false }} }}
+            }});
+            const text = await fetchFile("{filename}");
+            validateXYZ(text);
+            const atoms = parseXYZ(text);
+            viewer.avr.atoms = { 'atoms' if mode == 'trajectory' else f"atoms[{index}]" };
+            viewer.avr.modelStyle = 1;
+            viewer.avr.currentFrame = {index};
+            viewer.render();
+        }} catch (err) {{
+            document.getElementById("{viewer_id}").innerHTML = 
+            `<div style='color:red;padding:1em;'>Error: ${{err.message}}</div>`;
+            console.error(err);
+        }}
+        </script>
+        </body></html>
+        """
+
+    html_content = generate_weas_html(
+        filename, index=index, trajectory=(mode == "trajectory")
+    )
+    return (
+        dash_html.Div(
+            [
+                dash_html.H4(title, style={"textAlign": "center"}),
+                dash_html.Iframe(
+                    srcDoc=html_content,
+                    style={
+                        "height": "550px",
+                        "width": "100%",
+                        "border": "1px solid #ddd",
+                        "borderRadius": "5px",
+                    },
+                ),
+            ]
+        ),
+        {"marginTop": "20px"},
+    )

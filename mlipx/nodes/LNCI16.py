@@ -441,6 +441,9 @@ class LNCI16Benchmark(zntrack.Node):
         
     @staticmethod
     def register_callbacks(app, results_df):
+        # Import shared WEAS viewer callback utility
+        from mlipx.dash_utils import weas_viewer_callback
+        
         @app.callback(
             Output("LNCI16-plot", "figure"),
             Output("LNCI16-plot-container", "style"),
@@ -511,125 +514,99 @@ class LNCI16Benchmark(zntrack.Node):
 
             return fig, {"display": "block"}
 
-        # WEAS viewer callback for LNCI16
         @app.callback(
             Output("weas-viewer-LNCI16", "children"),
             Output("weas-viewer-LNCI16", "style"),
             Input("LNCI16-plot", "clickData"),
         )
         def update_weas_viewer(clickData):
-            import dash
-            if clickData is None:
-                raise dash.exceptions.PreventUpdate
-            # Load complex_atoms from file
-            from ase.io import read
-            import os
-            complex_atoms = read(os.path.abspath("assets/LNCI16/complex_atoms.xyz"), index=":")
-            system_name = clickData["points"][0].get("text", "").split("<br>")[0].split(": ")[1]
-            atoms = next((a for a in complex_atoms if a.info.get("system") == system_name), None)
-            if atoms is None:
-                raise dash.exceptions.PreventUpdate
-            index = complex_atoms.index(atoms)
-            filename = "/assets/LNCI16/complex_atoms.xyz"
+            return weas_viewer_callback(
+                clickData, 
+                "assets/LNCI16/complex_atoms.xyz",
+                mode="info",
+                info_key="system",
+                )
 
-            def generate_weas_html(filename, current_frame):
-                return f"""
-                <!doctype html>
-                <html lang="en">
-                <head>
-                    <meta charset="utf-8">
-                    <title>WEAS Viewer</title>
-                </head>
-                <body>
-                    <div id="viewer" style="position: relative; width: 100%; height: 500px; border: 1px solid #ccc;"></div>
-                    <div id="debug" style="margin-top: 10px; padding: 10px; background: #f0f0f0; font-family: monospace; display: none;"></div>
-                    <script type="module">
-                        async function fetchFile(filename) {{
-                            try {{
-                                const response = await fetch(filename);
-                                if (!response.ok) {{
-                                    throw new Error(`Failed to load file: ${{filename}} - ${{response.status}}`);
-                                }}
-                                const text = await response.text();
-                                console.log('File content:', text);
-                                document.getElementById("debug").innerHTML = 
-                                    `<strong>File content (first 500 chars):</strong><br><pre>${{text.substring(0, 500)}}</pre>`;
-                                document.getElementById("debug").style.display = 'block';
-                                return text;
-                            }} catch (error) {{
-                                console.error('Error fetching file:', error);
-                                throw error;
-                            }}
-                        }}
-                        function validateXYZ(content) {{
-                            const lines = content.trim().split('\\n');
-                            if (lines.length < 2) {{
-                                throw new Error('XYZ file too short');
-                            }}
-                            const numAtoms = parseInt(lines[0]);
-                            if (isNaN(numAtoms)) {{
-                                throw new Error('First line must be number of atoms');
-                            }}
-                            if (lines.length < numAtoms + 2) {{
-                                throw new Error(`Expected ${{numAtoms + 2}} lines, got ${{lines.length}}`);
-                            }}
-                            for (let i = 2; i < numAtoms + 2; i++) {{
-                                const parts = lines[i].trim().split(/\\s+/);
-                                if (parts.length < 4) {{
-                                    throw new Error(`Line ${{i+1}}: Expected element + 3 coordinates, got ${{parts.length}} parts`);
-                                }}
-                            }}
-                            return true;
-                        }}
-                        try {{
-                            const {{ WEAS, parseXYZ }} = await import('https://unpkg.com/weas/dist/index.mjs');
-                            const domElement = document.getElementById("viewer");
-                            const editor = new WEAS({{
-                                domElement,
-                                viewerConfig: {{ 
-                                    _modelStyle: 2,
-                                    backgroundColor: [1, 1, 1, 1]
-                                }},
-                                guiConfig: {{ 
-                                    buttons: {{ enabled: false }} 
-                                }}
-                            }});
-                            const structureData = await fetchFile("{filename}");
-                            validateXYZ(structureData);
-                            const atoms = parseXYZ(structureData)[{current_frame}];
-                            editor.avr.atoms = atoms;
-                            editor.avr.modelStyle = 1;
-                            editor.avr.currentFrame = {index};
-                            editor.render();
-                            document.getElementById("debug").style.display = 'none';
-                        }} catch (error) {{
-                            console.error('Error initializing WEAS:', error);
-                            document.getElementById("viewer").innerHTML = 
-                                `<div style="padding: 20px; color: red;">
-                                    <strong>Error loading structure:</strong><br>
-                                    ${{error.message}}
-                                    <br><br>
-                                    <small>Check the browser console for more details.</small>
-                                </div>`;
-                        }}
-                    </script>
-                </body>
-                </html>
-                """
-            html_content = generate_weas_html(filename, current_frame=index)
-            from dash import html as dash_html
-            return (
-                dash_html.Div([
-                    dash_html.H4(f"System: {system_name}", style={'textAlign': 'center'}),
-                    dash_html.Iframe(
-                        srcDoc=html_content,
-                        style={
-                            "height": "550px",
-                            "width": "100%",
-                            "border": "1px solid #ddd",
-                            "borderRadius": "5px"
-                        }
-                    )
-                ]),
-                {"marginTop": "20px"}
-            )
+
+
+
+    # @staticmethod
+    # def weas_viewer_callback(clickData, xyz_path, *, mode="info", info_key="system", index_key="x", viewer_id="viewer"):
+    #     import dash
+    #     from ase.io import read
+    #     import os
+    #     from dash import html as dash_html
+
+    #     if clickData is None:
+    #         raise dash.exceptions.PreventUpdate
+
+    #     atoms_list = read(os.path.abspath(xyz_path), index=":")
+    #     filename = f"/{xyz_path}"
+
+    #     if mode == "info":
+    #         label = clickData["points"][0].get("text", "").split("<br>")[0].split(": ")[1]
+    #         atoms = next((a for a in atoms_list if a.info.get(info_key) == label), None)
+    #         if atoms is None:
+    #             raise dash.exceptions.PreventUpdate
+    #         index = atoms_list.index(atoms)
+    #         title = label
+    #     elif mode in ("index", "trajectory"):
+    #         index = int(clickData["points"][0].get(index_key, 0))
+    #         if not (0 <= index < len(atoms_list)):
+    #             raise dash.exceptions.PreventUpdate
+    #         title = f"Frame {index}"
+    #     else:
+    #         raise ValueError(f"Unknown mode: {mode}")
+
+    #     def generate_weas_html(filename, index, trajectory):
+    #         return f"""
+    #       <!doctype html>
+    #       <html lang="en">
+    #       <head><meta charset="utf-8"><title>WEAS Viewer</title></head>
+    #       <body>
+    #       <div id="{viewer_id}" style="width: 100%; height: 500px; border: 1px solid #ccc;"></div>
+    #       <script type="module">
+    #       async function fetchFile(file) {{
+    #           const r = await fetch(file);
+    #           if (!r.ok) throw new Error(`Failed to fetch file: ${{r.status}}`);
+    #           return await r.text();
+    #       }}
+    #       function validateXYZ(txt) {{
+    #           const lines = txt.trim().split("\\n");
+    #           const n = parseInt(lines[0]);
+    #           if (isNaN(n) || lines.length < n + 2) throw new Error("Malformed XYZ file");
+    #       }}
+    #       try {{
+    #           const {{ WEAS, parseXYZ }} = await import("https://unpkg.com/weas/dist/index.mjs");
+    #           const viewer = new WEAS({{
+    #               domElement: document.getElementById("{viewer_id}"),
+    #               viewerConfig: {{ _modelStyle: 2, backgroundColor: [1,1,1,1] }},
+    #               guiConfig: {{ buttons: {{ enabled: false }} }}
+    #           }});
+    #           const text = await fetchFile("{filename}");
+    #           validateXYZ(text);
+    #           const atoms = parseXYZ(text);
+    #           viewer.avr.atoms = { 'atoms' if mode == 'trajectory' else f"atoms[{index}]" };
+    #           viewer.avr.modelStyle = 1;
+    #           viewer.avr.currentFrame = {index};
+    #           viewer.render();
+    #       }} catch (err) {{
+    #           document.getElementById("{viewer_id}").innerHTML = 
+    #             `<div style='color:red;padding:1em;'>Error: ${{err.message}}</div>`;
+    #           console.error(err);
+    #       }}
+    #       </script>
+    #       </body></html>
+    #       """
+
+    #     html_content = generate_weas_html(filename, index=index, trajectory=(mode == "trajectory"))
+    #     return (
+    #         dash_html.Div([
+    #             dash_html.H4(title, style={'textAlign': 'center'}),
+    #             dash_html.Iframe(
+    #                 srcDoc=html_content,
+    #                 style={"height": "550px", "width": "100%", "border": "1px solid #ddd", "borderRadius": "5px"}
+    #             )
+    #         ]),
+    #         {"marginTop": "20px"}
+    #     )

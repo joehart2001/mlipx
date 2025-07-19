@@ -749,17 +749,17 @@ class NEB2(zntrack.Node):
     def register_callbacks(app, all_group_data):
         from dash import Output, Input, State, exceptions
         import plotly.graph_objects as go
+        
+        # Import shared WEAS viewer callback utility
+        from mlipx.dash_utils import weas_viewer_callback
+        
         for group_name, (mae_df, neb_df, assets_dir) in all_group_data.items():
             # Prepare custom_col_names mapping for this group
-            # Try to infer from mae_df columns if available
             custom_col_names = {}
             for col in mae_df.columns:
                 if col == "Model":
                     continue
-                # Try to match to system names in neb_df keys
-                # neb_df keys are of the form "model_name::system_name"
                 for key in neb_df.keys():
-                    # key = "model_name::system_name"
                     _model, _system = key.split("::", 1)
                     if col.startswith(_system) or _system in col:
                         custom_col_names[_system] = col
@@ -803,7 +803,7 @@ class NEB2(zntrack.Node):
                 fig.update_layout(title=f"{model_name}: NEB Energy Path", xaxis_title="Image Index", yaxis_title="Energy (eV)")
                 return fig, {"display": "block"}, active_cell, model_name
 
-            # WEAS viewer callback
+            # WEAS viewer callback using shared utility
             @app.callback(
                 Output(f"weas-viewer-{group_name}", "children"),
                 Output(f"weas-viewer-{group_name}", "style"),
@@ -814,118 +814,20 @@ class NEB2(zntrack.Node):
                 import dash
                 if clickData is None or model_name is None:
                     raise dash.exceptions.PreventUpdate
-                index = int(clickData["points"][0]["x"])
+                # Get system name from clickData
                 point_data = clickData["points"][0]
-                system_name = point_data.get("customdata", "unknown")
-                system_names = [system_name]
-                children = []
-                for system_name in system_names:
-                    filename = f"/assets/{model_name}/{group_name}/{system_name}/images.xyz"
-                    def generate_weas_html(filename, current_frame):
-                        return f"""
-                        <!doctype html>
-                        <html lang="en">
-                        <head>
-                            <meta charset="utf-8">
-                            <title>WEAS Viewer</title>
-                        </head>
-                        <body>
-                            <div id="viewer" style="position: relative; width: 100%; height: 500px; border: 1px solid #ccc;"></div>
-                            <div id="debug" style="margin-top: 10px; padding: 10px; background: #f0f0f0; font-family: monospace; display: none;"></div>
-                            <script type="module">
-                                async function fetchFile(filename) {{
-                                    try {{
-                                        const response = await fetch(filename);
-                                        if (!response.ok) {{
-                                            throw new Error(`Failed to load file: ${{filename}} - ${{response.status}}`);
-                                        }}
-                                        const text = await response.text();
-                                        // Debug: show file content
-                                        console.log('File content:', text);
-                                        document.getElementById("debug").innerHTML = 
-                                            `<strong>File content (first 500 chars):</strong><br><pre>${{text.substring(0, 500)}}</pre>`;
-                                        document.getElementById("debug").style.display = 'block';
-                                        return text;
-                                    }} catch (error) {{
-                                        console.error('Error fetching file:', error);
-                                        throw error;
-                                    }}
-                                }}
-                                function validateXYZ(content) {{
-                                    const lines = content.trim().split('\\n');
-                                    if (lines.length < 2) {{
-                                        throw new Error('XYZ file too short');
-                                    }}
-                                    const numAtoms = parseInt(lines[0]);
-                                    if (isNaN(numAtoms)) {{
-                                        throw new Error('First line must be number of atoms');
-                                    }}
-                                    if (lines.length < numAtoms + 2) {{
-                                        throw new Error(`Expected ${{numAtoms + 2}} lines, got ${{lines.length}}`);
-                                    }}
-                                    // Check coordinate lines
-                                    for (let i = 2; i < numAtoms + 2; i++) {{
-                                        const parts = lines[i].trim().split(/\\s+/);
-                                        if (parts.length < 4) {{
-                                            throw new Error(`Line ${{i+1}}: Expected element + 3 coordinates, got ${{parts.length}} parts`);
-                                        }}
-                                    }}
-                                    return true;
-                                }}
-                                try {{
-                                    const {{ WEAS, parseXYZ }} = await import('https://unpkg.com/weas/dist/index.mjs');
-                                    const domElement = document.getElementById("viewer");
-                                    const editor = new WEAS({{
-                                        domElement,
-                                        viewerConfig: {{ 
-                                            _modelStyle: 2,
-                                            backgroundColor: [1, 1, 1, 1]
-                                        }},
-                                        guiConfig: {{ 
-                                            buttons: {{ enabled: false }} 
-                                        }}
-                                    }});
-                                    const structureData = await fetchFile("{filename}");
-                                    // Validate XYZ format before parsing
-                                    validateXYZ(structureData);
-                                    const atoms = parseXYZ(structureData);
-                                    editor.avr.atoms = atoms;
-                                    editor.avr.modelStyle = 1;
-                                    editor.avr.currentFrame = {index};
-                                    editor.render();
-                                    // Hide debug info if successful
-                                    document.getElementById("debug").style.display = 'none';
-                                }} catch (error) {{
-                                    console.error('Error initializing WEAS:', error);
-                                    document.getElementById("viewer").innerHTML = 
-                                        `<div style="padding: 20px; color: red;">
-                                            <strong>Error loading structure:</strong><br>
-                                            ${{error.message}}
-                                            <br><br>
-                                            <small>Check the browser console for more details.</small>
-                                        </div>`;
-                                }}
-                            </script>
-                        </body>
-                        </html>
-                        """
-                    html_content = generate_weas_html(filename, current_frame=index)
-                    from dash import html as dash_html
-                    children.append(
-                        dash_html.Div([
-                            dash_html.H4(f"Structure {index}", style={'textAlign': 'center'}),
-                            dash_html.Iframe(
-                                srcDoc=html_content,
-                                style={
-                                    "height": "550px",
-                                    "width": "100%",
-                                    "border": "1px solid #ddd",
-                                    "borderRadius": "5px"
-                                }
-                            )
-                        ])
-                    )
-                return (
-                    children if len(children) > 1 else children[0],
-                    {"marginTop": "20px"}
+                system = point_data.get("customdata", "unknown")
+                # Path to xyz file
+                xyz_path = f"assets/{model_name}/{group_name}/{system}/images.xyz"
+                viewer_id = f"neb-weas-{group_name}"
+                
+                return weas_viewer_callback(
+                    clickData,
+                    xyz_path,
+                    mode="trajectory",
+                    index_key="x",
+                    viewer_id=viewer_id
                 )
+                
+                
+                
