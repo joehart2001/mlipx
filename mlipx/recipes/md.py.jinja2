@@ -77,7 +77,7 @@ raise ValueError("Invalid ensemble: {{ ensemble }}. Choose NVT or NPT.")
 # Temperature ramp modifier
 {% if temp_end is not none %}
 temp_end = {{ temp_end }}
-t_ramp = mlipx.TemperatureRampModifier(end_temperature=temp_end, total_steps=steps)
+t_ramp = mlipx.TemperatureRampModifier(start_temperature=temperature, end_temperature=temp_end, total_steps=steps)
 print(f"Temperature ramping from {temperature} K to {temp_end} K over {steps} steps.")
 print(f"Running {{ ensemble }} MD for {steps} steps with a temperature ramp from {temperature} K to {temp_end} K with {len(frames)} initial configurations.")
 {% else %}
@@ -88,8 +88,8 @@ print(f"Running {{ ensemble }} MD for {steps} steps at {temperature} K with {len
 # Pressure ramp modifier
 {% if pressure_end is not none %}
 pressure_end = {{ pressure_end }}
-p_ramp = mlipx.PressureRampModifier(end_pressure=pressure_end, total_steps=steps)
-print(f"Pressure ramping to {pressure_end} bar over {steps} steps.")
+p_ramp = mlipx.PressureRampModifier(start_pressure=pressure, end_pressure=pressure_end, total_steps=steps)
+print(f"Pressure ramping from {pressure} to {pressure_end} GPa over {steps} steps.")
 {% else %}
 p_ramp = None
 {% endif %}
