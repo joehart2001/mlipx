@@ -405,10 +405,10 @@ class LNCI16Benchmark(zntrack.Node):
 
 
     @staticmethod
-    def build_layout(results_df):
+    def build_layout(mae_df):
         return html.Div([
             dash_table_interactive(
-                df=results_df.round(3),
+                df=mae_df.round(3),
                 id="LNCI16-table",
                 benchmark_info="Benchmark info:",
                 title="LNCI16 Benchmark",

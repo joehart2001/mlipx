@@ -1109,6 +1109,13 @@ BENCHMARKS = {
         "category_benchmark": True,
     },
     
+    "S30L": {"template": "S30L.py.jinja2"},
+    "LNCI16": {"template": "LNCI16.py.jinja2"},
+    "supramolecular_complex_benchmark": {
+        "template": "supramolecular_complex_benchmark.py.jinja2",
+        "category_benchmark": True,
+    },
+    
     "full-benchmark": {
         "template": "full_benchmark.py.jinja2",
         "category_benchmark": True,

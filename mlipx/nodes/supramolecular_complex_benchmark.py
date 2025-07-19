@@ -66,9 +66,9 @@ class SupramolecularComplexBenchmark(zntrack.Node):
         
     @staticmethod
     def benchmark_precompute(
-        ghost_atom_data: List[GhostAtomBenchmark] | Dict[str, GhostAtomBenchmark],
-        slab_extensivity_data: List[SlabExtensivityBenchmark] | Dict[str, SlabExtensivityBenchmark],
-        cache_dir: str = "app_cache/physicality_benchmark/",
+        S30L_data: List[S30LBenchmark] | Dict[str, S30LBenchmark],
+        LNCI16_data: List[LNCI16Benchmark] | Dict[str, LNCI16Benchmark],
+        cache_dir: str = "app_cache/supramolecular_complexes/",
         report: bool = False,
         normalise_to_model: Optional[str] = None,
     ):
@@ -79,57 +79,58 @@ class SupramolecularComplexBenchmark(zntrack.Node):
         
         from mlipx.dash_utils import process_data
         # list -> dict or dict -> dict
-        # OC157
-        ghost_atom_dict = process_data(
-            ghost_atom_data,
-            key_extractor=lambda node: node.name.split("_ghost-atom")[0],
+        # S30L
+        S30L_dict = process_data(
+            S30L_data,
+            key_extractor=lambda node: node.name.split("_S30LBenchmark")[0],
             value_extractor=lambda node: node
         )
-        # S24
-        slab_dict = process_data(
-            slab_extensivity_data,
-            key_extractor=lambda node: node.name.split("_slab-extensivity")[0],
+        # LNCI16
+        LNCI16_dict = process_data(
+            LNCI16_data,
+            key_extractor=lambda node: node.name.split("_LNCI16Benchmark")[0],
             value_extractor=lambda node: node
         )
         
         os.makedirs(cache_dir, exist_ok=True)
-        GhostAtomBenchmark.benchmark_precompute(
-            node_dict=ghost_atom_dict,
+        S30LBenchmark.benchmark_precompute(
+            node_dict=S30L_dict,
             normalise_to_model=normalise_to_model,
         )
-        SlabExtensivityBenchmark.benchmark_precompute(
-            node_dict=slab_dict,
+        LNCI16Benchmark.benchmark_precompute(
+            node_dict=LNCI16_dict,
             normalise_to_model=normalise_to_model,
         )
         
         
         # ------- Load precomputed data -------
-        # ghost atom
-        ghost_atom_results_df = pd.read_pickle(os.path.join(cache_dir, "ghost_atom_cache/results_df.pkl"))
-        # slab
-        slab_results_df = pd.read_pickle(os.path.join(cache_dir, "slab_extensivity_cache/results_df.pkl"))
-        
+        # S30L
+        S30L_mae_df = pd.read_pickle(os.path.join(cache_dir, "S30L_cache/mae_df.pkl"))
+        S30L_pred_df = pd.read_pickle(os.path.join(cache_dir, "S30L_cache/predictions_df.pkl"))
+        # LNCI16
+        LNCI16_mae_df = pd.read_pickle(os.path.join(cache_dir, "LNCI16_cache/mae_df.pkl"))
+        LNCI16_results_df = pd.read_pickle(os.path.join(cache_dir, "LNCI16_cache/results_df.pkl"))        
         
         
         from mlipx.data_utils import category_weighted_benchmark_score
 
         benchmark_score_df = category_weighted_benchmark_score(
-            ghost_atom=ghost_atom_results_df,
-            slab=slab_results_df,
+            S30L=S30L_mae_df,
+            LNCI16=LNCI16_mae_df,
             normalise_to_model=normalise_to_model,
-            weights={"ghost_atom": 1.0, "slab": 1.0},
+            weights={"S30L": 1.0, "LNCI16": 1.0},
         )
         
         benchmark_score_df.to_pickle(f"{cache_dir}/benchmark_score.pkl")
         
-        callback_fn = PhysicalityBenchmark.callback_fn_from_cache(
-            ghost_atom_results_df=ghost_atom_results_df,
-            slab_results_df=slab_results_df,
+        callback_fn = SupramolecularComplexBenchmark.callback_fn_from_cache(
+
+            
             normalise_to_model=normalise_to_model,
         )
         
         with open(f"{cache_dir}/callback_data.pkl", "wb") as f:
-            pickle.dump(PhysicalityBenchmark.callback_fn_from_cache, f)
+            pickle.dump(SupramolecularComplexBenchmark.callback_fn_from_cache, f)
         
         return 
     
@@ -149,17 +150,19 @@ class SupramolecularComplexBenchmark(zntrack.Node):
         from mlipx import GhostAtomBenchmark, SlabExtensivityBenchmark
 
         # ------- Load precomputed data -------
-        # ghost atom
-        ghost_atom_results_df = pd.read_pickle(os.path.join(cache_dir, "ghost_atom_cache/results_df.pkl"))
-        # slab
-        slab_results_df = pd.read_pickle(os.path.join(cache_dir, "slab_extensivity_cache/results_df.pkl"))
+        # S30L
+        S30L_mae_df = pd.read_pickle(os.path.join(cache_dir, "S30L_cache/mae_df.pkl"))
+        S30L_pred_df = pd.read_pickle(os.path.join(cache_dir, "S30L_cache/predictions_df.pkl"))
+        # LNCI16
+        LNCI16_mae_df = pd.read_pickle(os.path.join(cache_dir, "LNCI16_cache/mae_df.pkl"))
+        LNCI16_results_df = pd.read_pickle(os.path.join(cache_dir, "LNCI16_cache/results_df.pkl"))
         
-        # physicality benchmark
+        # supramolecular benchmark
         benchmark_score_df = pd.read_pickle(f"{cache_dir}/benchmark_score.pkl")
 
-        callback_fn = PhysicalityBenchmark.callback_fn_from_cache(
-            ghost_atom_results_df=ghost_atom_results_df,
-            slab_results_df=slab_results_df,
+        callback_fn = SupramolecularComplexBenchmark.callback_fn_from_cache(
+            S30L_mae_df=S30L_mae_df,
+            LNCI16_mae_df=LNCI16_mae_df,
             normalise_to_model=normalise_to_model,
         )
 
@@ -169,8 +172,8 @@ class SupramolecularComplexBenchmark(zntrack.Node):
             benchmark_score_df=benchmark_score_df,
             benchmark_title="Physicality Benchmark",
             apps_or_layouts_list=[
-                GhostAtomBenchmark.build_layout(ghost_atom_results_df),
-                SlabExtensivityBenchmark.build_layout(slab_results_df),
+                S30LBenchmark.build_layout(S30L_mae_df),
+                LNCI16Benchmark.build_layout(LNCI16_results_df),
             ],
             benchmark_table_info=f"Scores normalised to: {normalise_to_model}" if normalise_to_model else "",
             id="physicality-benchmark-score-table",
@@ -191,13 +194,13 @@ class SupramolecularComplexBenchmark(zntrack.Node):
     
     @staticmethod
     def callback_fn_from_cache(
-        ghost_atom_results_df,
-        slab_results_df,
+        S30L_mae_df,
+        LNCI16_mae_df,
         normalise_to_model=None,
     ):
-        from mlipx import GhostAtomBenchmark, SlabExtensivityBenchmark
+        from mlipx import S30LBenchmark, LNCI16Benchmark
 
         def callback_fn(app):
-            GhostAtomBenchmark.register_callbacks(app, ghost_atom_results_df)
-            SlabExtensivityBenchmark.register_callbacks(app, slab_results_df)
+            S30LBenchmark.register_callbacks(app, S30L_mae_df)
+            LNCI16Benchmark.register_callbacks(app, LNCI16_mae_df)
         return callback_fn

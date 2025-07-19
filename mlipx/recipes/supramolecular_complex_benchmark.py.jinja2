@@ -1,0 +1,35 @@
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% set build = true %}
+{% endif %}
+
+{% if build is not defined %}
+{% set build = false %}
+{% endif %}
+
+{% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+
+project = zntrack.Project()
+{% endif %}
+
+
+{% set standalone = false %}
+{% include "S30L.py.jinja2" %}
+{% include "LNCI16.py.jinja2" %}
+
+
+with project.group('supramolecular-complex-benchmark'):
+    supramolecular_complex_benchmark = mlipx.SupramolecularComplexBenchmark(
+        S30L_list=S30L_node_list,
+        LNCI16_list=LNCI16_node_list,
+    )
+
+
+{% if standalone %}
+project.build()
+{% elif build %}
+project.build()
+{% endif %}

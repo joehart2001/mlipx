@@ -1,0 +1,30 @@
+{% if standalone is not defined %}
+{% set standalone = true %}
+{% endif %}
+
+{% if standalone %}
+import mlipx
+import zntrack
+from models import MODELS
+
+project = zntrack.Project()
+{% endif %}
+
+
+LNCI16_node_dict = {}
+LNCI16_node_list = []
+
+for model_name, model in MODELS_subset.items():
+    with project.group(model_name):
+        LNCI16_benchmark = mlipx.LNCI16Benchmark(
+            model =model,
+            model_name=model_name,
+        )
+        LNCI16_node_dict[model_name] = LNCI16_benchmark
+        LNCI16_node_list.append(LNCI16_benchmark)
+
+    
+
+{% if standalone %}
+project.build()
+{% endif %}

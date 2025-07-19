@@ -1830,3 +1830,39 @@ def physicality_launch_dashboard(
     return PhysicalityBenchmark.launch_dashboard(
         ui=ui,
     )
+
+
+
+
+
+@app.command()
+def supramolecular_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    nodes = [
+        "*S30LBenchmark*",
+        "*LNCI16Benchmark*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+        
+    S30L_nodes = [node for node in all_nodes if "S30LBenchmark" in node]
+    LNCI16_nodes = [node for node in all_nodes if "LNCI16Benchmark" in node]
+    
+    S30L_node_objects = load_node_objects(nodes, glob, models, S30L_nodes, split_str="_S30LBenchmark")
+    LNCI16_node_objects = load_node_objects(nodes, glob, models, LNCI16_nodes, split_str="_LNCI16Benchmark")
+    
+    S30L_dict = load_nodes_model(S30L_node_objects, models, split_str="_S30LBenchmark")
+    LNCI16_dict = load_nodes_model(LNCI16_node_objects, models, split_str="_LNCI16Benchmark")
+    
+    from mlipx import SupramolecularComplexBenchmark
+    SupramolecularComplexBenchmark.benchmark_precompute(
+        S30L_data=S30L_dict,
+        LNCI16_data=LNCI16_dict,
+        normalise_to_model=normalise_to_model,
+    )
