@@ -68,6 +68,8 @@ def parse_inputs(datapath: str | None, material_ids: str | None, smiles: str | N
 
     return {
         "datapath": datapath.split(",") if datapath else None,
+        "md_datapath": datapath.split(",") if datapath else None,
+        "neb_datapath": datapath.split(",") if datapath else None,
         "material_ids": material_ids.split(",") if material_ids else None,
         "smiles": smiles.split(",") if smiles else None,
         "subsets": subsets.split(",") if subsets else None,
@@ -1025,8 +1027,6 @@ def create_benchmark_command(template_file: str, category_benchmark: bool = Fals
         handler = handle_recipeception if category_benchmark else handle_recipe
         # Collect all arguments for handler, using locals()
         kwargs = dict(
-            md_datapath=md_datapath,
-            neb_datapath=neb_datapath,
             steps=steps,
             temperature=temperature,
             temp_end=temp_end,
@@ -1062,6 +1062,8 @@ def create_benchmark_command(template_file: str, category_benchmark: bool = Fals
             initialize=initialize,
             repro=repro,
             datapath=datapath,
+            md_datapath=md_datapath,
+            neb_datapath=neb_datapath,
             material_ids=material_ids,
             smiles=smiles,
             **kwargs,
