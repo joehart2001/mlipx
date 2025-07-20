@@ -25,6 +25,13 @@ with project.group("initialize"):
         frames.append(mlipx.Smiles2Conformers(smiles=smiles, num_confs=1))
 {% endif %}
 
+{% if md_write_frames_every is not none %}
+write_frames_every = {{ md_write_frames_every }}
+{% else %}
+write_frames_every = 10
+{% endif %}
+
+
 
 {% if steps %}
 steps = {{ steps }}
