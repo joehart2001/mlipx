@@ -22,7 +22,7 @@ import flask
 from ase.io import read, write
 from copy import deepcopy
 import matplotlib.pyplot as plt
-from ase.neb import NEBTools
+from ase.mep import NEBTools
 
 from pathlib import Path
 
@@ -290,7 +290,7 @@ class NEB2(zntrack.Node):
             interpolated = NEB2.add_intermediary_images([initial, final], 1e-10, max_number=self.n_images-2)
             images = interpolated[1]
             for image in images:
-                image.set_calculator(deepcopy(calc))
+                image.calc = deepcopy(calc)
             
             # NEB calculations
             neb = NEB(images=images, climb=False)
