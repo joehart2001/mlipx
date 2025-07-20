@@ -334,6 +334,13 @@ class FullBenchmark(zntrack.Node):
                 (bulk_df, "Bulk Crystal"),
                 (mol_crystal_df, "Molecular Crystal"),
                 (molecular_df, "Molecular"),
+                (water_md_df, "Water MD"),
+                (nebs_df, "NEBs"),
+                (surface_df, "Surfaces"),
+                (supramolecular_df, "Supramolecular Complexes"),
+                (physicality_df, "Physicality"),
+                (mof_df, "MOF"),
+                
             )
             style_conditional = colour_table(combined_df, all_cols=True)
             return combined_df.to_dict("records"), style_conditional
