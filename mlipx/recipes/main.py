@@ -56,7 +56,14 @@ def render_models(models: str | None):
         render_template(CWD / "models.py.jinja2", "models.py", models=models.split(","))
 
 
-def parse_inputs(datapath: str | None, material_ids: str | None, smiles: str | None, subsets: str | None = None):
+def parse_inputs(
+    datapath: str | None,
+    md_datapath: str | None,
+    neb_datapath: str | None,
+    material_ids: str | None, 
+    smiles: str | None, 
+    subsets: str | None = None
+    ):
     """Parse and validate input arguments."""
     if not any([datapath, material_ids, smiles, ]):
         #raise ValueError(
