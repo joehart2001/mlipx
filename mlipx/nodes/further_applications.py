@@ -212,7 +212,7 @@ class FurtherApplications(zntrack.Node):
                 app,
                 groups=groups,
                 group_mae_tables=group_mae_tables,
-                properties_dict=properties_dict,
+                NVT_properties_dict=properties_dict,
             )
         return callback_fn
     
@@ -250,7 +250,7 @@ class FurtherApplications(zntrack.Node):
             app,
             groups=groups,
             group_mae_tables=group_mae_tables,
-            properties_dict=properties_dict
+            NVT_properties_dict=properties_dict
         )
         
 

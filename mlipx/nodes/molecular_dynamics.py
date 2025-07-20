@@ -493,7 +493,9 @@ class MolecularDynamics(zntrack.Node):
 
     @staticmethod
     def mae_plot_interactive(
-        node_dict,
+        node_dict_NVT,
+        node_dict_NPT: t.Optional[dict[str, NodeWithMolecularDynamics]] = None,
+        node_dict_stability: t.Optional[dict[str, NodeWithMolecularDynamics]] = None,        
         run_interactive: bool = True,
         ui: str | None = None,
         normalise_to_model: t.Optional[str] = None,
@@ -507,7 +509,7 @@ class MolecularDynamics(zntrack.Node):
         import json
 
         # Define which properties to compute
-        properties = [
+        NVT_properties = [
             'g_r_oo',
             'g_r_oh',
             'g_r_hh',
@@ -515,13 +517,17 @@ class MolecularDynamics(zntrack.Node):
             'vacf',
             'vdos',
         ]
+        NPT_properties = [
+            'density',
+        ]
         
         # ------------ ref data ------------
 
         from mlipx.benchmark_download_utils import get_benchmark_data
         ref_data_path = get_benchmark_data("water_MD_data.zip", force=True) / "water_MD_data"
 
-        properties_dict = {}
+        NVT_properties_dict = {}
+        NPT_properties_dict = {}
         # Add reference data for all RDFs
         with open(ref_data_path / "pbe-d3-330k-g-r_oo.json", "r") as f:
             pbe_D3_330K_oo = json.load(f)
@@ -536,9 +542,21 @@ class MolecularDynamics(zntrack.Node):
             vacf_ref_data = json.load(f)
         with open(ref_data_path / "vdos_300K_PBE_D3.json", "r") as f:
             vdos_ref_data = json.load(f)
+    
+        with open(ref_data_path / "water-NPT-PBE-330K-density.json", "r") as f:
+            NPT_pbe_330K_density = json.load(f)
             
-        # Insert VACF reference into properties_dict["vacf"] following RDF pattern
-        properties_dict["vacf"] = {
+            
+        NPT_properties_dict['density'] = {
+            'PBE_330K': {
+                'time': NPT_pbe_330K_density['x'],
+                'density': NPT_pbe_330K_density['y'],
+            }
+        }
+        
+            
+        # Insert VACF reference into NVT_properties_dict["vacf"] following RDF pattern
+        NVT_properties_dict["vacf"] = {
             "SPC/E_300K": {
                 "time": np.array(vacf_ref_data["x"]) / 10,
                 "vaf": vacf_ref_data["y"]
@@ -550,39 +568,39 @@ class MolecularDynamics(zntrack.Node):
         ref_vdos = np.array(vdos_ref_data["y"])
         ref_vdos /= np.trapz(ref_vdos, x=ref_freq) 
         ref_vdos = ref_vdos * 1000
-        properties_dict["vdos"] = {
+        NVT_properties_dict["vdos"] = {
             "PBE_D3_300K": {
                 "frequency": ref_freq.tolist(),
                 "vdos": ref_vdos.tolist()
             }
         }
 
-        properties_dict['g_r_oo'] = {
+        NVT_properties_dict['g_r_oo'] = {
             'PBE_D3_330K': {
                 'r': pbe_D3_330K_oo['x'],
                 'rdf': pbe_D3_330K_oo['y']
             }
         }
 
-        properties_dict['g_r_oh'] = {
+        NVT_properties_dict['g_r_oh'] = {
             'PBE_D3_330K': {
                 'r': pbe_D3_330K_oh['x'],
                 'rdf': pbe_D3_330K_oh['y']
             }
         }
-        properties_dict['g_r_hh'] = {
+        NVT_properties_dict['g_r_hh'] = {
             'PBE_D3_330K': {
                 'r': pbe_D3_330K_hh['x'],
                 'rdf': pbe_D3_330K_hh['y']
             }
         }
         # Merge in exp_300K data for g_r_oo without overwriting existing dict
-        properties_dict['g_r_oo']['EXP_300K'] = {
+        NVT_properties_dict['g_r_oo']['EXP_300K'] = {
             'r': exp_300K['x'],
             'rdf': exp_300K['y']
         }
         
-        properties_dict['msd_O'] = {
+        NVT_properties_dict['msd_O'] = {
             "PBE_TS_vdW(SC)_300K": {
                 "time": [], # to include
                 "msd": [],
@@ -592,14 +610,14 @@ class MolecularDynamics(zntrack.Node):
         
         groups = {
             "water_rdfs": {
-                "properties": ['g_r_oo', 'g_r_oh', 'g_r_hh'],
+                "NVT_properties": ['g_r_oo', 'g_r_oh', 'g_r_hh'],
                 "table_id": "rdf-mae-score-table",
                 "details_id": "rdf-table-details",
                 "last_clicked_id": "rdf-table-last-clicked",
                 "title": "RDFs: O-O, O-H, H-H",
             },
             "water_dynamic_properties": {
-                "properties": ['msd_O', 'vacf', 'vdos'],
+                "NVT_properties": ['msd_O', 'vacf', 'vdos'],
                 "table_id": "dynamic-score-table",
                 "details_id": "dynamic-table-details",
                 "last_clicked_id": "dynamic-table-last-clicked",
@@ -612,7 +630,7 @@ class MolecularDynamics(zntrack.Node):
         
 
         # Compute properties for each model
-        for model_name, node in tqdm.tqdm(node_dict.items(), desc="Computing properties for models"):
+        for model_name, node in tqdm.tqdm(node_dict_NVT.items(), desc="Computing NVT properties for models"):
             traj = node.traj
             #traj = traj[::10]
             traj = traj[1000:]
@@ -622,12 +640,12 @@ class MolecularDynamics(zntrack.Node):
             print("loaded trajectory for model:", model_name)
             o_indices = [atom.index for atom in traj[0] if atom.symbol == 'O']
             h_indices = [atom.index for atom in traj[0] if atom.symbol == 'H']
-            for prop in properties:
-                if prop not in properties_dict:
-                    properties_dict[prop] = {}
+            for prop in NVT_properties:
+                if prop not in NVT_properties_dict:
+                    NVT_properties_dict[prop] = {}
                 if prop == 'msd_O':
                     time, msd = MolecularDynamics.compute_msd(traj, timestep=1, atom_symbol='O')
-                    properties_dict[prop][model_name] = {
+                    NVT_properties_dict[prop][model_name] = {
                         "time": time.tolist(),
                         "msd": msd.tolist(),
                     }
@@ -643,7 +661,7 @@ class MolecularDynamics(zntrack.Node):
                         bins=100,
                         n_jobs=1,
                     )
-                    properties_dict[prop][model_name] = {
+                    NVT_properties_dict[prop][model_name] = {
                         "r": r,
                         "rdf": rdf,
                     }
@@ -657,7 +675,7 @@ class MolecularDynamics(zntrack.Node):
                         bins=100,
                         n_jobs=1,
                     )
-                    properties_dict[prop][model_name] = {
+                    NVT_properties_dict[prop][model_name] = {
                         "r": r,
                         "rdf": rdf,
                     }
@@ -671,7 +689,7 @@ class MolecularDynamics(zntrack.Node):
                         bins=100,
                         n_jobs=1,
                     )
-                    properties_dict[prop][model_name] = {
+                    NVT_properties_dict[prop][model_name] = {
                         "r": r,
                         "rdf": rdf,
                     }
@@ -680,7 +698,7 @@ class MolecularDynamics(zntrack.Node):
                     # Velocity autocorrelation function
                     vaf = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, atoms_filter=(('O',),))
                     #print(vaf)
-                    properties_dict[prop][model_name] = {
+                    NVT_properties_dict[prop][model_name] = {
                         "time": vaf[0],
                         "vaf": vaf[1],
                     }
@@ -689,13 +707,13 @@ class MolecularDynamics(zntrack.Node):
                     freq, vdos_values = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True, atoms_filter=(('O',),))
                     #vdos_values /= np.trapz(vdos_values, x=freq)  # Normalize VDOS
                     freq *= 1000  # Convert to desired units (ps^-1)
-                    properties_dict[prop][model_name] = {
+                    NVT_properties_dict[prop][model_name] = {
                         "frequency": freq.tolist(),
                         "vdos": vdos_values.tolist(),
                     }
 
         # Add msd_dict for later use
-        msd_dict = properties_dict["msd_O"]
+        msd_dict = NVT_properties_dict["msd_O"]
         
         # print(properties_dict.keys())
         # print(properties_dict['vdos']['mace_mp_0a_D3'].keys())
@@ -704,7 +722,7 @@ class MolecularDynamics(zntrack.Node):
 
 
         # --- Helper to compute MAE DataFrame for a property ---
-        def compute_mae_table(prop, properties_dict, model_names, normalise_to_model=None):
+        def compute_mae_table(prop, NVT_properties_dict, model_names, normalise_to_model=None):
             import numpy as np
             import pandas as pd
 
@@ -712,7 +730,7 @@ class MolecularDynamics(zntrack.Node):
             reference_keys = []
             valid_model_names = []
 
-            for k, data in properties_dict[prop].items():
+            for k, data in NVT_properties_dict[prop].items():
                 if k in model_names:
                     valid_model_names.append(k)
                 elif isinstance(data, dict) and any(key in data for key in ["rdf", "vaf", "vdos"]):
@@ -722,9 +740,9 @@ class MolecularDynamics(zntrack.Node):
 
             for model_name in valid_model_names:
                 row = {"Model": model_name}
-                model_data = properties_dict[prop].get(model_name)
+                model_data = NVT_properties_dict[prop].get(model_name)
                 for ref_key in reference_keys:
-                    ref_data = properties_dict[prop].get(ref_key)
+                    ref_data = NVT_properties_dict[prop].get(ref_key)
                     # Guard against missing or invalid data
                     if (
                         model_data is None or ref_data is None
@@ -794,15 +812,15 @@ class MolecularDynamics(zntrack.Node):
             columns = ["Model"] + [f"{prop} ({ref_key})" for ref_key in reference_keys]
             return pd.DataFrame(mae_data, columns=columns).round(3)
 
-        model_names = list(node_dict.keys())
+        model_names = list(node_dict_NVT.keys())
 
         # --- Helper to build group MAE tables ---
-        def build_group_mae_table(group, properties_dict, model_names, normalise_to_model=None):
+        def build_group_mae_table(group, NVT_properties_dict, model_names, normalise_to_model=None):
             import pandas as pd
             dfs = []
             scores = {}
-            for prop in group["properties"]:
-                df = compute_mae_table(prop, properties_dict, model_names)
+            for prop in group["NVT_properties"]:
+                df = compute_mae_table(prop, NVT_properties_dict, model_names)
                 if df.empty or len(df.columns) <= 1:
                     print(f"No data for property '{prop}' in group '{group['title']}'")
                     continue
@@ -830,22 +848,21 @@ class MolecularDynamics(zntrack.Node):
         # Build group MAE tables
         group_mae_tables = {}
         for group_name, group in groups.items():
-            group_mae_tables[group_name] = build_group_mae_table(group, properties_dict, model_names, normalise_to_model)
+            group_mae_tables[group_name] = build_group_mae_table(group, NVT_properties_dict, model_names, normalise_to_model)
 
         if ui is None and run_interactive:
-            return group_mae_tables, properties_dict, groups
+            return group_mae_tables, NVT_properties_dict, groups
 
         if not run_interactive:
-            return group_mae_tables, properties_dict, groups
+            return group_mae_tables, NVT_properties_dict, groups
         
-        # if not run_interactive:
-        #     return app, (group_mae_tables, properties_dict, groups)
+
         return run_app(app, ui=ui)
 
 
 
     @staticmethod
-    def register_callbacks(app, groups, group_mae_tables, properties_dict):
+    def register_callbacks(app, groups, group_mae_tables, NVT_properties_dict):
         from dash import Input, Output, State, no_update, html, dcc
         import plotly.graph_objs as go
         import numpy as np
@@ -894,7 +911,7 @@ class MolecularDynamics(zntrack.Node):
             table_id = group["table_id"]
             details_id = group["details_id"]
             last_clicked_id = group["last_clicked_id"]
-            props = group["properties"]
+            props = group["NVT_properties"]
             df = group_mae_tables[group_name]
 
             @app.callback(
@@ -936,9 +953,9 @@ class MolecularDynamics(zntrack.Node):
                 tabs = []
 
                 for _prop in props:
-                    if _prop not in properties_dict:
+                    if _prop not in NVT_properties_dict:
                         continue
-                    prop_data = properties_dict[_prop]
+                    prop_data = NVT_properties_dict[_prop]
 
                     # Only show plot if _prop matches prop (from header)
                     if match and _prop != prop:
@@ -992,7 +1009,9 @@ class MolecularDynamics(zntrack.Node):
     
     @staticmethod
     def benchmark_precompute(
-        node_dict,
+        node_dict_NVT,
+        node_dict_NPT=None,
+        node_dict_stability=None,
         cache_dir="app_cache/further_applications_benchmark/molecular_dynamics_cache",
         ui=None,
         run_interactive=False,
@@ -1000,8 +1019,10 @@ class MolecularDynamics(zntrack.Node):
     ):
         import os
         os.makedirs(cache_dir, exist_ok=True)
-        group_mae_tables, properties_dict, groups = MolecularDynamics.mae_plot_interactive(
-            node_dict=node_dict,
+        group_mae_tables, NVT_properties_dict, groups = MolecularDynamics.mae_plot_interactive(
+            node_dict_NVT=node_dict_NVT,
+            node_dict_NPT=node_dict_NPT,
+            node_dict_stability=node_dict_stability,
             run_interactive=run_interactive,
             ui=ui,
             normalise_to_model=normalise_to_model,
@@ -1010,11 +1031,11 @@ class MolecularDynamics(zntrack.Node):
         for group_name, group_df in group_mae_tables.items():
             group_df.to_pickle(f"{cache_dir}/mae_df_{group_name}.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
-            pickle.dump(properties_dict, f)
-        msd_dict = properties_dict["msd_O"]
+            pickle.dump(NVT_properties_dict, f)
+        msd_dict = NVT_properties_dict["msd_O"]
         with open(f"{cache_dir}/msd_data.pkl", "wb") as f:
             pickle.dump(msd_dict, f)
-        vdos_dict = properties_dict["vdos"]
+        vdos_dict = NVT_properties_dict["vdos"]
         with open(f"{cache_dir}/vdos_data.pkl", "wb") as f:
             pickle.dump(vdos_dict, f)
         # Save groups structure
@@ -1040,10 +1061,10 @@ class MolecularDynamics(zntrack.Node):
         for group_name in groups:
             group_mae_tables[group_name] = pd.read_pickle(f"{cache_dir}/mae_df_{group_name}.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "rb") as f:
-            properties_dict = pickle.load(f)
+            NVT_properties_dict = pickle.load(f)
         with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
-        properties_dict["msd_O"] = msd_dict
+        NVT_properties_dict["msd_O"] = msd_dict
         #properties_dict["vdos"] = vdos_dict
 
         app = dash.Dash(__name__)
@@ -1052,7 +1073,7 @@ class MolecularDynamics(zntrack.Node):
             app,
             groups=groups,
             group_mae_tables=group_mae_tables,
-            properties_dict=properties_dict
+            NVT_properties_dict=NVT_properties_dict
         )
         return run_app(app, ui=ui)
     
