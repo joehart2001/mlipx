@@ -116,6 +116,7 @@ for model_name, model in MODELS.items():
                 modifiers=[m for m in [t_ramp, p_ramp] if m is not None],
                 steps=steps,
                 print_energy_every=1000,
+                write_frames_every=write_frames_every,
                 resume_trajectory_path=resume_trajectory_path,
                 ensemble="{{ ensemble }}",
             )
