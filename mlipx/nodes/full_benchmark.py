@@ -37,7 +37,7 @@ from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, MolecularBenc
 from mlipx import NEBFutherApplications, SurfaceBenchmark, SupramolecularComplexBenchmark, PhysicalityBenchmark, MOFBenchmark
 from mlipx import OC157Benchmark, S24Benchmark, S30LBenchmark, LNCI16Benchmark, ProteinLigandBenchmark
 from mlipx import PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, HomonuclearDiatomics
-from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, NEB2, Wiggle150, SlabExtensivityBenchmark
+from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, NEB2, Wiggle150, SlabExtensivityBenchmark, QMOFBenchmark
 
 
 import os
