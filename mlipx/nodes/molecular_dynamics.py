@@ -228,7 +228,7 @@ class MolecularDynamics(zntrack.Node):
         if self.resume_trajectory_path and Path(self.resume_trajectory_path).exists():
             # Resume from last frame
             atoms = read(self.resume_trajectory_path, index=-1)
-            if self.wrap_atoms:
+            if self.wrap_atoms is True:
                 print("Wrapping atoms in resume trajectory.")
                 atoms.wrap()
             atoms.calc = self.model.get_calculator()
@@ -279,7 +279,7 @@ class MolecularDynamics(zntrack.Node):
                 atoms = self.data[self.data_id]
             elif self.data_path:
                 atoms = read(self.data_path, self.data_id)
-            if self.wrap_atoms:
+            if self.wrap_atoms is True:
                 print("Wrapping atoms in initial configuration.")
                 atoms.wrap()
             atoms.calc = self.model.get_calculator()
