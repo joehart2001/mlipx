@@ -51,6 +51,12 @@ pressure = {{ pressure }}
 pressure = 1.0
 {% endif %}
 
+{% if wrap_atoms == True %}
+wrap_atoms = True
+print("wrap atoms: True")
+{% else %}
+wrap_atoms = False
+{% endif %}
 
 {% if resume_trajectory_path %}
 resume_trajectory_path = "{{ resume_trajectory_path }}"
@@ -119,6 +125,7 @@ for model_name, model in MODELS.items():
                 write_frames_every=write_frames_every,
                 resume_trajectory_path=resume_trajectory_path,
                 ensemble="{{ ensemble }}",
+                wrap_atoms=wrap_atoms,
             )
             if len(frames) == 1:
                 MD_dict[model_name] = md

@@ -191,6 +191,7 @@ class MolecularDynamics(zntrack.Node):
     external_save_path: pathlib.Path = zntrack.params(None)
     resume_trajectory_path: pathlib.Path = zntrack.params(None)
     ensemble: str = zntrack.params("NVT")  # Options: "NVT", "NPT"
+    wrap_atoms: bool = zntrack.params(False)
 
     observer_metrics: dict = zntrack.metrics()
     plots: pd.DataFrame = zntrack.plots(y=["energy", "fmax"], autosave=True)
@@ -227,6 +228,9 @@ class MolecularDynamics(zntrack.Node):
         if self.resume_trajectory_path and Path(self.resume_trajectory_path).exists():
             # Resume from last frame
             atoms = read(self.resume_trajectory_path, index=-1)
+            if self.wrap_atoms:
+                print("Wrapping atoms in resume trajectory.")
+                atoms.wrap()
             atoms.calc = self.model.get_calculator()
 
             # Load full trajectory to count previous frames
@@ -275,6 +279,9 @@ class MolecularDynamics(zntrack.Node):
                 atoms = self.data[self.data_id]
             elif self.data_path:
                 atoms = read(self.data_path, self.data_id)
+            if self.wrap_atoms:
+                print("Wrapping atoms in initial configuration.")
+                atoms.wrap()
             atoms.calc = self.model.get_calculator()
             start_idx = 0
             traj_mode = 'w'
