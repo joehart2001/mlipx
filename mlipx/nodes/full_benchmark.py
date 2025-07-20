@@ -137,7 +137,7 @@ class FullBenchmark(zntrack.Node):
         cache_dir = Path("app_cache/")
         cache_dir.mkdir(parents=True, exist_ok=True)
         
-        n_categories = 7
+        n_categories = 9
 
         print(f"Precomputing Bulk Crystal Benchmark (1/{n_categories})...")
         BulkCrystalBenchmark.benchmark_precompute(

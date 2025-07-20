@@ -18,6 +18,7 @@ from mlipx.benchmark_download_utils import get_benchmark_data
 from mlipx.phonons_utils import download_alex_parallel
 from mlipx.benchmark_download_utils import BENCHMARK_DATA_DIR
 from ase.data import chemical_symbols
+import os
 
 project = zntrack.Project()
 {% endif %}
@@ -42,6 +43,12 @@ with project.group("full-benchmark"):
         mol_crystal_benchmark=mol_benchmark,
         mol_benchmark=mol_benchmark,
         further_apps_benchmark=further_apps_benchmark,
+        neb_further_apps_benchmark=neb_further_apps_benchmark,
+        surface_benchmark=surface_benchmark,
+        supramolecular_complex_benchmark=supramolecular_complex_benchmark,
+        physicality_benchmark=physicality_benchmark,
+        mof_benchmark=mof_benchmark,
+
         
     )
 
