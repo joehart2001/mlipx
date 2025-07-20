@@ -81,6 +81,8 @@ def handle_recipe(
     initialize: bool,
     repro: bool,
     datapath: str | None,
+    md_datapath: str | None,
+    neb_datapath: str | None,
     material_ids: str | None,
     smiles: str | None,
     **additional_context,
@@ -89,7 +91,7 @@ def handle_recipe(
     if initialize:
         initialize_directory()
 
-    inputs = parse_inputs(datapath, material_ids, smiles)
+    inputs = parse_inputs(datapath, md_datapath, neb_datapath, material_ids, smiles)
     render_template(template_name, "main.py", **inputs, **additional_context)
     repro_if_requested(repro)
     
@@ -99,6 +101,8 @@ def handle_recipeception(
     initialize: bool,
     repro: bool,
     datapath: str | None,
+    md_datapath: str | None,
+    neb_datapath: str | None,
     material_ids: str | None,
     smiles: str | None,
     **additional_context,
@@ -109,7 +113,8 @@ def handle_recipeception(
     if initialize:
         initialize_directory()
 
-    inputs = parse_inputs(datapath, material_ids, smiles)
+    inputs = parse_inputs(datapath, md_datapath, neb_datapath, material_ids, smiles)
+    
     #inputs.update(additional_context)
     render_templateception(template_name, "main.py", **inputs, **additional_context)
     repro_if_requested(repro)
