@@ -75,8 +75,8 @@ def parse_inputs(
 
     return {
         "datapath": datapath.split(",") if datapath else None,
-        "md_datapath": datapath.split(",") if datapath else None,
-        "neb_datapath": datapath.split(",") if datapath else None,
+        "md_datapath": md_datapath.split(",") if md_datapath else None,
+        "neb_datapath": neb_datapath.split(",") if neb_datapath else None,
         "material_ids": material_ids.split(",") if material_ids else None,
         "smiles": smiles.split(",") if smiles else None,
         "subsets": subsets.split(",") if subsets else None,
