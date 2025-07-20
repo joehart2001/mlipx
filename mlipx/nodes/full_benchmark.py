@@ -37,7 +37,7 @@ from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, MolecularBenc
 from mlipx import NEBFutherApplications, SurfaceBenchmark, SupramolecularComplexBenchmark, PhysicalityBenchmark, MOFBenchmark
 from mlipx import OC157Benchmark, S24Benchmark, S30LBenchmark, LNCI16Benchmark, ProteinLigandBenchmark
 from mlipx import PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, HomonuclearDiatomics
-from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, NEB2, Wiggle150
+from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, NEB2, Wiggle150, SlabExtensivityBenchmark
 
 
 import os
@@ -128,7 +128,7 @@ class FullBenchmark(zntrack.Node):
         LNCI16_data: List[LNCI16Benchmark] | Dict[str, LNCI16Benchmark],
         protein_ligand_data: List[mlipx.ProteinLigandBenchmark] | Dict[str, mlipx.ProteinLigandBenchmark],
         ghost_atom_data: List[mlipx.GhostAtomBenchmark] | Dict[str, mlipx.GhostAtomBenchmark],
-        slab_extensivity_data: List[mlipx.SlabBenchmark] | Dict[str, mlipx.SlabBenchmark],
+        slab_extensivity_data: List[SlabExtensivityBenchmark] | Dict[str, SlabExtensivityBenchmark],
         QMOF_data: List[QMOFBenchmark] | Dict[str, QMOFBenchmark],
         report: bool = False,
         normalise_to_model: Optional[str] = None,
