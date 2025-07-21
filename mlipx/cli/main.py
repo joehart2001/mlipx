@@ -653,6 +653,64 @@ def oc157_compare(
     
 
 @app.command()
+def oc157_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+
+    ):
+    
+    nodes = [
+        "*OC157Benchmark*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+
+    
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_oc157")
+    
+    benchmark_node_dict = {}
+
+    for name, node in node_objects.items():
+        model = name.split("_oc157")[0]
+        benchmark_node_dict[model] = node
+        
+    if models:
+        # filter to selected models
+        node_objects = {
+            m: node for m, node in node_objects.items() if m in models
+        }
+
+    from mlipx import OC157Benchmark
+    OC157Benchmark.benchmark_precompute(
+        node_dict=benchmark_node_dict,
+        normalise_to_model=normalise_to_model,
+    )
+    
+    
+@app.command()
+def oc157_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import OC157Benchmark
+    OC157Benchmark.launch_dashboard(
+        ui=ui,
+    )    
+    
+
+
+
+@app.command()
 def cohesive_compare(
     nodes: Annotated[list[str], typer.Argument(help="Path(s) to cohesive nodes")],
     glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
@@ -1091,6 +1149,18 @@ def full_benchmark_precompute(
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
     ):
     
+        # add: 
+                # OC157_data: List[OC157Benchmark] | Dict[str, OC157Benchmark],
+                # S24_data: List[S24Benchmark] | Dict[str, S24Benchmark],
+                # S30L_data: List[S30LBenchmark] | Dict[str, S30LBenchmark],
+                # LNCI16_data: List[LNCI16Benchmark] | Dict[str, LNCI16Benchmark],
+                # protein_ligand_data: List[mlipx.ProteinLigandBenchmark] | Dict[str, mlipx.ProteinLigandBenchmark],
+                # ghost_atom_data: List[mlipx.GhostAtomBenchmark] | Dict[str, mlipx.GhostAtomBenchmark],
+                # slab_extensivity_data: List[SlabExtensivityBenchmark] | Dict[str, SlabExtensivityBenchmark],
+                # QMOF_data: List[QMOFBenchmark] | Dict[str, QMOFBenchmark],
+                
+        
+        
     nodes = [
         "*Elasticity*",
         "*Phonon*",
@@ -1101,7 +1171,16 @@ def full_benchmark_precompute(
         "*HomonuclearDiatomics*",
         "*Wiggle150*",
         "*MolecularDynamics*",
-        "*NEB2*"
+        "*NEB2*",
+        "*OC157Benchmark*",
+        "*S24Benchmark*",
+        "*S30LBenchmark*",
+        "*LNCI16Benchmark*",
+        "*ProteinLigandBenchmark*",
+        "*GhostAtomBenchmark*",
+        "*SlabExtensivityBenchmark*",
+        "*QMOFBenchmark*",
+        
     ]
     glob = True
     
@@ -1156,6 +1235,50 @@ def full_benchmark_precompute(
         models,
         all_nodes,
     )
+    
+    OC157_dict, S24_dict, S30L_dict = get_category_node_dicts_general(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        node_types=[
+            ("OC157", "OC157Benchmark", "_oc157"),
+            ("S24", "S24Benchmark", "_S24Benchmark"),
+            ("S30L", "S30LBenchmark", "_S30LBenchmark"),
+        ]
+    )
+    
+    LNCI16_dict, ProteinLigand_dict = get_category_node_dicts_general(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        node_types=[
+            ("LNCI16", "LNCI16Benchmark", "_LNCI16Benchmark"),
+            ("ProteinLigand", "ProteinLigandBenchmark", "_ProteinLigandBenchmark"),
+        ]
+    )
+    
+    GhostAtom_dict, SlabExtensivity_dict = get_category_node_dicts_general(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        node_types=[
+            ("GhostAtom", "GhostAtomBenchmark", "_GhostAtomBenchmark"),
+            ("SlabExtensivity", "SlabExtensivityBenchmark", "_SlabExtensivityBenchmark"),
+        ]
+    )
+    
+    qmof_dict = get_category_node_dicts_general(
+        nodes,
+        glob,
+        models,
+        all_nodes,
+        node_types=[
+            ("QMOF", "QMOFBenchmark", "_QMOFBenchmark"),
+        ]
+    )
 
     
     
@@ -1180,6 +1303,14 @@ def full_benchmark_precompute(
         Wiggle150_data=wig150_dict,
         MD_data=MD_dict,
         NEB_data=neb_dict,
+        OC157_data=OC157_dict,
+        S24_data=S24_dict,
+        S30L_data=S30L_dict,
+        LNCI16_data=LNCI16_dict,
+        protein_ligand_data=ProteinLigand_dict,
+        ghost_atom_data=GhostAtom_dict,
+        slab_extensivity_data=SlabExtensivity_dict,
+        QMOF_data=qmof_dict,
         normalise_to_model=normalise_to_model,
     )
     
@@ -2034,3 +2165,37 @@ def mof_launch_dashboard(
     
     
     
+    
+    
+def get_category_node_dicts_general(
+    nodes: list[str],
+    glob: bool,
+    models: list[str] | None,
+    all_nodes: list[str],
+    node_types: list[tuple[str, str, str]],  # list of (name, filter_str, split_str)
+) -> dict[str, dict[str, zntrack.Node]]:
+    """
+    Returns a dictionary mapping benchmark names to dictionaries of model-node mappings.
+
+    Parameters:
+        nodes: Selected nodes to load (exact names or patterns depending on `glob`)
+        glob: Whether to interpret `nodes` as glob patterns
+        models: List of model names (or None to infer from nodes)
+        all_nodes: List of all available node names
+        node_types: List of tuples (name, filter_str, split_str)
+                    - name: key in output dictionary
+                    - filter_str: substring to filter relevant nodes in `all_nodes`
+                    - split_str: used for extracting model names from node names
+
+    Returns:
+        A dictionary: {name: {model: node_object, ...}, ...}
+    """
+    result = {}
+
+    for name, filter_str, split_str in node_types:
+        matching_nodes = [node for node in all_nodes if filter_str in node]
+        node_objects = load_node_objects(nodes, glob, models, matching_nodes, split_str=split_str)
+        node_dict = load_nodes_model(node_objects, models, split_str=split_str)
+        result[name] = node_dict
+
+    return result

@@ -156,6 +156,8 @@ class MolecularBenchmark(zntrack.Node):
         callback_fn = MolecularBenchmark.callback_fn_from_cache(
             mae_df_GMTKN55=mae_df_GMTKN55,
             all_model_dicts_GMTKN55=GMTKN55_data,
+            wig150_mae_df=wig150_mae_df,
+            wig150_rel_energy_df=wig150_rel_energy_df,
             results_dict_HD=results_dict,
             normalise_to_model=normalise_to_model,
         )

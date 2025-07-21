@@ -567,16 +567,16 @@ class MolecularDynamics(zntrack.Node):
         with open(ref_data_path / "vdos_300K_PBE_D3.json", "r") as f:
             vdos_ref_data = json.load(f)
     
-        with open(ref_data_path / "water-NPT-PBE-330K-density.json", "r") as f:
-            NPT_pbe_330K_density = json.load(f)
+        # with open(ref_data_path / "water-NPT-PBE-330K-density.json", "r") as f:
+        #     NPT_pbe_330K_density = json.load(f)
             
             
-        NPT_properties_dict['density'] = {
-            'PBE_330K': {
-                'time': NPT_pbe_330K_density['x'],
-                'density': NPT_pbe_330K_density['y'],
-            }
-        }
+        # NPT_properties_dict['density'] = {
+        #     'PBE_330K': {
+        #         'time': NPT_pbe_330K_density['x'],
+        #         'density': NPT_pbe_330K_density['y'],
+        #     }
+        # }
         
             
         # Insert VACF reference into NVT_properties_dict["vacf"] following RDF pattern
@@ -657,7 +657,7 @@ class MolecularDynamics(zntrack.Node):
         for model_name, node in tqdm.tqdm(node_dict_NVT.items(), desc="Computing NVT properties for models"):
             traj = node.traj
             #traj = traj[::10]
-            traj = traj[1000:]
+            #traj = traj[1000:]
             
             print(f"Processing model: {model_name} with {len(traj)} frames")
             velocities = [atoms.get_velocities() for atoms in traj]

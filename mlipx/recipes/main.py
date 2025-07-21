@@ -1092,6 +1092,10 @@ BENCHMARKS = {
     },
     
     "neb": {"template": "neb.py.jinja2"},
+    "further-applications-neb": {
+        "template": "further_applications_NEB.py.jinja2",
+        "category_benchmark": True,
+    },
     
     "phonons": {"template": "phonons.py.jinja2"},
     "phonons-all": {"template": "phonons_all.py.jinja2"},
@@ -1137,10 +1141,7 @@ BENCHMARKS = {
     
     "S30L": {"template": "S30L.py.jinja2"},
     "LNCI16": {"template": "LNCI16.py.jinja2"},
-    "protein-benchmark": {
-        "template": "PLA15_PLF547_protein_ligand.py.jinja2",
-        "category_benchmark": True,
-    },
+    "protein-benchmark": {"template": "PLA15_PLF547_protein_ligand.py.jinja2"},
     "supramolecular_complex_benchmark": {
         "template": "supramolecular_complex_benchmark.py.jinja2",
         "category_benchmark": True,

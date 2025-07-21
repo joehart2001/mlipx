@@ -34,7 +34,7 @@ from typing import List, Dict, Any, Optional
 
 import mlipx
 from mlipx import MolecularCrystalBenchmark, BulkCrystalBenchmark, MolecularBenchmark, FurtherApplications
-from mlipx import NEBFutherApplications, SurfaceBenchmark, SupramolecularComplexBenchmark, PhysicalityBenchmark, MOFBenchmark
+from mlipx import NEBFurtherApplications, SurfaceBenchmark, SupramolecularComplexBenchmark, PhysicalityBenchmark, MOFBenchmark
 from mlipx import OC157Benchmark, S24Benchmark, S30LBenchmark, LNCI16Benchmark, ProteinLigandBenchmark
 from mlipx import PhononDispersion, Elasticity, LatticeConstant, X23Benchmark, DMCICE13Benchmark, GMTKN55Benchmark, HomonuclearDiatomics
 from mlipx import PhononAllRef, PhononAllBatch, MolecularDynamics, NEB2, Wiggle150, SlabExtensivityBenchmark, QMOFBenchmark
@@ -87,7 +87,7 @@ class FullBenchmark(zntrack.Node):
     mol_crystal_benchmark: List[MolecularCrystalBenchmark] = zntrack.deps()
     mol_benchmark: List[MolecularBenchmark] = zntrack.deps()
     further_apps_benchmark: List[FurtherApplications] = zntrack.deps()
-    neb_further_apps_benchmark: List[NEBFutherApplications] = zntrack.deps()
+    neb_further_apps_benchmark: List[NEBFurtherApplications] = zntrack.deps()
     surface_benchmark: List[SurfaceBenchmark] = zntrack.deps()
     supramolecular_complex_benchmark: List[SupramolecularComplexBenchmark] = zntrack.deps()
     physicality_benchmark: List[PhysicalityBenchmark] = zntrack.deps()
@@ -179,7 +179,7 @@ class FullBenchmark(zntrack.Node):
         )
         
         print(f"Precomputing NEB Benchmark (5/{n_categories})...")
-        NEBFutherApplications.benchmark_precompute(
+        NEBFurtherApplications.benchmark_precompute(
             neb_data=NEB_data,
             cache_dir=str(cache_dir / "nebs_further_apps"),
             report=report,

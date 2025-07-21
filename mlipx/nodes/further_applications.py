@@ -88,7 +88,7 @@ class FurtherApplications(zntrack.Node):
         
         os.makedirs(cache_dir, exist_ok=True)
         MolecularDynamics.benchmark_precompute(
-            node_dict=MD_dict,
+            node_dict_NVT=MD_dict,
             ui=ui,
             run_interactive=False,
             normalise_to_model=normalise_to_model,

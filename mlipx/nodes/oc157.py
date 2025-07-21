@@ -49,8 +49,7 @@ import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from mlipx.benchmark_download_utils import get_benchmark_data
-
-
+from ase.io import write
 
 
 # OC157 benchmark node
@@ -79,6 +78,7 @@ class OC157Benchmark(zntrack.Node):
     ref_rel_energy_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "oc157_ref_rel_energies.csv")
     oc_mae_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "oc157_mae.json")
     oc_ranks_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "oc157_rank_accuracy.json")
+    #oc_triplet_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "oc157_triplets.xyz")
     
 
     def run(self):
@@ -125,6 +125,7 @@ class OC157Benchmark(zntrack.Node):
         dft_E = []
         system_ids = []
         system_compositions = []
+        nwd = self.nwd
 
         for idx in tqdm(range(1, n_systems + 1), desc="Loading OC157 systems"):
             sys_id = f"{idx:03d}"
@@ -155,7 +156,9 @@ class OC157Benchmark(zntrack.Node):
 
         dft_E = np.array(dft_E)
         
-        for trio in tqdm(triplets, desc="Evaluating model on triplets"):
+        
+        
+        for idx, trio in enumerate(tqdm(triplets, desc="Evaluating model on triplets")):
             Eref = dft_E[:3]
             dft_E = dft_E[3:]
             rel_dft.append(relative_energies(*Eref))
@@ -164,6 +167,18 @@ class OC157Benchmark(zntrack.Node):
             pred_E = evaluate_model(trio)
             rel_pred.append(relative_energies(*pred_E))
             rank_pred.append(int(np.argmin(pred_E)))
+            
+            for atom in trio:
+                atom.info['system_id'] = system_ids[idx]
+                atom.info['composition'] = system_compositions[idx]
+            
+            # Save trio to an XYZ file for visualization            
+            output_dir = Path(nwd) / "triplet_structures"
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            write((output_dir / f'{system_ids[idx]}.xyz').as_posix(), trio)
+            
+            
 
         rel_dft = np.array(rel_dft)
         rel_pred = np.array(rel_pred)
@@ -194,6 +209,9 @@ class OC157Benchmark(zntrack.Node):
             json.dump(mae, f)
         with open(self.oc_ranks_output, "w") as f:
             json.dump(rank_acc, f)
+            
+            
+
 
     @property
     def get_mae(self):
@@ -213,7 +231,12 @@ class OC157Benchmark(zntrack.Node):
     def get_ref(self):
         return pd.read_csv(self.ref_rel_energy_output)
     
-    
+    @property
+    def get_triplet_dir(self):
+        triplet_dir = Path(self.nwd) / "triplet_structures"
+        if not triplet_dir.exists():
+            raise FileNotFoundError(f"Triplet structures directory {triplet_dir} does not exist.")
+        return triplet_dir
 
     
     
@@ -224,6 +247,18 @@ class OC157Benchmark(zntrack.Node):
         cache_dir: str = "app_cache/surface_benchmark/oc157_cache/",
         normalise_to_model: t.Optional[str] = None,
     ):
+        
+        # save triplet structures for visualization
+        triplet_dir = node_dict[list(node_dict.keys())[0]].get_triplet_dir
+        triplet_files = sorted(triplet_dir.glob("*.xyz"))
+        
+        save_dir = os.path.abspath(f"assets/OC157/")
+        os.makedirs(save_dir, exist_ok=True)
+        for triplet_file in triplet_files:
+            trio = read(triplet_file, index=":")
+            write(os.path.join(save_dir, triplet_file.name), trio)
+            
+        
         from scipy.stats import pearsonr
 
         mae_dict = {}
@@ -301,7 +336,10 @@ class OC157Benchmark(zntrack.Node):
             )
 
         if app is None:
-            app = dash.Dash(__name__)
+            assets_dir = os.path.abspath("assets")
+            print("Serving assets from:", assets_dir)
+            app = dash.Dash(__name__, assets_folder=assets_dir)
+
             app.layout = layout
             callback_fn(app)
             return run_app(app, ui=ui)
@@ -317,9 +355,6 @@ class OC157Benchmark(zntrack.Node):
                 id="oc157-mae-table",
                 benchmark_info="Benchmark info: Performance in predicting relative energies between 3 structures for 157 molecule-surface combinations.",
                 title="OC157 Dataset: MAE and Ranking Accuracy",
-                extra_components=[
-                    html.Div(id="oc157-model-plot"),
-                ],
                 tooltip_header={
                     "Model": "Name of the model",
                     "MAE (meV)": "Mean Absolute Error (meV)",
@@ -328,7 +363,26 @@ class OC157Benchmark(zntrack.Node):
                     "Pearson r": "Pearson correlation coefficient",
                     "Score": "Avg of MAE and 1 - Ranking Accuracy (lower is better)",
                     "Rank": "Model rank based on score (lower is better)"
-                }
+                },
+                extra_components=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                "Click on the points to see the structure!",
+                                style={
+                                    "color": "red",
+                                    "fontWeight": "bold",
+                                    "marginBottom": "10px"
+                                }
+                            ),
+                            dcc.Graph(id="oc157-plot")
+                        ],
+                        id="oc157-plot-container",
+                        style={"display": "none"},
+                    ),
+                    html.Div(id="weas-viewer-oc157", style={'marginTop': '20px'}),
+                ]
+                
             )
         ])
         
@@ -345,13 +399,15 @@ class OC157Benchmark(zntrack.Node):
         rel_df_all, 
         dft_df
     ):
+        from mlipx.dash_utils import weas_viewer_callback
         from sklearn.metrics import mean_absolute_error, mean_squared_error
         from scipy.stats import pearsonr
         model_df_dict = {model: group for model, group in rel_df_all.groupby("Model")}
         #model_df_dict = {df["Model"].iloc[0]: df for df in rel_df_all}
 
         @app.callback(
-            Output("oc157-model-plot", "children"),
+            Output("oc157-plot", "figure"),
+            Output("oc157-plot-container", "style"),
             Input("oc157-mae-table", "active_cell"),
             State("oc157-mae-table", "data"),
         )
@@ -401,7 +457,11 @@ class OC157Benchmark(zntrack.Node):
                         for label, etype, dft, pred in zip(hover_labels, energy_labels, dft_values[:n_points], pred_values)
                     ],
                     hoverinfo="text",
-                    name=clicked_model
+                    name=clicked_model,
+                    customdata = [
+                        {"system": label.split(":")[0], "frame": i % 3}
+                        for i, label in enumerate(hover_labels)
+                    ]
                 )
             )
             fig.add_trace(go.Scatter(
@@ -429,4 +489,30 @@ class OC157Benchmark(zntrack.Node):
                 ]
             )
 
-            return dcc.Graph(figure=fig)
+            return fig, {"display": "block"} #dcc.Graph(figure=fig)
+        
+        
+        
+        @app.callback(
+            Output("weas-viewer-oc157", "children"),
+            Output("weas-viewer-oc157", "style"),
+            Input("oc157-plot", "clickData"),
+        )
+        def update_weas_viewer(clickData):
+            if not clickData:
+                raise PreventUpdate
+            
+            
+            custom = clickData["points"][0]["customdata"]
+            system = custom["system"]
+            frame = custom["frame"]
+
+            xyz_path = f"assets/OC157/{int(system):03d}.xyz" # :03d for zero-padded system ID (e.g. 1, 67, 157 -> 001, 067, 157)
+            print(f"Loading XYZ file for system {system}: {xyz_path}")
+            
+            return weas_viewer_callback(
+                {"points": [{"frame": frame}]},
+                xyz_path,
+                mode="trajectory",
+                index_key="x",
+            )

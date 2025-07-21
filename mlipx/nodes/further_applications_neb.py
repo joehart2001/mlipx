@@ -49,7 +49,7 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 
 
-class NEBFutherApplications(zntrack.Node):
+class NEBFurtherApplications(zntrack.Node):
     """ Node to combine all molecular benchmarks
     """
     # inputs
@@ -103,7 +103,7 @@ class NEBFutherApplications(zntrack.Node):
             #print(mae_df)
 
 
-        benchmark_score_df = NEBFutherApplications.benchmark_score(
+        benchmark_score_df = NEBFurtherApplications.benchmark_score(
             all_group_data=all_group_data,
             normalise_to_model=normalise_to_model,
         ).round(3).sort_values(by='Avg MAE \u2193').reset_index(drop=True)
@@ -111,12 +111,12 @@ class NEBFutherApplications(zntrack.Node):
         
         benchmark_score_df.to_pickle(f"{cache_dir}/benchmark_score.pkl")
         
-        callback_fn = NEBFutherApplications.callback_fn_from_cache(
+        callback_fn = NEBFurtherApplications.callback_fn_from_cache(
             all_group_data=all_group_data,
         )
         
         with open(f"{cache_dir}/callback_data.pkl", "wb") as f:
-            pickle.dump(NEBFutherApplications.callback_fn_from_cache, f)
+            pickle.dump(NEBFurtherApplications.callback_fn_from_cache, f)
 
         return
 
@@ -153,7 +153,7 @@ class NEBFutherApplications(zntrack.Node):
         benchmark_score_df = pd.read_pickle(f"{cache_dir}/benchmark_score.pkl")
 
 
-        callback_fn = NEBFutherApplications.callback_fn_from_cache(
+        callback_fn = NEBFurtherApplications.callback_fn_from_cache(
             all_group_data=all_group_data,
         )
 
@@ -161,7 +161,7 @@ class NEBFutherApplications(zntrack.Node):
         app = dash.Dash(__name__, assets_folder=assets_dir)
         
 
-        layout = NEBFutherApplications.build_layout(
+        layout = NEBFurtherApplications.build_layout(
             benchmark_score_df=benchmark_score_df,
             apps_or_layouts_list=[
                 NEB2.build_layout(all_group_data),

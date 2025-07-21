@@ -50,7 +50,7 @@ from .nodes.phonon_all_meta import PhononAllBatchMeta
 from .nodes.oc157 import OC157Benchmark
 from .nodes.wiggle150 import Wiggle150
 from .nodes.further_applications import FurtherApplications
-from .nodes.further_applications_neb import NEBFutherApplications
+from .nodes.further_applications_neb import NEBFurtherApplications
 from .nodes.surface_benchmark import SurfaceBenchmark
 from .nodes.S24_benchmark import S24Benchmark
 from .nodes.ghost_atom_benchmark import GhostAtomBenchmark
@@ -122,7 +122,7 @@ __all__ = [
     "PhononAllBatchMeta",
     "Wiggle150",
     "FurtherApplications",
-    "NEBFutherApplications",
+    "NEBFurtherApplications",
     "NPTConfig",
     "NPT_MTK_Config",
     "S24Benchmark",
