@@ -1226,7 +1226,7 @@ def full_benchmark_precompute(
         glob,
         models,
         all_nodes,
-        split_str_MD="_config-0_MolecularDynamicss",
+        split_str_MD="_H2O-64_NVT_330K",
     )
     
     neb_dict = get_neb_further_apps_dict(
@@ -1235,20 +1235,20 @@ def full_benchmark_precompute(
         models,
         all_nodes,
     )
-    
-    OC157_dict, S24_dict, S30L_dict = get_category_node_dicts_general(
+    surface_results = get_category_node_dicts_general(
         nodes,
         glob,
         models,
         all_nodes,
         node_types=[
             ("OC157", "OC157Benchmark", "_oc157"),
-            ("S24", "S24Benchmark", "_S24Benchmark"),
+            ("S24", "S24Benchmark", "_s24"),
             ("S30L", "S30LBenchmark", "_S30LBenchmark"),
         ]
     )
+    OC157_dict, S24_dict, S30L_dict = surface_results["OC157"], surface_results["S24"], surface_results["S30L"]
     
-    LNCI16_dict, ProteinLigand_dict = get_category_node_dicts_general(
+    supramolecular_results = get_category_node_dicts_general(
         nodes,
         glob,
         models,
@@ -1258,19 +1258,21 @@ def full_benchmark_precompute(
             ("ProteinLigand", "ProteinLigandBenchmark", "_ProteinLigandBenchmark"),
         ]
     )
+    LNCI16_dict, ProteinLigand_dict = supramolecular_results["LNCI16"], supramolecular_results["ProteinLigand"]
     
-    GhostAtom_dict, SlabExtensivity_dict = get_category_node_dicts_general(
+    physicality_results = get_category_node_dicts_general(
         nodes,
         glob,
         models,
         all_nodes,
         node_types=[
-            ("GhostAtom", "GhostAtomBenchmark", "_GhostAtomBenchmark"),
-            ("SlabExtensivity", "SlabExtensivityBenchmark", "_SlabExtensivityBenchmark"),
+            ("GhostAtom", "GhostAtomBenchmark", "_ghost-atom"),
+            ("SlabExtensivity", "SlabExtensivityBenchmark", "_slab-extensivity"),
         ]
     )
+    GhostAtom_dict, SlabExtensivity_dict = physicality_results["GhostAtom"], physicality_results["SlabExtensivity"]
     
-    qmof_dict = get_category_node_dicts_general(
+    mof_results = get_category_node_dicts_general(
         nodes,
         glob,
         models,
@@ -1279,14 +1281,9 @@ def full_benchmark_precompute(
             ("QMOF", "QMOFBenchmark", "_QMOFBenchmark"),
         ]
     )
-
+    qmof_dict = mof_results["QMOF"]
     
     
-    
-    # if ui not in {None, "browser"}:
-    #     typer.echo("Invalid UI mode. Choose from: none or browser.")
-    #     raise typer.Exit(1)
-    # print('\n UI = ', ui)
     
     print("Running full benchmark precompute...")
     from mlipx import FullBenchmark
@@ -1515,11 +1512,11 @@ def md_compare(
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
-    
-    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_config-0_MolecularDynamics")
-    
-    benchmark_node_dict = load_nodes_model(node_objects, models, split_str="_config-0_MolecularDynamics")
-    
+
+    node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_H2O-64_NVT_330K")
+
+    benchmark_node_dict = load_nodes_model(node_objects, models, split_str="_H2O-64_NVT_330K")
+
     if ui not in {None, "browser"}:
         typer.echo("Invalid UI mode. Choose from: none or browser.")
         raise typer.Exit(1)
@@ -1539,15 +1536,15 @@ def get_further_apps_benchmark_node_dicts(
     glob: bool,
     models: list[str] | None,
     all_nodes: list[str],
-    split_str_MD: str = "_config-0_MolecularDynamics",
+    split_str_MD: str = "_H2O-64_NVT_330K",
 ) -> dict[str, zntrack.Node]:
     
     MD_nodes = [node for node in all_nodes if "MolecularDynamics" in node]
-    
-    MD_node_objects = load_node_objects(nodes, glob, models, MD_nodes, split_str="_config-0_MolecularDynamics")
-    
-    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
-    
+
+    MD_node_objects = load_node_objects(nodes, glob, models, MD_nodes, split_str="_H2O-64_NVT_330K")
+
+    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_H2O-64_NVT_330K")
+
     return MD_dict
 
 
@@ -1577,14 +1574,16 @@ def md_precompute(
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
 
-    MD_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_config-0_MolecularDynamics")
-    
-    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
-    
+    MD_NVT_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_H2O-64_NVT_330K")
+    MD_NPT_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_H2O-64_NPT_MTK_330K")
 
+    node_dict_NVT = load_nodes_model(MD_NVT_node_objects, models, split_str="_H2O-64_NVT_330K")
+    node_dict_NPT = load_nodes_model(MD_NPT_node_objects, models, split_str="_H2O-64_NPT_MTK_330K")
+    
     from mlipx import MolecularDynamics
     MolecularDynamics.benchmark_precompute(
-        node_dict=MD_dict,
+        node_dict_NVT=node_dict_NVT,
+        node_dict_NPT=node_dict_NPT,
         normalise_to_model=normalise_to_model,
     )
     
@@ -1632,10 +1631,9 @@ def further_apps_precompute(
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
 
-    MD_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_config-0_MolecularDynamics")
-    
-    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_config-0_MolecularDynamics")
-    
+    MD_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_H2O-64_NVT_330K")
+
+    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_H2O-64_NVT_330K")
 
     from mlipx import FurtherApplications
     FurtherApplications.benchmark_precompute(
@@ -2199,3 +2197,4 @@ def get_category_node_dicts_general(
         result[name] = node_dict
 
     return result
+

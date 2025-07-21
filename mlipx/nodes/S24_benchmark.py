@@ -173,16 +173,15 @@ class S24Benchmark(zntrack.Node):
         mae_df = pd.DataFrame.from_dict(mae_dict, orient="index", columns=["MAE (meV)"])
         mae_df.index.name = "Model"
         mae_df.reset_index(inplace=True)
-            
-        mae_df["Score"] = mae_df["MAE (meV)"]
+                    
+        mae_df["Score \u2193"] = mae_df["MAE (meV)"]
         
         if normalise_to_model is not None:
-            mae_df["Score"] = mae_df["Score"] / mae_df[mae_df["Model"] == normalise_to_model]["Score"].values[0]
-        
-        mae_df['Rank'] = mae_df['Score'].rank(ascending=True, method="min")
+            mae_df["Score \u2193"] = mae_df["Score \u2193"] / mae_df[mae_df["Model"] == normalise_to_model]["Score \u2193"].values[0]
+
+        mae_df['Rank'] = mae_df['Score \u2193'].rank(ascending=True, method="min")
         
         mae_df = mae_df.round(3)
-
 
 
         os.makedirs(cache_dir, exist_ok=True)
@@ -241,7 +240,7 @@ class S24Benchmark(zntrack.Node):
                 tooltip_header={
                     "Model": "Name of the MLIP",
                     "MAE (meV)": "Mean Absolute Error (meV)",
-                    "Score": "MAE (normalised)",
+                    "Score \u2193": "MAE (normalised)",
                     "Rank": "Model rank based on score (lower is better)"
                 }
             )

@@ -64,7 +64,11 @@ BENCHMARK_STRUCTURE = {
     "Molecular Crystal Score": ["X23 Benchmark", "DMC-ICE13 Benchmark"],
     "Molecular Score": ["GMTKN55 Benchmark", "Homonuclear Diatomics", "Wiggle150"],
     "Water MD": ["Water RDFs"],
-    "NEBs": ["LiFePO4 b and c paths"]#, "Si 64 and 216"],
+    "NEBs": ["LiFePO4 b and c paths"],
+    "Surfaces": ["OC157 Benchmark", "S24 Benchmark"],
+    "Supramolecular Complexes": ["S30L Benchmark", "LNCI16 Benchmark", "Protein-Ligand Benchmark"],
+    "Physicality": ["Ghost Atom Benchmark", "Slab Extensivity Benchmark"],
+    "MOF": ["QMOF Benchmark"],
 }
 
 # # Mapping from benchmark label to their dash table id
@@ -139,52 +143,52 @@ class FullBenchmark(zntrack.Node):
         
         n_categories = 9
 
-        print(f"Precomputing Bulk Crystal Benchmark (1/{n_categories})...")
-        BulkCrystalBenchmark.benchmark_precompute(
-            elasticity_data=elasticity_data,
-            lattice_const_data=lattice_const_data,
-            lattice_const_ref_node_dict=lattice_const_ref_node_dict,
-            phonon_ref_data=phonon_ref_data,
-            phonon_pred_data=phonon_pred_data,
-            cache_dir=str(cache_dir / "bulk_crystal_benchmark"),
-            report=report,
-            normalise_to_model=normalise_to_model,
-        )
+        # print(f"Precomputing Bulk Crystal Benchmark (1/{n_categories})...")
+        # BulkCrystalBenchmark.benchmark_precompute(
+        #     elasticity_data=elasticity_data,
+        #     lattice_const_data=lattice_const_data,
+        #     lattice_const_ref_node_dict=lattice_const_ref_node_dict,
+        #     phonon_ref_data=phonon_ref_data,
+        #     phonon_pred_data=phonon_pred_data,
+        #     cache_dir=str(cache_dir / "bulk_crystal_benchmark"),
+        #     report=report,
+        #     normalise_to_model=normalise_to_model,
+        # )
 
-        print(f"Precomputing Molecular Crystal Benchmark (2/{n_categories})...")
-        MolecularCrystalBenchmark.benchmark_precompute(
-            X23_data=X23_data,
-            DMC_ICE_data=DMC_ICE_data,
-            cache_dir=str(cache_dir / "molecular_crystal_benchmark"),
-            report=report,
-            normalise_to_model=normalise_to_model,
-        )
+        # print(f"Precomputing Molecular Crystal Benchmark (2/{n_categories})...")
+        # MolecularCrystalBenchmark.benchmark_precompute(
+        #     X23_data=X23_data,
+        #     DMC_ICE_data=DMC_ICE_data,
+        #     cache_dir=str(cache_dir / "molecular_crystal_benchmark"),
+        #     report=report,
+        #     normalise_to_model=normalise_to_model,
+        # )
 
-        print(f"Precomputing Molecular Benchmark (3/{n_categories})...")
-        MolecularBenchmark.benchmark_precompute(
-            GMTKN55_data=GMTKN55_data,
-            HD_data=HD_data,
-            Wiggle150_data=Wiggle150_data,
-            cache_dir=str(cache_dir / "molecular_benchmark"),
-            report=report,
-            normalise_to_model=normalise_to_model,
-        )
+        # print(f"Precomputing Molecular Benchmark (3/{n_categories})...")
+        # MolecularBenchmark.benchmark_precompute(
+        #     GMTKN55_data=GMTKN55_data,
+        #     HD_data=HD_data,
+        #     Wiggle150_data=Wiggle150_data,
+        #     cache_dir=str(cache_dir / "molecular_benchmark"),
+        #     report=report,
+        #     normalise_to_model=normalise_to_model,
+        # )
         
-        print(f"Precomputing Water MD Benchmark (4/{n_categories})...")
-        FurtherApplications.benchmark_precompute(
-            MD_data=MD_data,
-            cache_dir=str(cache_dir / "further_applications_benchmark"),
-            report=report,
-            normalise_to_model=normalise_to_model,
-        )
+        # print(f"Precomputing Water MD Benchmark (4/{n_categories})...")
+        # FurtherApplications.benchmark_precompute(
+        #     MD_data=MD_data,
+        #     cache_dir=str(cache_dir / "further_applications_benchmark"),
+        #     report=report,
+        #     normalise_to_model=normalise_to_model,
+        # )
         
-        print(f"Precomputing NEB Benchmark (5/{n_categories})...")
-        NEBFurtherApplications.benchmark_precompute(
-            neb_data=NEB_data,
-            cache_dir=str(cache_dir / "nebs_further_apps"),
-            report=report,
-            normalise_to_model=normalise_to_model,
-        )
+        # print(f"Precomputing NEB Benchmark (5/{n_categories})...")
+        # NEBFurtherApplications.benchmark_precompute(
+        #     neb_data=NEB_data,
+        #     cache_dir=str(cache_dir / "nebs_further_apps"),
+        #     report=report,
+        #     normalise_to_model=normalise_to_model,
+        # )
         
         print(f"Precomputing Surface Benchmark (6/{n_categories})...")
         SurfaceBenchmark.benchmark_precompute(

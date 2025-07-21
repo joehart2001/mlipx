@@ -107,6 +107,11 @@ class SurfaceBenchmark(zntrack.Node):
         
         
         from mlipx.data_utils import category_weighted_benchmark_score
+        
+        print("OC157 MAE DataFrame: ")
+        print(OC157_mae_df)
+        print("S24 MAE DataFrame: ")
+        print(S24_mae_df)
 
         benchmark_score_df = category_weighted_benchmark_score(
             OC157=OC157_mae_df,
@@ -166,7 +171,12 @@ class SurfaceBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
 
-        app = dash.Dash(__name__, suppress_callback_exceptions=True)
+
+        assets_dir = os.path.abspath("assets")
+        print("Serving assets from:", assets_dir)
+        app = dash.Dash(__name__, assets_folder=assets_dir)
+            
+        #app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
         layout = combine_apps(
             benchmark_score_df=benchmark_score_df,

@@ -82,7 +82,7 @@ class FurtherApplications(zntrack.Node):
 
         MD_dict = process_data(
             MD_data,
-            key_extractor=lambda node: node.name.split("_config-0_MolecularDynamics")[0],
+            key_extractor=lambda node: node.name.split("_H2O-64_NVT_330K")[0],
             value_extractor=lambda node: node
         )
         
@@ -117,7 +117,7 @@ class FurtherApplications(zntrack.Node):
         benchmark_score_df = benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True).reset_index(drop=True)
         benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
 
-        benchmark_score_df.to_csv(f"{cache_dir}/benchmark_score.csv", index=False)
+        benchmark_score_df.to_pickle(f"{cache_dir}/benchmark_score.pkl")
 
 
 
@@ -134,7 +134,7 @@ class FurtherApplications(zntrack.Node):
         from mlipx.dash_utils import run_app
         import dash
 
-        benchmark_score_df = pd.read_csv(f"{cache_dir}/benchmark_score.csv")
+        benchmark_score_df = pd.read_pickle(f"{cache_dir}/benchmark_score.pkl")
         with open(f"{cache_dir}/molecular_dynamics_cache/groups.pkl", "rb") as f:
             groups = pickle.load(f)
         # Load group mae tables

@@ -12,6 +12,11 @@ def category_weighted_benchmark_score(
     """Weighted scoring for molecular benchmarks from multiple input score DataFrames."""
     if weights is None:
         weights = {name: 1.0 for name in score_dfs.keys()}
+        
+    print("score_dfs:")
+    for name, df in score_dfs.items():
+        print(f" - {name}:")
+        print(df)
 
     scores = {}
     # Only consider DataFrames that are not None
@@ -23,11 +28,15 @@ def category_weighted_benchmark_score(
         *(set(df["Model"] if "Model" in df.columns else df["Method"]) for df in valid_dfs.values())
     )
 
+    print(f"All models found: {all_models}")
+    
     for model in all_models:
         entry = {}
         total = 0.0
         denom = 0.0
         for name, df in score_dfs.items():
+            print(f"Processing {name} DataFrame for model {model}")
+            print(df)
             if df is None:
                 continue
             col = "Model" if "Model" in df.columns else "Method"
@@ -36,9 +45,9 @@ def category_weighted_benchmark_score(
             for c in df.columns:
                 if "Score" in c:
                     score_col = c
-                    if "\u2193" in c:
-                        break
+                    break
             if score_col is None:
+                print(f"Warning: No score column found in {name} DataFrame. Skipping.")
                 continue
             # Only add if model present in this df
             if model not in set(df[col]):
@@ -57,7 +66,8 @@ def category_weighted_benchmark_score(
         norm_val = df.loc[df["Model"] == normalise_to_model, "Avg MAE \u2193"].values[0]
         df["Avg MAE \u2193"] = df["Avg MAE \u2193"] / norm_val
 
-
+    print(f"Benchmark score DataFrame:")
+    print(df)
     df = df.round(3).sort_values(by="Avg MAE \u2193").reset_index(drop=True)
     df["Rank"] = df["Avg MAE \u2193"].rank(ascending=True)
     

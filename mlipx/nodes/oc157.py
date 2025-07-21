@@ -293,16 +293,12 @@ class OC157Benchmark(zntrack.Node):
             .merge(pd.DataFrame(pearsons_dict.items(), columns=["Model", "Pearson r"]), on="Model")
         )
         
-        mae_df["Score"] = mae_df["MAE (meV)"] + (1 - mae_df["Ranking Accuracy"]) / 2
-
-        # mae_df["Score"] = mae_df[["MAE (meV)", "Ranking Accuracy"]].apply(
-        #     lambda row: row["MAE (meV)"] / (row["Ranking Accuracy"] + 1e-8), axis=1
-        # )
+        mae_df["Score \u2193"] = mae_df["MAE (meV)"] + (1 - mae_df["Ranking Accuracy"]) / 2
 
         if normalise_to_model is not None:
-            mae_df["Score"] = mae_df["Score"] / mae_df[mae_df["Model"] == normalise_to_model]["Score"].values[0]
+            mae_df["Score \u2193"] = mae_df["Score \u2193"] / mae_df[mae_df["Model"] == normalise_to_model]["Score \u2193"].values[0]
 
-        mae_df['Rank'] = mae_df['Score'].rank(ascending=True)
+        mae_df['Rank'] = mae_df['Score \u2193'].rank(ascending=True)
 
         os.makedirs(cache_dir, exist_ok=True)
         mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
@@ -361,7 +357,7 @@ class OC157Benchmark(zntrack.Node):
                     "RMSD (meV)": "Root Mean Square Deviation (meV)",
                     "Ranking Accuracy": "Accuracy in ranking stability across triplets",
                     "Pearson r": "Pearson correlation coefficient",
-                    "Score": "Avg of MAE and 1 - Ranking Accuracy (lower is better)",
+                    "Score \u2193": "Avg of MAE and 1 - Ranking Accuracy (lower is better)",
                     "Rank": "Model rank based on score (lower is better)"
                 },
                 extra_components=[
