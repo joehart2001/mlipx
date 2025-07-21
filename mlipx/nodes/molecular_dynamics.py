@@ -197,7 +197,7 @@ class MolecularDynamics(zntrack.Node):
 
     frames_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "frames.xyz")
     traj_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "trajectory.traj")
-
+    log_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "md_status.log")
 
     def run(self):
         start_time = time.time()
@@ -319,53 +319,77 @@ class MolecularDynamics(zntrack.Node):
             
         remaining_steps = max(0, self.steps - start_idx)
 
-        for local_idx, _ in enumerate(
-            tqdm.tqdm(
-                dyn.irun(steps=remaining_steps),
-                total=self.steps,
-                initial=start_idx,
-            )
-        ):
-            idx = start_idx + local_idx
 
-            if idx % self.write_frames_every == 0:
-                ase.io.write(self.frames_path, atoms, append=True)
-
-
-                if self.external_save_path:
-                    ase.io.write(self.external_save_path, atoms, append=True)
-
-                plots = {
-                    "energy": atoms.get_potential_energy(),
-                    "fmax": np.max(np.linalg.norm(atoms.get_forces(), axis=1)),
-                    "fnorm": np.linalg.norm(atoms.get_forces()),
-                }
-                self.plots.loc[len(self.plots)] = plots
-                # Save to CSV after each update
-                self.plots.to_csv(plots_path, index=False)
-
-            # print every x steps
-            if self.print_energy_every is not None and idx % self.print_energy_every == 0:
-                epot = atoms.get_potential_energy() / len(atoms)
-                ekin = atoms.get_kinetic_energy() / len(atoms)
-                elapsed_time = time.time() - start_time
-                elapsed_min, elapsed_sec = divmod(elapsed_time, 60)
-                tqdm.tqdm.write(
-                    f"Step {idx} | Epot = {epot:.3f} eV  Ekin = {ekin:.3f} eV  "
-                    f"(T = {ekin / (1.5 * ase.units.kB):.0f} K)  "
-                    f"Etot = {epot + ekin:.3f} eV  Elapsed: {int(elapsed_min)}m {elapsed_sec:.1f}s"
+        try:
+            for local_idx, _ in enumerate(
+                tqdm.tqdm(
+                    dyn.irun(steps=remaining_steps),
+                    total=self.steps,
+                    initial=start_idx,
                 )
+            ):
+                idx = start_idx + local_idx
 
-            for obs in self.observers:
-                if obs.check(atoms):
-                    self.observer_metrics[obs.name] = idx
+                if idx % self.write_frames_every == 0:
+                    ase.io.write(self.frames_path, atoms, append=True)
 
-            if len(self.observer_metrics) > 0:
-                break
 
-            for mod in self.modifiers:
-                mod.modify(dyn, idx)
+                    if self.external_save_path:
+                        ase.io.write(self.external_save_path, atoms, append=True)
 
+                    plots = {
+                        "energy": atoms.get_potential_energy(),
+                        "fmax": np.max(np.linalg.norm(atoms.get_forces(), axis=1)),
+                        "fnorm": np.linalg.norm(atoms.get_forces()),
+                    }
+                    self.plots.loc[len(self.plots)] = plots
+                    # Save to CSV after each update
+                    self.plots.to_csv(plots_path, index=False)
+                    
+                    # Write intermediate log update
+                    with open(self.log_path, "w") as f:
+                        f.write(f"steps_completed: {idx + 1}\n")
+                        f.write(f"simulation_complete: False\n")
+                        f.write(f"error_message: None\n")
+
+                # print every x steps
+                if self.print_energy_every is not None and idx % self.print_energy_every == 0:
+                    epot = atoms.get_potential_energy() / len(atoms)
+                    ekin = atoms.get_kinetic_energy() / len(atoms)
+                    elapsed_time = time.time() - start_time
+                    elapsed_min, elapsed_sec = divmod(elapsed_time, 60)
+                    tqdm.tqdm.write(
+                        f"Step {idx} | Epot = {epot:.3f} eV  Ekin = {ekin:.3f} eV  "
+                        f"(T = {ekin / (1.5 * ase.units.kB):.0f} K)  "
+                        f"Etot = {epot + ekin:.3f} eV  Elapsed: {int(elapsed_min)}m {elapsed_sec:.1f}s"
+                    )
+
+                for obs in self.observers:
+                    if obs.check(atoms):
+                        self.observer_metrics[obs.name] = idx
+
+                if len(self.observer_metrics) > 0:
+                    break
+
+                for mod in self.modifiers:
+                    mod.modify(dyn, idx)
+
+
+            # Final success log
+            with open(self.log_path, "w") as f:
+                f.write(f"steps_completed: {self.steps}\n")
+                f.write(f"simulation_complete: True\n")
+                f.write(f"error_message: None\n")
+        
+
+        except Exception as e:
+            with open(self.log_path, "w") as f:
+                f.write(f"steps_completed: {locals().get('idx', start_idx)}\n") # use locals() to get idx if it exists, otherwise use start_idx
+                f.write(f"simulation_complete: False\n")
+                f.write(f"error_message: {str(e)}\n")
+            raise
+
+        
         for obs in self.observers:
             # document all attached observers
             self.observer_metrics[obs.name] = self.observer_metrics.get(obs.name, -1)
