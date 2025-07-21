@@ -138,6 +138,8 @@ class S30LBenchmark(zntrack.Node):
         ref_df = df[["Index", "E_ref (eV)"]]
         model_df = df[["Index", f"E_{self.model_name} (eV)"]].copy()
         mae = df["Error (kcal/mol)"].abs().mean()
+        
+        print(f"MAE for {self.model_name}: {mae:.2f} kcal/mol")
 
         # Save complex structures for visualization
         write(self.s30l_complex_atoms_path, complex_atoms_list)

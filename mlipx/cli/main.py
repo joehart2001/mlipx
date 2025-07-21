@@ -1835,6 +1835,55 @@ def physicality_launch_dashboard(
 
 
 
+@app.command()
+def s30l_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    nodes = [
+        "*S30LBenchmark*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+        
+    S30L_nodes = [node for node in all_nodes if "S30LBenchmark" in node]
+    
+    S30L_node_objects = load_node_objects(nodes, glob, models, S30L_nodes, split_str="_S30LBenchmark")
+    
+    S30L_dict = load_nodes_model(S30L_node_objects, models, split_str="_S30LBenchmark")
+    
+    from mlipx import S30LBenchmark
+    S30LBenchmark.benchmark_precompute(
+        node_dict=S30L_dict,
+        normalise_to_model=normalise_to_model,
+    )
+    
+@app.command()
+def s30l_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import S30LBenchmark
+    if return_app == True:
+        return S30LBenchmark.launch_dashboard(
+            ui=ui,
+            return_app=return_app,
+        )
+    else:
+        S30LBenchmark.launch_dashboard(
+            ui=ui,
+        )
+
 
 
 @app.command()
