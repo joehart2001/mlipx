@@ -147,7 +147,7 @@ class S30LBenchmark(zntrack.Node):
         ref_df.to_csv(self.s30l_ref_path, index=False)
         model_df.to_csv(self.s30l_pred_path, index=False)
         with open(self.s30l_mae_path, "w") as f:
-            json.dump(mae, f)
+            json.dump(float(mae), f)
 
 
     @property
