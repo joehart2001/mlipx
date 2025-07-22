@@ -36,7 +36,7 @@ bulk_crystal_benchmark = None
 {% if run_mol_crystal %}
 {% include "molecular_crystal_benchmark.py.jinja2" %}
 {% else %}
-mol_benchmark = None
+mol_crystal_benchmark = None
 {% endif %}
 
 {% if run_mol %}
@@ -94,7 +94,7 @@ mof_benchmark = None
 with project.group("full-benchmark"):
     full_benchmark = mlipx.FullBenchmark(
         bulk_crystal_benchmark=bulk_crystal_benchmark,
-        mol_crystal_benchmark=mol_benchmark,
+        mol_crystal_benchmark=mol_crystal_benchmark,
         mol_benchmark=mol_benchmark,
         further_apps_benchmark=further_apps_benchmark,
         neb_further_apps_benchmark=neb_further_apps_benchmark,

@@ -21,7 +21,7 @@ project = zntrack.Project()
 {% include "ghost_atom_benchmark.py.jinja2" %}
 
 
-with project.group(model_name, "physicality-benchmark"):
+with project.group("physicality-benchmark"):
         physicality_benchmark = mlipx.PhysicalityBenchmark(
                 ghost_atom_list=ghost_atom_list,
                 slab_list=slab_list,
