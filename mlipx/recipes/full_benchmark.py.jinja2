@@ -81,15 +81,6 @@ supramolecular_complex_benchmark = None
 mof_benchmark = None
 {% endif %}
 
-# {% include "molecular_crystal_benchmark.py.jinja2" %}
-# {% include "molecular_benchmark.py.jinja2" %}
-# {% include "further_applications.py.jinja2" %}
-
-# {% include "further_applications_NEB.py.jinja2" %}
-# {% include "surface_benchmark.py.jinja2" %}
-# {% include "physicality_benchmark.py.jinja2" %}
-# {% include "supramolecular_complex_benchmark.py.jinja2" %}
-# {% include "MOF_benchmark.py.jinja2" %}
 
 with project.group("full-benchmark"):
     full_benchmark = mlipx.FullBenchmark(
