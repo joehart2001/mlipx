@@ -132,8 +132,8 @@ class LNCI16Benchmark(zntrack.Node):
             try:
                 with open(filepath, 'r') as f:
                     charge_str = f.read().strip()
-                    charge = float(charge_str)
-                    
+                    charge = int(float(charge_str))
+
                 logging.debug(f"Read charge {charge} from {filepath}")
                 return charge
             except Exception as e:
@@ -308,8 +308,9 @@ class LNCI16Benchmark(zntrack.Node):
 
         # Compute MAE from the "error_kcal" column and save as JSON
         mae = results["error_kcal"].abs().mean()
+        print(f"MAE for {self.model_name} on LNCI16: {mae} kcal/mol")
         with open(self.lnci16_mae_path, "w") as f:
-            json.dump(mae, f)
+            json.dump(float(mae), f)
 
 
     @property
