@@ -88,7 +88,7 @@ class QMOFBenchmark(zntrack.Node):
         mlip_e, ref_e, mofs, num_atoms = calc_mof_energies(structures, calc, self.model_name, n_mofs=self.n_mofs)
         
         # Save complex structures for visualization
-        write(self.qmof_atoms_path, mofs, format="xyz")
+        write(self.qmof_atoms_path, mofs, format="extxyz")
         
         
 
