@@ -81,6 +81,11 @@ class QMOFBenchmark(zntrack.Node):
                 e_pred = mof.get_potential_energy()
                 energies_mlip[mof.info['qmof_id']] = e_pred
                 
+                mof.info[f"{model_name}_energy_eV"] = e_pred
+                mof.info["ref_energy_eV"] = energies_ref[mof.info['qmof_id']]
+                mof.calc = None  # Clear calculator to avoid array shape broadcasting issues
+                
+                
             num_atoms = {mof.info['qmof_id']: len(mof) for mof in structures}
                 
             return energies_mlip, energies_ref, structures, num_atoms
