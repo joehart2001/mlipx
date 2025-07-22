@@ -48,7 +48,7 @@ from ase import Atoms
 from rdkit import Chem
 from rdkit.Chem import AllChem
 import random
-
+from ase.io import read, write
 
 class GhostAtomBenchmark(zntrack.Node):
     """ Benchmark comparing: E_slab1
@@ -57,6 +57,8 @@ class GhostAtomBenchmark(zntrack.Node):
     model: NodeWithCalculator = zntrack.deps()
     model_name: str = zntrack.params()
     ghost_atom_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "ghost_atom_benchmark.csv")
+    ghost_system_structure: pathlib.Path = zntrack.outs_path(zntrack.nwd / "ghost_system_structure.xyz")
+    random_H_structures: pathlib.Path = zntrack.outs_path(zntrack.nwd / "random_H_structures.xyz")
 
 
 
@@ -146,6 +148,7 @@ class GhostAtomBenchmark(zntrack.Node):
 
         # Test 1: Add ghost atoms and compare forces
         system_ghost = self.create_ghost_atoms_system(solute, ghost_Ne, ghost_dist, calc)
+        write(self.ghost_system_structure, system_ghost)
         F_solute = self.get_forces(solute, calc)
         F_ghost = self.get_forces(system_ghost, calc)
         # difference in forces on solute atoms only
@@ -155,14 +158,21 @@ class GhostAtomBenchmark(zntrack.Node):
         # Test 2: Add random H atoms and compare forces
         rng = np.random.default_rng(SEED)
         dF_test6_list = []
-        for _ in range(rand_trials):
+        randH_structures = []
+        for i in range(rand_trials):
             system_randH = self.add_random_H(solute, rand_min_dist, rand_max_dist, rng, calc)
+            randH_structures.append(system_randH)
             F_randH = self.get_forces(system_randH, calc)
             # difference in forces on solute atoms only
             dF = np.linalg.norm(F_solute - F_randH[:len(solute)], axis=1)
             dF_test6_list.append(np.mean(dF))
         mean_dF_test6 = np.mean(dF_test6_list)
         std_dF_test6 = np.std(dF_test6_list)
+
+
+        
+        for i, system_randH in enumerate(randH_structures):
+            write(self.random_H_structures, system_randH, append=True)
 
         # Collect results into DataFrame
         df = pd.DataFrame({
@@ -181,12 +191,33 @@ class GhostAtomBenchmark(zntrack.Node):
         return pd.read_csv(self.ghost_atom_output)
     
     
+    @property
+    def get_ghost_system_structure(self):
+        # load ghost system structure
+        return ase.io.read(self.ghost_system_structure)
+    @property
+    def get_random_H_structures(self):
+        # load random H structures
+        return ase.io.read(self.random_H_structures, index=":")
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     @staticmethod
     def benchmark_precompute(
         node_dict: dict[str, "GhostAtomBenchmark"],
         cache_dir: str = "app_cache/physicality_benchmark/ghost_atom_cache/",
         normalise_to_model: Optional[str] = None,
     ):
+        
+        
+        
         os.makedirs(cache_dir, exist_ok=True)
         df_list = []
         for model_name, node in node_dict.items():
@@ -194,6 +225,14 @@ class GhostAtomBenchmark(zntrack.Node):
             #df["Model"] = model_name  # ensure model name column
             df_list.append(df)
             
+            structure_save_dir = os.path.abspath(f"assets/ghost_atom/{model_name}/")
+            os.makedirs(structure_save_dir, exist_ok=True)
+            
+            ghost_atom_structure = node.get_ghost_system_structure
+            write(Path(structure_save_dir) / "ghost_atom_structure.xyz", ghost_atom_structure)
+            random_H_structures = node.get_random_H_structures
+            write(Path(structure_save_dir) / "random_H_structures.xyz",random_H_structures)
+
         full_df = pd.concat(df_list, ignore_index=True)
         
         full_df["Score"] = full_df["test2 mean ΔF"]
@@ -225,11 +264,15 @@ class GhostAtomBenchmark(zntrack.Node):
             GhostAtomBenchmark.register_callbacks(
                 app_instance,
                 results_df=results_df,
+                cache_dir=cache_dir,
             )
 
         if app is None:
-            app = dash.Dash(__name__)
+            assets_dir = os.path.abspath("assets")
+            print("Serving assets from:", assets_dir)
+            app = dash.Dash(__name__, assets_folder=assets_dir)
             app.layout = layout
+            callback_fn(app)
             return run_app(app, ui=ui)
         else:
             return layout, lambda _: None
@@ -251,12 +294,55 @@ class GhostAtomBenchmark(zntrack.Node):
                     "test2 std ΔF": "Standard deviation of ΔF for random H-atom placements",
                     "Score": "Same as test2 mean ΔF (lower is better); normalized if specified",
                     "Rank": "Ranking of model by Score (lower is better)"
-                }
-            )
+                },
+                extra_components=[
+                    html.Div(id="weas-viewer-ghost-atom", style={"marginTop": "20px"}),
+                ]
+                    
+            ),
+            
         ])
         
         
         
     @staticmethod
-    def register_callbacks(app, results_df):
-        pass
+    def register_callbacks(app, results_df, cache_dir):
+        from mlipx.dash_utils import weas_viewer_callback
+
+        @app.callback(
+            Output("weas-viewer-ghost-atom", "children"),
+            Output("weas-viewer-ghost-atom", "style"),
+            Input("ghost-mae-table", "active_cell"),
+            State("ghost-mae-table", "data"),
+        )
+        def update_weas_viewer(active_cell, table_data):
+            if not active_cell:
+                raise PreventUpdate
+
+            row = active_cell["row"]
+            clicked_model = table_data[row]["Model"]
+            col = active_cell["column_id"]
+
+            if "test1" in col:
+                structure_path = os.path.join(cache_dir, clicked_model, "ghost_atom_structure.xyz")
+
+                return weas_viewer_callback(
+                    active_cell,
+                    f"assets/ghost_atom/{clicked_model}/ghost_atom_structure.xyz",
+                    mode="index",
+                    index_key=active_cell["row"]
+                )
+                
+            elif "test2" in col:
+                structure_path = os.path.join(cache_dir, clicked_model, "random_H_structures.xyz")
+
+                return weas_viewer_callback(
+                    active_cell,
+                    f"assets/ghost_atom/{clicked_model}/random_H_structures.xyz",
+                    mode="trajectory",
+                    #index_key="pointIndex"
+                )
+            else:
+                raise PreventUpdate
+            
+            

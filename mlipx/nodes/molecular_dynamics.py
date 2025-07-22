@@ -537,7 +537,7 @@ class MolecularDynamics(zntrack.Node):
             'g_r_oo',
             'g_r_oh',
             'g_r_hh',
-            'msd_O',
+            'msd',
             'vacf',
             'vdos',
         ]
@@ -624,12 +624,18 @@ class MolecularDynamics(zntrack.Node):
             'rdf': exp_300K['y']
         }
         
-        NVT_properties_dict['msd_O'] = {
-            "PBE_TS_vdW(SC)_300K": {
+        NVT_properties_dict['msd'] = {
+            "PBE_TS_vdW_SC_300K": {
                 "time": [], # to include
                 "msd": [],
                 "D": 0.044  # Å^2/ps
             }
+        }
+        
+        common_tooltips = {
+            "Model": "Model name",
+            "Score ↓": "Average MAE or error score for this model (lower is better)",
+            "Rank": "Rank based on average score",
         }
         
         groups = {
@@ -639,13 +645,26 @@ class MolecularDynamics(zntrack.Node):
                 "details_id": "rdf-table-details",
                 "last_clicked_id": "rdf-table-last-clicked",
                 "title": "RDFs: O-O, O-H, H-H",
+                "tooltip_header":{
+                    **common_tooltips,
+                    "g_r_oo (PBE_D3_330K)": "MAE of model's O-O RDF vs PBE-D3 330K",
+                    "g_r_oo (EXP_300K)": "MAE of model's O-O RDF vs EXP 300K",
+                    "g_r_oh (PBE_D3_330K)": "MAE of model's O-H RDF vs PBE-D3 330K",
+                    "g_r_hh (PBE_D3_330K)": "MAE of model's H-H RDF vs PBE-D3 330K",
+                }
             },
             "NVT_water_dynamic_properties": {
-                "NVT_properties": ['msd_O', 'vacf', 'vdos'],
+                "NVT_properties": ['msd', 'vacf', 'vdos'],
                 "table_id": "dynamic-score-table",
                 "details_id": "dynamic-table-details",
                 "last_clicked_id": "dynamic-table-last-clicked",
                 "title": "Dynamic Properties: MSD, VACF, VDOS",
+                "tooltip_header": {
+                    **common_tooltips,
+                    "msd (PBE_TS_vdW_SC_300K)": "Absolute error for the self diffusion coefficient of water compared to PBE with TS dispersion at 300K (D = 0.044 Å²/ps)",
+                    "vacf (SPC/E_300K)": "MAE of model's velocity autocorrelation function for oxygen vs SPC/E potential at 300K",
+                    "vdos (PBE_D3_300K)": "MAE of model's combined (O + H) vibrational density of states vs PBE-D3 300K",
+                }
             },
             "NPT_water_properties": {
                 "NPT_properties": ['density'],
@@ -653,10 +672,17 @@ class MolecularDynamics(zntrack.Node):
                 "details_id": "npt-table-details",
                 "last_clicked_id": "npt-table-last-clicked",
                 "title": "NPT Properties: Density",
+                "tooltip_header": {
+                    **common_tooltips,
+                    "density (PBE_330K)": "Absolute error for mean density of water vs NPT PBE at 330K",
+                }
             },
         }
         
-        
+
+        # print("NVT node dict:", node_dict_NVT)
+        # print("NPT node dict:", node_dict_NPT)
+
         # ----------- predicted data -----------
         
 
@@ -674,14 +700,12 @@ class MolecularDynamics(zntrack.Node):
             for prop in NVT_properties:
                 if prop not in NVT_properties_dict:
                     NVT_properties_dict[prop] = {}
-                if prop == 'msd_O':
-                    time, msd = MolecularDynamics.compute_msd(traj, timestep=1, atom_symbol='O')
+                if prop == 'msd':
+                    time, msd = MolecularDynamics.compute_msd(traj, timestep=1)
                     NVT_properties_dict[prop][model_name] = {
                         "time": time.tolist(),
                         "msd": msd.tolist(),
                     }
-                    print(f"Computed MSD for {model_name} with {len(time)} time points.")
-                    #print(properties_dict[prop][model_name])
                 elif prop == 'g_r_oo':
                     # O-O RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
@@ -735,7 +759,11 @@ class MolecularDynamics(zntrack.Node):
                     }
                 elif prop == 'vdos':
                     # Velocity density of states
-                    freq, vdos_values = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True, atoms_filter=(('O',),))
+                    freq_O, vdos_values_O = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True, atoms_filter=(('O',),))
+                    freq_H, vdos_values_H = MolecularDynamics.compute_vacf(traj, velocities, timestep=1, fft=True, atoms_filter=(('H',),))
+                    # add O and H ontop
+                    vdos_values = vdos_values_O + vdos_values_H
+                    freq = freq_O
                     #vdos_values /= np.trapz(vdos_values, x=freq)  # Normalize VDOS
                     freq *= 1000  # Convert to desired units (ps^-1)
                     NVT_properties_dict[prop][model_name] = {
@@ -744,7 +772,7 @@ class MolecularDynamics(zntrack.Node):
                     }
 
         # Add msd_dict for later use
-        msd_dict = NVT_properties_dict["msd_O"]
+        msd_dict = NVT_properties_dict["msd"]
         
 
         
@@ -752,6 +780,7 @@ class MolecularDynamics(zntrack.Node):
         
         if node_dict_NPT:
             for model_name, node in tqdm.tqdm(node_dict_NPT.items(), desc="Computing NPT properties for models"):
+                print(f"Processing NPT model: {model_name}")
                 traj = node.traj
                 times = np.arange(len(traj)) / 100 # 1 fs timestep, written every 10 fs -> ps
                 
@@ -766,6 +795,8 @@ class MolecularDynamics(zntrack.Node):
                     "time": times.tolist(),
                     "density": density,
                 }
+                
+                
                 
                 
         
@@ -785,7 +816,7 @@ class MolecularDynamics(zntrack.Node):
             for k, data in properties_dict[prop].items():
                 if k in model_names:
                     valid_model_names.append(k)
-                elif isinstance(data, dict) and any(key in data for key in ["rdf", "vaf", "vdos, density"]):
+                elif isinstance(data, dict) and any(key in data for key in ["rdf", "msd", "vaf", "vdos", "density"]):
                     reference_keys.append(k)
 
             mae_data = []
@@ -798,9 +829,8 @@ class MolecularDynamics(zntrack.Node):
                     # Guard against missing or invalid data
                     if (
                         model_data is None or ref_data is None
-                        #or not isinstance(model_data, dict)
-                        #or not isinstance(ref_data, dict)
                     ):
+                        print(f"Skipping {prop} for {model_name} vs {ref_key}: missing data")
                         continue
 
                     # RDF MAE computation
@@ -857,22 +887,37 @@ class MolecularDynamics(zntrack.Node):
                         vdos_ref_interp = np.interp(freq_model_masked, freq_ref, vdos_ref)
                         mae = np.mean(np.abs(vdos_model_masked - vdos_ref_interp))
                         row[f"{prop} ({ref_key})"] = round(mae, 4)
+                        
+                    elif "msd" in ref_data and "msd" in model_data:
+                        # compare diffusion coefficient to the ref value
+                        t_model = np.array(model_data["time"])
+                        msd_model = np.array(model_data["msd"])
+                        from scipy.stats import linregress
+                        mask = (t_model > 10)
+
+                        slope, _, _, _, _ = linregress(t_model[mask], msd_model[mask])
+                        D_model = slope / 6  # Diffusion coefficient from MSD slope
+                        D_ref = ref_data.get("D", None)
+                        if D_ref is None:
+                            continue
+                        mae = abs(D_model - D_ref)
+                        row[f"{prop} ({ref_key})"] = round(mae, 4)
+                        
 
                     elif "density" in ref_data and "density" in model_data:
-                        t_ref = np.array(ref_data["time"])
+                        # Compare mean density
                         y_ref = np.array(ref_data["density"])
-                        t_model = np.array(model_data["time"])
                         y_model = np.array(model_data["density"])
-                        y_model_interp = np.interp(t_ref, t_model, y_model)
-                        mae = np.mean(np.abs(y_model_interp - y_ref))
+                        mean_ref = np.mean(y_ref)
+                        mean_model = np.mean(y_model)
+                        mae = abs(mean_model - mean_ref)
                         row[f"{prop} ({ref_key})"] = round(mae, 4)
 
                 mae_data.append(row)
 
             # Columns are Model plus all reference-property pairs (now using new header format)
             columns = ["Model"] + [f"{prop} ({ref_key})" for ref_key in reference_keys]
-            return pd.DataFrame(mae_data, columns=columns).round(3)
-
+            return pd.DataFrame(mae_data, columns=columns)
         model_names = list(node_dict_NVT.keys())
 
         # --- Helper to build group MAE tables ---
@@ -880,13 +925,15 @@ class MolecularDynamics(zntrack.Node):
             import pandas as pd
             dfs = []
             scores = {}
-            for prop in group["NVT_properties"]:
+            for prop in group.get("NVT_properties", []) + group.get("NPT_properties", []):
+                print(f"Computing MAE for property '{prop}' in group '{group['title']}'")
                 df = compute_mae_table(prop, properties_dict, model_names)
                 if df.empty or len(df.columns) <= 1:
+                    print(df)
                     print(f"No data for property '{prop}' in group '{group['title']}'")
                     continue
-                print(prop)
-                print(df)
+                #print(prop)
+                #print(df)
                 mae_cols = [col for col in df.columns if col != "Model"]
                 ref_col = mae_cols[0]  # Assume first column is the reference
 
@@ -904,7 +951,7 @@ class MolecularDynamics(zntrack.Node):
             merged["Score ↓"] = np.average(list(scores.values()))
             merged["Rank"] = merged["Score ↓"].rank(method="min").astype(int)
             merged.reset_index(inplace=True)
-            return merged
+            return merged.round(3)
 
         # Build group MAE tables
         group_mae_tables = {}
@@ -913,15 +960,17 @@ class MolecularDynamics(zntrack.Node):
                 properties_dict = NVT_properties_dict
             elif "NPT_properties" in group:
                 properties_dict = NPT_properties_dict
+            print(f"Building MAE table for group {group_name}")
             group_mae_tables[group_name] = build_group_mae_table(group, properties_dict, model_names, normalise_to_model)
-
+            print(f"built group MAE table for {group_name} with {len(group_mae_tables[group_name])} rows")
+        
         if ui is None and run_interactive:
             return group_mae_tables, NVT_properties_dict, NPT_properties_dict, groups
 
         if not run_interactive:
             return group_mae_tables, NVT_properties_dict, NPT_properties_dict, groups
 
-        return
+        return 
 
 
 
@@ -975,12 +1024,13 @@ class MolecularDynamics(zntrack.Node):
                 "yaxis_title": "VDOS",
                 "title": "Vibrational Density of States",
             },
-            "msd_O": {
-                "xlim": (0, 1000),
+            "msd": {
+                "xlim": (0, 50),
                 "ylim": (None, None),
                 "xaxis_title": "Time (ps)",
                 "yaxis_title": "MSD (Å²)",
-                "title": "Mean Squared Displacement of Oxygen",
+                "title": "Mean Squared Displacement",
+                "extras": ["diffusion_slope"],
             },
             "density": {
                 "xlim": (0, None),
@@ -988,6 +1038,7 @@ class MolecularDynamics(zntrack.Node):
                 "xaxis_title": "Time (ps)",
                 "yaxis_title": "Density (g/cm³)",
                 "title": "Density over Time",
+                "extras": ["mean_lines"],
             },
         }
 
@@ -995,10 +1046,6 @@ class MolecularDynamics(zntrack.Node):
             table_id = group["table_id"]
             details_id = group["details_id"]
             last_clicked_id = group["last_clicked_id"]
-            # if "NVT_properties" in group:
-            #     props = group["NVT_properties"]
-            # elif "NPT_properties" in group:
-            #     props = group["NPT_properties"]
             props = group.get("NVT_properties", []) + group.get("NPT_properties", [])
             df = group_mae_tables[group_name]
 
@@ -1034,13 +1081,19 @@ class MolecularDynamics(zntrack.Node):
                 # Collapse plot if the "Model" column is clicked, consistent with lattice constant plots
                 if col_id == "Model":
                     return html.Div(), None
+                if col_id in ["Score ↓", "Rank"]:
+                    return no_update, no_update
 
-                # if last_clicked == [model_name, ref_name]:
-                #     return html.Div(), None
+                # Only plot if the requested prop is present in the group
+                if prop not in props:
+                    print(f"Property '{prop}' not in group '{group_name}', skipping plot.")
+                    return html.Div(), [model_name, ref_name]
+                
 
                 tabs = []
 
-                for _prop in props:
+                # Only loop over the selected property (not all group properties)
+                for _prop in [prop]:
                     if _prop in NVT_properties_dict:
                         prop_data = NVT_properties_dict[_prop]
                     elif _prop in NPT_properties_dict:
@@ -1074,7 +1127,7 @@ class MolecularDynamics(zntrack.Node):
                     if x_key == "time" and y_key in ("vaf",):
                         x = x / 100  # VACF only
 
-                    fig.add_trace(go.Scatter(x=x, y=y, name=f"{ref_name} (Ref)", line=dict(dash="dash", color="black")))
+                    fig.add_trace(go.Scatter(x=x, y=y, name=f"{ref_name} (Ref)", line=dict(dash="dot", color="black")))
 
                     # Plot model
                     model = prop_data[model_name]
@@ -1094,6 +1147,35 @@ class MolecularDynamics(zntrack.Node):
                         yaxis_range=config.get("ylim"),
                         margin=dict(l=20, r=20, t=40, b=20),
                     )
+
+                    # Apply extras from plot config
+                    extras = config.get("extras", [])
+                    if "mean_lines" in extras and y_key == "density":
+                        avg_ref = np.mean(y)
+                        avg_model = np.mean(y_model)
+                        fig.add_trace(go.Scatter(
+                            x=x, y=[avg_ref]*len(x),
+                            mode="lines", name=f"{ref_name} Avg",
+                            line=dict(dash="dot", color="black", width=2)
+                        ))
+                        fig.add_trace(go.Scatter(
+                            x=x_model, y=[avg_model]*len(x_model),
+                            mode="lines", name=f"{model_name} Avg",
+                            line=dict(dash="dot", width=2, color="black")
+                        ))
+                    if "diffusion_slope" in extras and y_key == "msd":
+                        from scipy.stats import linregress
+                        x_model = np.array(x_model)
+                        y_model = np.array(y_model)
+                        mask = x_model > 10
+                        slope, intercept, _, _, _ = linregress(x_model[mask], y_model[mask])
+                        label = f"{model_name} D={slope/6:.3f} Å²/ps"
+                        fig.add_trace(go.Scatter(
+                            x=x_model, y=slope*x_model + intercept,
+                            mode="lines", name=label,
+                            line=dict(dash="dot", width=2, color="black")
+                        ))
+
 
                 return dcc.Graph(figure=fig), [model_name, ref_name]
             
@@ -1124,7 +1206,7 @@ class MolecularDynamics(zntrack.Node):
             group_df.to_pickle(f"{cache_dir}/mae_df_{group_name}.pkl")
         with open(f"{cache_dir}/rdf_data.pkl", "wb") as f:
             pickle.dump(NVT_properties_dict, f)
-        msd_dict = NVT_properties_dict["msd_O"]
+        msd_dict = NVT_properties_dict["msd"]
         with open(f"{cache_dir}/msd_data.pkl", "wb") as f:
             pickle.dump(msd_dict, f)
         vdos_dict = NVT_properties_dict["vdos"]
@@ -1161,7 +1243,7 @@ class MolecularDynamics(zntrack.Node):
             NVT_properties_dict = pickle.load(f)
         with open(f"{cache_dir}/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
-        NVT_properties_dict["msd_O"] = msd_dict
+        NVT_properties_dict["msd"] = msd_dict
         # Load vdos_data and add to NVT_properties_dict
         with open(f"{cache_dir}/vdos_data.pkl", "rb") as f:
             vdos_dict = pickle.load(f)
@@ -1205,6 +1287,7 @@ class MolecularDynamics(zntrack.Node):
                         html.Div(id=group["details_id"]),
                         dcc.Store(id=group["last_clicked_id"], data=None),
                     ],
+                    tooltip_header=group["tooltip_header"],
                 )
             )
             
@@ -1214,16 +1297,21 @@ class MolecularDynamics(zntrack.Node):
         
         
         
-        
+            
     @staticmethod
-    def compute_msd(traj, timestep=1, atom_symbol="O"):
+    def compute_msd(traj, timestep=1, atom_symbol=None):
         """
-        Compute the Mean Squared Displacement (MSD) for atoms of the given symbol.
+        Compute the Mean Squared Displacement (MSD) averaged over all time origins.
 
         Parameters
         ----------
-        atom_symbol : str
-            Element symbol (e.g., "O" or "H") for which to compute MSD.
+        traj : list of ase.Atoms
+            The trajectory.
+        timestep : float
+            Time step in femtoseconds (fs).
+        atom_symbol : str or None
+            Element symbol (e.g., "O" or "H") for which to compute MSD,
+            or None to use all atoms.
 
         Returns
         -------
@@ -1233,25 +1321,34 @@ class MolecularDynamics(zntrack.Node):
             MSD values at each time step.
         """
         from tqdm import tqdm
-        atom_indices = [atom.index for atom in traj[0] if atom.symbol == atom_symbol]
+        import numpy as np
+
+        if atom_symbol is None:
+            atom_indices = list(range(len(traj[0])))
+        else:
+            atom_indices = [atom.index for atom in traj[0] if atom.symbol == atom_symbol]        
+        
+        num_atoms = len(atom_indices)
         num_frames = len(traj)
-        initial_positions = traj[0].get_positions()[atom_indices]
-        msd_values = np.zeros(num_frames)
+        positions = np.array([atoms.get_positions()[atom_indices] for atoms in traj])  # shape: (num_frames, num_atoms, 3)
 
-        for i, atoms in enumerate(tqdm(traj, desc=f"Computing MSD for {atom_symbol}")):
-            current_positions = atoms.get_positions()[atom_indices]
-            displacements = current_positions - initial_positions
-            squared_displacements = np.sum(displacements**2, axis=1)
-            msd_values[i] = np.mean(squared_displacements)
+        max_lag = num_frames
+        msd_values = np.zeros(max_lag)
+        counts = np.zeros(max_lag)
 
-        timestep_fs = timestep
-        time_steps = np.arange(num_frames) * timestep_fs / 100
+        stride = 10
+        for lag in tqdm(range(max_lag), desc="Computing MSD"):
+            valid_origins = range(0, num_frames - lag, stride)
+            disps = [positions[t0 + lag] - positions[t0] for t0 in valid_origins]
+            displacements = np.stack(disps)
+
+            displacements = positions[lag:] - positions[:num_frames - lag]
+            squared_displacements = np.sum(displacements**2, axis=2)  # sum over x,y,z
+            msd_values[lag] = np.mean(squared_displacements)
+            counts[lag] = squared_displacements.size
+
+        time_steps = np.arange(max_lag) * timestep / 100  # fs → ps (points every 10 fs)
         return time_steps, msd_values
-    
-    
-    
-    
-
     
 
 

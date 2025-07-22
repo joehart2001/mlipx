@@ -1574,8 +1574,11 @@ def md_precompute(
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
 
-    MD_NVT_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_H2O-64_NVT_330K")
-    MD_NPT_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_H2O-64_NPT_MTK_330K")
+    NVT_nodes = [node for node in all_nodes if "NVT" in node]
+    NPT_nodes = [node for node in all_nodes if "NPT" in node]
+
+    MD_NVT_node_objects = load_node_objects(nodes, glob, models, NVT_nodes, split_str="_H2O-64_NVT_330K")
+    MD_NPT_node_objects = load_node_objects(nodes, glob, models, NPT_nodes, split_str="_H2O-64_NPT_MTK_330K")
 
     node_dict_NVT = load_nodes_model(MD_NVT_node_objects, models, split_str="_H2O-64_NVT_330K")
     node_dict_NPT = load_nodes_model(MD_NPT_node_objects, models, split_str="_H2O-64_NPT_MTK_330K")
@@ -1630,6 +1633,7 @@ def further_apps_precompute(
     fs = dvc.api.DVCFileSystem()
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
+        
 
     MD_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_H2O-64_NVT_330K")
 
@@ -1813,7 +1817,7 @@ def s24_precompute(
     
     from mlipx import S24Benchmark
     S24Benchmark.benchmark_precompute(
-        node_dict=node_objects,
+        node_dict=benchmark_node_dict,
         normalise_to_model=normalise_to_model,
     )
     

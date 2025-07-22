@@ -35,7 +35,7 @@ from plotly.io import write_image
 from ase.io import read
 from tqdm import tqdm
 from copy import deepcopy
-
+from ase.io import read, write
 from scipy.stats import gaussian_kde
 
 from mlipx.abc import ComparisonResults, NodeWithCalculator
@@ -67,6 +67,7 @@ class S24Benchmark(zntrack.Node):
     pred_energy_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s24_pred_energies.csv")
     ref_energy_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s24_ref_energies.csv")
     s24_mae_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s24_mae.json")
+    s24_structures_output: pathlib.Path = zntrack.outs_path(zntrack.nwd / "s24_mol_surface_atoms.xyz")
     
 
     def run(self):
@@ -83,6 +84,8 @@ class S24Benchmark(zntrack.Node):
 
         ref = {}
         pred = {}
+        mol_surface_list = []
+        
 
         for i in tqdm(range(0, len(atoms_list), 3), desc=f"Processing Triplets for model: {self.model_name}"):
             surface = atoms_list[i]
@@ -90,6 +93,9 @@ class S24Benchmark(zntrack.Node):
             molecule = atoms_list[i + 2]
             surface_formula = surface.get_chemical_formula()
             molecule_formula = molecule.get_chemical_formula()
+            
+            mol_surface.info["name"] = f"{surface_formula}-{molecule_formula}"
+            
 
             dft_surface_energy = surface.get_potential_energy()
             dft_mol_surface_energy = mol_surface.get_potential_energy()
@@ -108,8 +114,12 @@ class S24Benchmark(zntrack.Node):
 
             pred[f"{surface_formula}-{molecule_formula}"] = calc_abs_energy
             ref[f"{surface_formula}-{molecule_formula}"] = dft_abs_energy
+            
+            mol_surface_list.append(mol_surface)
 
         mae = np.mean([abs(pred[key] - ref[key]) for key in pred.keys() if key in ref])
+
+        write(self.s24_structures_output, mol_surface_list)
 
         # Save pred and ref as DataFrames with a system col, as CSV
         self.pred_energy_output.parent.mkdir(parents=True, exist_ok=True)
@@ -141,9 +151,12 @@ class S24Benchmark(zntrack.Node):
         with open(self.s24_mae_output, "r") as f:
             return json.load(f)
         
+    @property
+    def get_structures(self) -> List[ase.Atoms]:
+        """Get the structures from the S24 benchmark."""
+        return read(self.s24_structures_output, ":")
         
-        
-        
+    
         
         
         
@@ -154,7 +167,13 @@ class S24Benchmark(zntrack.Node):
         normalise_to_model: t.Optional[str] = None,
     ):
         from scipy.stats import pearsonr
-
+        
+        mol_surface_atoms = node_dict[list(node_dict.keys())[0]].get_structures
+        save_dir = os.path.abspath(f"assets/S24/")
+        os.makedirs(save_dir, exist_ok=True)
+        write(os.path.join(save_dir, "mol_surface_atoms.xyz"), mol_surface_atoms)
+        
+        
         mae_dict = {}
         
         pred_dict = {}
@@ -218,7 +237,10 @@ class S24Benchmark(zntrack.Node):
             )
 
         if app is None:
-            app = dash.Dash(__name__)
+            assets_dir = os.path.abspath("assets")
+            print("Serving assets from:", assets_dir)
+            app = dash.Dash(__name__, assets_folder=assets_dir)
+            
             app.layout = layout
             callback_fn(app)
             return run_app(app, ui=ui)
@@ -234,15 +256,30 @@ class S24Benchmark(zntrack.Node):
                 id="s24-mae-table",
                 benchmark_info="Benchmark info:",
                 title="S24 Dataset",
-                extra_components=[
-                    html.Div(id="s24-model-plot"),
-                ],
                 tooltip_header={
                     "Model": "Name of the MLIP",
                     "MAE (meV)": "Mean Absolute Error (meV)",
                     "Score \u2193": "MAE (normalised)",
                     "Rank": "Model rank based on score (lower is better)"
-                }
+                },
+                extra_components=[
+                    html.Div(
+                        children=[
+                            html.Div(
+                                "Click on the points to see the structure!",
+                                style={
+                                    "color": "red",
+                                    "fontWeight": "bold",
+                                    "marginBottom": "10px"
+                                }
+                            ),
+                            dcc.Graph(id="s24-plot")
+                        ],
+                        id="s24-plot-container",
+                        style={"display": "none"},
+                    ),
+                    html.Div(id="weas-viewer-s24", style={'marginTop': '20px'}),
+                ]
             )
         ])
         
@@ -258,11 +295,13 @@ class S24Benchmark(zntrack.Node):
         pred_df: pd.DataFrame,
         ref_df: pd.DataFrame
     ): 
+        from mlipx.dash_utils import weas_viewer_callback
         from sklearn.metrics import mean_absolute_error, mean_squared_error
         from scipy.stats import pearsonr
 
         @app.callback(
-            Output("s24-model-plot", "children"),
+            Output("s24-plot", "figure"),
+            Output("s24-plot-container", "style"),
             Input("s24-mae-table", "active_cell"),
             State("s24-mae-table", "data"),
         )
@@ -325,4 +364,19 @@ class S24Benchmark(zntrack.Node):
                 ]
             )
 
-            return dcc.Graph(figure=fig)
+            return fig, {"display": "block"}
+
+        @app.callback(
+            Output("weas-viewer-s24", "children"),
+            Output("weas-viewer-s24", "style"),
+            Input("s24-plot", "clickData"),
+        )
+        def update_weas_viewer(clickData):
+            if not clickData:
+                raise PreventUpdate
+            return weas_viewer_callback(
+                clickData,
+                "assets/S24/mol_surface_atoms.xyz",
+                mode="info",
+                info_key="name",
+            )

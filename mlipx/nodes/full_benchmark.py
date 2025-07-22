@@ -87,17 +87,26 @@ class FullBenchmark(zntrack.Node):
     """ Node to combine all bulk crystal benchmarks
     """
     # inputs
-    bulk_crystal_benchmark: List[BulkCrystalBenchmark] = zntrack.deps()
-    mol_crystal_benchmark: List[MolecularCrystalBenchmark] = zntrack.deps()
-    mol_benchmark: List[MolecularBenchmark] = zntrack.deps()
-    further_apps_benchmark: List[FurtherApplications] = zntrack.deps()
-    neb_further_apps_benchmark: List[NEBFurtherApplications] = zntrack.deps()
-    surface_benchmark: List[SurfaceBenchmark] = zntrack.deps()
-    supramolecular_complex_benchmark: List[SupramolecularComplexBenchmark] = zntrack.deps()
-    physicality_benchmark: List[PhysicalityBenchmark] = zntrack.deps()
-    mof_benchmark: List[MOFBenchmark] = zntrack.deps()
-    
-    
+    # bulk_crystal_benchmark: List[BulkCrystalBenchmark] = zntrack.deps()
+    # mol_crystal_benchmark: List[MolecularCrystalBenchmark] = zntrack.deps()
+    # mol_benchmark: List[MolecularBenchmark] = zntrack.deps()
+    # further_apps_benchmark: List[FurtherApplications] = zntrack.deps()
+    # neb_further_apps_benchmark: List[NEBFurtherApplications] = zntrack.deps()
+    # surface_benchmark: List[SurfaceBenchmark] = zntrack.deps()
+    # supramolecular_complex_benchmark: List[SupramolecularComplexBenchmark] = zntrack.deps()
+    # physicality_benchmark: List[PhysicalityBenchmark] = zntrack.deps()
+    # mof_benchmark: List[MOFBenchmark] = zntrack.deps()
+        
+    bulk_crystal_benchmark: Optional[List[BulkCrystalBenchmark]] = zntrack.deps(None)
+    mol_crystal_benchmark: Optional[List[MolecularCrystalBenchmark]] = zntrack.deps(None)
+    mol_benchmark: Optional[List[MolecularBenchmark]] = zntrack.deps(None)
+    further_apps_benchmark: Optional[List[FurtherApplications]] = zntrack.deps(None)
+    neb_further_apps_benchmark: Optional[List[NEBFurtherApplications]] = zntrack.deps(None)
+    surface_benchmark: Optional[List[SurfaceBenchmark]] = zntrack.deps(None)
+    supramolecular_complex_benchmark: Optional[List[SupramolecularComplexBenchmark]] = zntrack.deps(None)
+    physicality_benchmark: Optional[List[PhysicalityBenchmark]] = zntrack.deps(None)
+    mof_benchmark: Optional[List[MOFBenchmark]] = zntrack.deps(None)
+
     def run(self):
         pass
         
@@ -298,6 +307,10 @@ class FullBenchmark(zntrack.Node):
         mol_callback_fn(app_summary)
         further_callback_fn(app_summary)
         neb_further_callback_fn(app_summary)
+        surface_callback_fn(app_summary)
+        supramolecular_callback_fn(app_summary)
+        physicality_callback_fn(app_summary)
+        mof_callback_fn(app_summary)
 
         @app_summary.callback(
             dash.Output("tab-content", "children"),

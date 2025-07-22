@@ -787,7 +787,13 @@ def weas_viewer_callback(
         index = atoms_list.index(atoms)
         title = label
     elif mode in ("index", "trajectory"):
-        index = int(clickData["points"][0].get(index_key, 0))
+        # Support both Plotly clickData and Dash DataTable active_cell
+        if "points" in clickData:
+            index = int(clickData["points"][0].get(index_key, 0))
+        elif isinstance(clickData, dict) and "row" in clickData:
+            index = int(clickData["row"])
+        else:
+            raise dash.exceptions.PreventUpdate
         if not (0 <= index < len(atoms_list)):
             raise dash.exceptions.PreventUpdate
         title = f"Frame {index}"

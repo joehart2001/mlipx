@@ -1024,6 +1024,15 @@ def create_benchmark_command(template_file: str, category_benchmark: bool = Fals
         use_janus: bool = False,
         all_images: bool = False,
         n_mofs: int | None = None,
+        run_bulk_crystal: bool = True,
+        run_mol_crystal: bool = True,
+        run_mol: bool = True,
+        run_further_apps: bool = True,
+        run_further_apps_neb: bool = True,
+        run_surface: bool = True,
+        run_physicality: bool = True,
+        run_supramolecular: bool = True,
+        run_mof: bool = True,
     ):
         """Run a benchmark."""
         if models is not None:
@@ -1068,6 +1077,15 @@ def create_benchmark_command(template_file: str, category_benchmark: bool = Fals
             use_janus=use_janus,
             all_images=all_images,
             n_mofs=n_mofs,
+            run_bulk_crystal=run_bulk_crystal,
+            run_mol_crystal=run_mol_crystal,
+            run_mol=run_mol,
+            run_further_apps=run_further_apps,
+            run_further_apps_neb=run_further_apps_neb,
+            run_surface=run_surface,
+            run_physicality=run_physicality,
+            run_supramolecular=run_supramolecular,
+            run_mof=run_mof,
         )
         handler(
             template_file,

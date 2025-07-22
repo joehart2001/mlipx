@@ -26,16 +26,70 @@ project = zntrack.Project()
 
 
 {% set standalone = false %}
-{% include "bulk_crystal_benchmark.py.jinja2" %}
-{% include "molecular_crystal_benchmark.py.jinja2" %}
-{% include "molecular_benchmark.py.jinja2" %}
-{% include "further_applications.py.jinja2" %}
 
+{% if run_bulk_crystal %}
+{% include "bulk_crystal_benchmark.py.jinja2" %}
+{% else %}
+bulk_crystal_benchmark = None
+{% endif %}
+
+{% if run_mol_crystal %}
+{% include "molecular_crystal_benchmark.py.jinja2" %}
+{% else %}
+mol_benchmark = None
+{% endif %}
+
+{% if run_mol %}
+{% include "molecular_benchmark.py.jinja2" %}
+{% else %}
+mol_benchmark = None
+{% endif %}
+
+{% if run_further_apps %}
+{% include "further_applications.py.jinja2" %}
+{% else %}
+further_apps_benchmark = None
+{% endif %}
+
+{% if run_further_apps_neb %}
 {% include "further_applications_NEB.py.jinja2" %}
+{% else %}
+neb_further_apps_benchmark = None
+{% endif %}
+
+{% if run_surface %}
 {% include "surface_benchmark.py.jinja2" %}
+{% else %}
+surface_benchmark = None 
+{% endif %}
+
+{% if run_physicality %}
 {% include "physicality_benchmark.py.jinja2" %}
+{% else %}
+physicality_benchmark = None
+{% endif %}
+
+{% if run_supramolecular %}
 {% include "supramolecular_complex_benchmark.py.jinja2" %}
+{% else %}
+supramolecular_complex_benchmark = None
+{% endif %}
+
+{% if run_mof %}
 {% include "MOF_benchmark.py.jinja2" %}
+{% else %}
+mof_benchmark = None
+{% endif %}
+
+# {% include "molecular_crystal_benchmark.py.jinja2" %}
+# {% include "molecular_benchmark.py.jinja2" %}
+# {% include "further_applications.py.jinja2" %}
+
+# {% include "further_applications_NEB.py.jinja2" %}
+# {% include "surface_benchmark.py.jinja2" %}
+# {% include "physicality_benchmark.py.jinja2" %}
+# {% include "supramolecular_complex_benchmark.py.jinja2" %}
+# {% include "MOF_benchmark.py.jinja2" %}
 
 with project.group("full-benchmark"):
     full_benchmark = mlipx.FullBenchmark(
