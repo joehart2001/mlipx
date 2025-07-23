@@ -34,6 +34,11 @@ n_jobs = -1
 print(f"Parallelisation over {n_jobs} jobs")
 {% endif %}
 
+{% if relax_deformed_structures %}
+relax_deformed_structures = True
+{% else %}
+relax_deformed_structures = False
+{% endif %}
 
 print(f"Elasticity benchmark on {n_materials} mp-ids")
 
@@ -47,6 +52,7 @@ for model_name, model in MODELS.items():
             model_name=model_name,
             n_materials=n_materials,
             n_jobs=n_jobs,
+            relax_deformed_structures=relax_deformed_structures,
         )
         elasticity_dict[model_name] = benchmark
         elasticity_list.append(benchmark)
