@@ -71,7 +71,8 @@ class FurtherApplications(zntrack.Node):
 
     @staticmethod
     def benchmark_precompute(
-        MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
+        MD_NVT_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
+        MD_NPT_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
         cache_dir: str = "app_cache/further_applications_benchmark",
         ui: str = "browser",
         report: bool = False,
@@ -80,15 +81,21 @@ class FurtherApplications(zntrack.Node):
         from mlipx.dash_utils import process_data
         os.makedirs(cache_dir, exist_ok=True)
 
-        MD_dict = process_data(
-            MD_data,
+        MD_NVT_dict = process_data(
+            MD_NVT_data,
             key_extractor=lambda node: node.name.split("_H2O-64_NVT_330K")[0],
+            value_extractor=lambda node: node
+        )
+        MD_NPT_dict = process_data(
+            MD_NPT_data,
+            key_extractor=lambda node: node.name.split("_H2O-64_NPT_MTK_330K")[0],
             value_extractor=lambda node: node
         )
         
         os.makedirs(cache_dir, exist_ok=True)
         MolecularDynamics.benchmark_precompute(
-            node_dict_NVT=MD_dict,
+            node_dict_NVT=MD_NVT_dict,
+            node_dict_NPT=MD_NPT_dict,
             ui=ui,
             run_interactive=False,
             normalise_to_model=normalise_to_model,
@@ -105,12 +112,14 @@ class FurtherApplications(zntrack.Node):
         group_mae_tables = {}
         for group_name in groups:
             group_mae_tables[group_name] = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_{group_name}.pkl")
-        with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
-            properties_dict = pickle.load(f)
-        with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
-            msd_dict = pickle.load(f)
-        properties_dict["msd_O"] = msd_dict
-        
+        # with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
+        #     NVT_properties_dict = pickle.load(f)
+        # with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
+        #     msd_dict = pickle.load(f)
+        # NVT_properties_dict["msd_O"] = msd_dict
+        # # Load NPT property data
+        # with open(f"{cache_dir}/npt_data.pkl", "rb") as f:
+        #     NPT_properties_dict = pickle.load(f)
         
 
         benchmark_score_df = FurtherApplications.benchmark_score(groups=groups, group_mae_tables=group_mae_tables, normalise_to_model=normalise_to_model).round(3)
@@ -142,15 +151,22 @@ class FurtherApplications(zntrack.Node):
         for group_name in groups:
             group_mae_tables[group_name] = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_{group_name}.pkl")
         with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
-            properties_dict = pickle.load(f)
+            NVT_properties_dict = pickle.load(f)
+        with open(f"{cache_dir}/molecular_dynamics_cache/vdos_data.pkl", "rb") as f:
+            vdos_dict = pickle.load(f)
+        NVT_properties_dict["vdos"] = vdos_dict
         with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
             msd_dict = pickle.load(f)
-        properties_dict["msd_O"] = msd_dict
-
+        NVT_properties_dict["msd_O"] = msd_dict
+        # Load NPT property data
+        with open(f"{cache_dir}/molecular_dynamics_cache/npt_data.pkl", "rb") as f:
+            NPT_properties_dict = pickle.load(f)
+            
         callback_fn = FurtherApplications.callback_fn_from_cache(
             groups=groups,
             group_mae_tables=group_mae_tables,
-            properties_dict=properties_dict,
+            NVT_properties_dict=NVT_properties_dict,
+            NPT_properties_dict=NPT_properties_dict,
         )
 
         app = dash.Dash(__name__)
@@ -182,7 +198,8 @@ class FurtherApplications(zntrack.Node):
         #mae_df_list,
         groups,
         group_mae_tables,
-        properties_dict,
+        NVT_properties_dict,
+        NPT_properties_dict,
         normalise_to_model=None
     ):
         """
@@ -212,7 +229,8 @@ class FurtherApplications(zntrack.Node):
                 app,
                 groups=groups,
                 group_mae_tables=group_mae_tables,
-                NVT_properties_dict=properties_dict,
+                NVT_properties_dict=NVT_properties_dict,
+                NPT_properties_dict=NPT_properties_dict,
             )
         return callback_fn
     

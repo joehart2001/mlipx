@@ -1144,7 +1144,7 @@ def full_benchmark_precompute(
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
     #ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     #return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
-    report: Annotated[bool, Option("--report", help="Generate a report")] = True,
+    report: Annotated[bool, Option("--report", help="Generate a report")] = False,
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
     ):
     
@@ -1219,14 +1219,17 @@ def full_benchmark_precompute(
         split_str_HD="_homonuclear-diatomics",
         split_str_wiggle150="_Wiggle150",
     )
-    
-    MD_dict = get_further_apps_benchmark_node_dicts(
+
+    MD_NVT_dict, MD_NPT_dict = get_further_apps_benchmark_node_dicts(
         nodes,
         glob,
         models,
         all_nodes,
-        split_str_MD="_H2O-64_NVT_330K",
+        split_str_NVT="_H2O-64_NVT_330K",
+        split_str_NPT="_H2O-64_NPT_MTK_330K",
     )
+    
+
     
     neb_dict = get_neb_further_apps_dict(
         nodes,
@@ -1535,16 +1538,22 @@ def get_further_apps_benchmark_node_dicts(
     glob: bool,
     models: list[str] | None,
     all_nodes: list[str],
-    split_str_MD: str = "_H2O-64_NVT_330K",
+    split_str_NVT: str = "_H2O-64_NVT_330K",
+    split_str_NPT: str = "_H2O-64_NPT_MTK_330K",
 ) -> dict[str, zntrack.Node]:
     
-    MD_nodes = [node for node in all_nodes if "MolecularDynamics" in node]
 
-    MD_node_objects = load_node_objects(nodes, glob, models, MD_nodes, split_str="_H2O-64_NVT_330K")
 
-    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_H2O-64_NVT_330K")
+    NVT_nodes = [node for node in all_nodes if "NVT" in node]
+    NPT_nodes = [node for node in all_nodes if "NPT" in node]
 
-    return MD_dict
+    MD_NVT_node_objects = load_node_objects(nodes, glob, models, NVT_nodes, split_str=split_str_NVT)
+    MD_NPT_node_objects = load_node_objects(nodes, glob, models, NPT_nodes, split_str=split_str_NPT)
+
+    node_dict_NVT = load_nodes_model(MD_NVT_node_objects, models, split_str=split_str_NVT)
+    node_dict_NPT = load_nodes_model(MD_NPT_node_objects, models, split_str=split_str_NPT)
+
+    return node_dict_NVT, node_dict_NPT
 
 
 
@@ -1636,14 +1645,19 @@ def further_apps_precompute(
     with fs.open("zntrack.json", mode="r") as f:
         all_nodes = list(json.load(f).keys())
         
+    NVT_nodes = [node for node in all_nodes if "NVT" in node]
+    NPT_nodes = [node for node in all_nodes if "NPT" in node]
 
-    MD_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_H2O-64_NVT_330K")
+    MD_NVT_node_objects = load_node_objects(nodes, glob, models, NVT_nodes, split_str="_H2O-64_NVT_330K")
+    MD_NPT_node_objects = load_node_objects(nodes, glob, models, NPT_nodes, split_str="_H2O-64_NPT_MTK_330K")
 
-    MD_dict = load_nodes_model(MD_node_objects, models, split_str="_H2O-64_NVT_330K")
+    node_dict_NVT = load_nodes_model(MD_NVT_node_objects, models, split_str="_H2O-64_NVT_330K")
+    node_dict_NPT = load_nodes_model(MD_NPT_node_objects, models, split_str="_H2O-64_NPT_MTK_330K")
 
     from mlipx import FurtherApplications
     FurtherApplications.benchmark_precompute(
-        MD_data=MD_dict,
+        MD_NVT_data=node_dict_NVT,
+        MD_NPT_data=node_dict_NPT,
         normalise_to_model=normalise_to_model,
     )
     

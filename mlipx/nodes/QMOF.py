@@ -234,7 +234,7 @@ class QMOFBenchmark(zntrack.Node):
                         id="QMOF-plot-container",
                         style={"display": "none"},
                     ),
-                    html.Div(id="weas-viewer-QMOF", style={'marginTop': '20px'}),
+                    #html.Div(id="weas-viewer-QMOF", style={'marginTop': '20px'}),
                 ]
             )
         ])
@@ -265,60 +265,82 @@ class QMOFBenchmark(zntrack.Node):
                 return dash.no_update, {"display": "none"}
 
             df = pred_df.copy()
-            df = df[df["Model"] == clicked_model]
-
-            fig = go.Figure()
-            fig.add_trace(
-                go.Scatter(
-                    x=df["E_ref (eV/atom)"],
-                    y=df["E_model (eV/atom)"],
-                    mode="markers",
-                    marker=dict(size=6, opacity=0.7),
-                    customdata=df["qmof_id"],  # ← fixed value
-                    text=[
-                        f"qmof_id: {i}<br>DFT: {e_ref:.3f} eV/atom<br>{clicked_model}: {e_model:.3f} eV/atom"
-                        for i, e_ref, e_model in zip(df["qmof_id"], df["E_ref (eV/atom)"], df["E_model (eV/atom)"])
-                    ],
-                    hoverinfo="text",
-                    name=clicked_model
-                )
-            )
-            fig.add_trace(go.Scatter(
-                x=[-10, 10], y=[-10, 10],
-                mode="lines",
-                line=dict(dash="dash", color="black", width=1),
-                showlegend=False
-            ))
-
+            print(df)
+            #df = df[df["Model"] == clicked_model]
+            
+            x = df["E_ref (eV/atom)"]
+            y = df["E_model (eV/atom)"]
             mae = (df["E_model (eV/atom)"] - df["E_ref (eV/atom)"]).abs().mean()
+            mae = mae.round(3)
+            
+            from mlipx.plotting_utils import generate_density_scatter_figure
+            fig, cell_points, *_ = generate_density_scatter_figure(x, y, label=clicked_model, mae=mae, mode="QMOF")
 
-            fig.update_layout(
-                title=f"{clicked_model} vs DFT Interaction Energies",
-                xaxis_title="DFT Energy [eV/atom]",
-                yaxis_title=f"{clicked_model} Energy [eV/atom]",
-                annotations=[
-                    dict(
-                        text=f"N = {len(df)}<br>MAE = {mae:.2f} (ev/atom)",
-                        xref="paper", yref="paper",
-                        x=0.01, y=0.99, showarrow=False,
-                        align="left", bgcolor="white", font=dict(size=10)
-                    )
-                ]
-            )
+
+            graph = html.Div([
+                dcc.Graph(
+                    id={'type': 'scatter-plot', 'index': 'main'},
+                    figure=fig,
+                    style={"height": "60vh"}
+                )
+            ])
 
             return fig, {"display": "block"}
+        
+        
+        
+            # fig = go.Figure()
+            # fig.add_trace(
+            #     go.Scatter(
+            #         x=df["E_ref (eV/atom)"],
+            #         y=df["E_model (eV/atom)"],
+            #         mode="markers",
+            #         marker=dict(size=6, opacity=0.7),
+            #         customdata=df["qmof_id"],  # ← fixed value
+            #         text=[
+            #             f"qmof_id: {i}<br>DFT: {e_ref:.3f} eV/atom<br>{clicked_model}: {e_model:.3f} eV/atom"
+            #             for i, e_ref, e_model in zip(df["qmof_id"], df["E_ref (eV/atom)"], df["E_model (eV/atom)"])
+            #         ],
+            #         hoverinfo="text",
+            #         name=clicked_model
+            #     )
+            # )
+            # fig.add_trace(go.Scatter(
+            #     x=[-10, 10], y=[-10, 10],
+            #     mode="lines",
+            #     line=dict(dash="dash", color="black", width=1),
+            #     showlegend=False
+            # ))
 
-        @app.callback(
-            Output("weas-viewer-QMOF", "children"),
-            Output("weas-viewer-QMOF", "style"),
-            Input("QMOF-plot", "clickData"),
-        )
-        def update_weas_viewer(clickData):
-            if not clickData:
-                raise PreventUpdate
-            return weas_viewer_callback(
-                clickData,
-                "assets/QMOF/mofs.xyz",
-                mode="info",
-                info_key="qmof_id",
-            )
+            # mae = (df["E_model (eV/atom)"] - df["E_ref (eV/atom)"]).abs().mean()
+
+            # fig.update_layout(
+            #     title=f"{clicked_model} vs DFT Interaction Energies",
+            #     xaxis_title="DFT Energy [eV/atom]",
+            #     yaxis_title=f"{clicked_model} Energy [eV/atom]",
+            #     annotations=[
+            #         dict(
+            #             text=f"N = {len(df)}<br>MAE = {mae:.2f} (ev/atom)",
+            #             xref="paper", yref="paper",
+            #             x=0.01, y=0.99, showarrow=False,
+            #             align="left", bgcolor="white", font=dict(size=10)
+            #         )
+            #     ]
+            # )
+
+            # return fig, {"display": "block"}
+
+        # @app.callback(
+        #     Output("weas-viewer-QMOF", "children"),
+        #     Output("weas-viewer-QMOF", "style"),
+        #     Input("QMOF-plot", "clickData"),
+        # )
+        # def update_weas_viewer(clickData):
+        #     if not clickData:
+        #         raise PreventUpdate
+        #     return weas_viewer_callback(
+        #         clickData,
+        #         "assets/QMOF/mofs.xyz",
+        #         mode="info",
+        #         info_key="qmof_id",
+        #     )
