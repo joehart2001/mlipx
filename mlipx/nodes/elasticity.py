@@ -94,7 +94,6 @@ class Elasticity(zntrack.Node):
 
     def run(self):
         
-        #calc = self.model.get_calculator(device_override="cpu")
         calc = self.model.get_calculator()
         
         
@@ -102,7 +101,7 @@ class Elasticity(zntrack.Node):
         benchmark = ElasticityBenchmark(n_samples=self.n_materials, seed=2025, 
                                         fmax=self.fmax, 
                                         relax_structure=self.relax_structure,
-                                        relax_deformed_structures=True,
+                                        relax_deformed_structures=self.relax_deformed_structures,
                                         norm_strains = self.norm_strains,
                                         shear_strains = self.shear_strains,
                                         benchmark_name = "mp-pbe-elasticity-2025.3.json.gz"
