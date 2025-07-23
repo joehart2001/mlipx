@@ -64,7 +64,7 @@ class QMOFBenchmark(zntrack.Node):
 
         calc = self.model.get_calculator()
         base_dir = get_benchmark_data("QMOF.zip") / "QMOF"
-        structures = read(base_dir / "qmof_valid_structures.xyz", index=":")
+        structures = read(base_dir / "qmof_valid_structures.xyz", index=":", format="extxyz")
 
 
         def calc_mof_energies(structures, calc, model_name, n_mofs = None):

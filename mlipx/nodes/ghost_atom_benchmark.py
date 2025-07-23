@@ -221,6 +221,7 @@ class GhostAtomBenchmark(zntrack.Node):
         os.makedirs(cache_dir, exist_ok=True)
         df_list = []
         for model_name, node in node_dict.items():
+            print(f"Processing {model_name} ghost atom benchmark")
             df = node.get_results.copy()
             #df["Model"] = model_name  # ensure model name column
             df_list.append(df)
@@ -244,6 +245,9 @@ class GhostAtomBenchmark(zntrack.Node):
         full_df["Rank"] = full_df["Score"].rank(ascending=True, method="min")
         
         full_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
+        
+        print("ghost atom benchmark df")
+        print(full_df)
 
 
 
@@ -306,7 +310,10 @@ class GhostAtomBenchmark(zntrack.Node):
         
         
     @staticmethod
-    def register_callbacks(app, results_df, cache_dir):
+    def register_callbacks(
+        app, 
+        results_df, 
+    ):
         from mlipx.dash_utils import weas_viewer_callback
 
         @app.callback(
@@ -324,7 +331,6 @@ class GhostAtomBenchmark(zntrack.Node):
             col = active_cell["column_id"]
 
             if "test1" in col:
-                structure_path = os.path.join(cache_dir, clicked_model, "ghost_atom_structure.xyz")
 
                 return weas_viewer_callback(
                     active_cell,
@@ -334,7 +340,6 @@ class GhostAtomBenchmark(zntrack.Node):
                 )
                 
             elif "test2" in col:
-                structure_path = os.path.join(cache_dir, clicked_model, "random_H_structures.xyz")
 
                 return weas_viewer_callback(
                     active_cell,

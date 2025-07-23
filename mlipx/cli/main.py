@@ -387,17 +387,16 @@ def load_node_objects(
 
     # Instantiate nodes
     node_objects = {}
-    # def load_node(name):
-    #     return name, zntrack.from_rev(name)
-
-    # with ThreadPoolExecutor() as executor:
-    #     futures = {executor.submit(load_node, name): name for name in selected_nodes}
-    #     for future in tqdm(as_completed(futures), total=len(futures), desc="Loading ZnTrack nodes"):
-    #         name, obj = future.result()
-    #         node_objects[name] = obj
         
     for name in selected_nodes:
-        node_objects[name] = zntrack.from_rev(name)
+
+        #print(f"Loading node: {name}")
+        try:
+            node_objects[name] = zntrack.from_rev(name)
+        except Exception as e:
+            print(f"[ERROR] Could not load node '{name}': {e}")
+            import traceback
+            traceback.print_exc()
 
     return node_objects
     
@@ -1590,6 +1589,9 @@ def md_precompute(
         normalise_to_model=normalise_to_model,
     )
     
+    
+
+
 
 
 @app.command()
@@ -1913,7 +1915,34 @@ def surface_benchmark_launch_dashboard(
     
 
 
+@app.command()
+def ghost_atom_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    nodes = [
+        "*GhostAtomBenchmark*",
+    ]
+    glob = True
     
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+        
+        
+    ghost_atom_node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_ghost-atom")
+    
+    ghost_atom_dict = load_nodes_model(ghost_atom_node_objects, models, split_str="_ghost-atom")
+    
+    print("ghost atom dict")
+    print(ghost_atom_dict.keys())
+    
+    from mlipx import GhostAtomBenchmark
+    GhostAtomBenchmark.benchmark_precompute(
+        node_dict=ghost_atom_dict,
+        normalise_to_model=normalise_to_model,
+    )
     
     
 @app.command()
@@ -1942,7 +1971,8 @@ def physicality_precompute(
     ghost_atom_dict = load_nodes_model(ghost_atom_node_objects, models, split_str="_ghost-atom")
     slab_extensivity_dict = load_nodes_model(slab_extensivity_node_objects, models, split_str="_slab-extensivity")
     
-    
+    print("ghost atom dict")
+    print(ghost_atom_dict.keys())
     
     from mlipx import PhysicalityBenchmark
     PhysicalityBenchmark.benchmark_precompute(

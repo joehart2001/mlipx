@@ -701,7 +701,7 @@ class MolecularDynamics(zntrack.Node):
                 if prop not in NVT_properties_dict:
                     NVT_properties_dict[prop] = {}
                 if prop == 'msd':
-                    time, msd = MolecularDynamics.compute_msd(traj, timestep=1)
+                    time, msd = MolecularDynamics.compute_msd(traj[::50], timestep=1)
                     NVT_properties_dict[prop][model_name] = {
                         "time": time.tolist(),
                         "msd": msd.tolist(),
@@ -893,9 +893,12 @@ class MolecularDynamics(zntrack.Node):
                         t_model = np.array(model_data["time"])
                         msd_model = np.array(model_data["msd"])
                         from scipy.stats import linregress
-                        mask = (t_model > 10)
+                        #mask = (t_model > 10)
+                        #print(t_model, msd_model)
+                        #print(t_model[mask], msd_model[mask])
 
-                        slope, _, _, _, _ = linregress(t_model[mask], msd_model[mask])
+                        #slope, _, _, _, _ = linregress(t_model[mask], msd_model[mask])
+                        slope, _, _, _, _ = linregress(t_model, msd_model)
                         D_model = slope / 6  # Diffusion coefficient from MSD slope
                         D_ref = ref_data.get("D", None)
                         if D_ref is None:
@@ -923,8 +926,8 @@ class MolecularDynamics(zntrack.Node):
         # --- Helper to build group MAE tables ---
         def build_group_mae_table(group, properties_dict, model_names, normalise_to_model=None):
             import pandas as pd
-            dfs = []
-            scores = {}
+            dfs = []            
+                
             for prop in group.get("NVT_properties", []) + group.get("NPT_properties", []):
                 print(f"Computing MAE for property '{prop}' in group '{group['title']}'")
                 df = compute_mae_table(prop, properties_dict, model_names)
@@ -932,25 +935,35 @@ class MolecularDynamics(zntrack.Node):
                     print(df)
                     print(f"No data for property '{prop}' in group '{group['title']}'")
                     continue
-                #print(prop)
-                #print(df)
-                mae_cols = [col for col in df.columns if col != "Model"]
-                ref_col = mae_cols[0]  # Assume first column is the reference
 
-                if normalise_to_model is not None:
-                    match = df[df["Model"] == normalise_to_model]
-                    ref_mae = match[ref_col].values[0]
-                    scores[prop] = df[ref_col] / ref_mae
-
-                else:
-                    scores[prop] = df[ref_col]
-                    
                 dfs.append(df.set_index("Model"))
 
             merged = pd.concat(dfs, axis=1)
-            merged["Score ↓"] = np.average(list(scores.values()))
+            merged["Model"] = merged.index
+            # --- begin patch ---
+            merged.reset_index(drop=True, inplace=True)
+            cols = ["Model"] + [col for col in merged.columns if col != "Model"]
+            merged = merged[cols]
+            # --- end patch ---
+            
+            group_score = 0
+            mae_cols = [col for col in merged.columns if col != "Model"]
+            for model_name in model_names:
+                for col in mae_cols:                    
+                    if normalise_to_model is not None:
+                        ref = merged.loc[merged["Model"] == normalise_to_model, col].values[0]
+                        group_score += merged.loc[merged["Model"] == model_name, col].values[0] / ref
+                    else:
+                        
+                        group_score += merged.loc[merged["Model"] == model_name, col].values[0]
+
+                merged.loc[merged["Model"] == model_name, "Score ↓"] = group_score / len(mae_cols)
+
+
             merged["Rank"] = merged["Score ↓"].rank(method="min").astype(int)
-            merged.reset_index(inplace=True)
+            merged.reset_index(drop=True, inplace=True)
+            print("merged df:", merged)
+            print(merged)
             return merged.round(3)
 
         # Build group MAE tables
@@ -1167,8 +1180,9 @@ class MolecularDynamics(zntrack.Node):
                         from scipy.stats import linregress
                         x_model = np.array(x_model)
                         y_model = np.array(y_model)
-                        mask = x_model > 10
-                        slope, intercept, _, _, _ = linregress(x_model[mask], y_model[mask])
+                        #mask = x_model > 10
+                        #slope, intercept, _, _, _ = linregress(x_model[mask], y_model[mask])
+                        slope, intercept, _, _, _ = linregress(x_model, y_model)
                         label = f"{model_name} D={slope/6:.3f} Å²/ps"
                         fig.add_trace(go.Scatter(
                             x=x_model, y=slope*x_model + intercept,

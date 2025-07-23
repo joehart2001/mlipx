@@ -161,7 +161,11 @@ class PhysicalityBenchmark(zntrack.Node):
             normalise_to_model=normalise_to_model,
         )
 
-        app = dash.Dash(__name__, suppress_callback_exceptions=True)
+        assets_dir = os.path.abspath("assets")
+        print("Serving assets from:", assets_dir)
+        app = dash.Dash(__name__, assets_folder=assets_dir)
+            
+        #app = dash.Dash(__name__, suppress_callback_exceptions=True)
 
         layout = combine_apps(
             benchmark_score_df=benchmark_score_df,
