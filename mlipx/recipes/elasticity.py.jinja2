@@ -36,8 +36,10 @@ print(f"Parallelisation over {n_jobs} jobs")
 
 {% if relax_deformed_structures %}
 relax_deformed_structures = True
+print("Relaxing deformed structures")
 {% else %}
 relax_deformed_structures = False
+print("Not relaxing deformed structures")
 {% endif %}
 
 print(f"Elasticity benchmark on {n_materials} mp-ids")
