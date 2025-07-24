@@ -672,6 +672,7 @@ class MolecularDynamics(zntrack.Node):
                 "details_id": "npt-table-details",
                 "last_clicked_id": "npt-table-last-clicked",
                 "title": "NPT Properties: Density",
+                "benchmark_info": "MTK NPT at 330K, 64 water molecules, 50k steps, 1 fs timestep.",
                 "tooltip_header": {
                     **common_tooltips,
                     "density (PBE_330K)": "Absolute error for mean density of water vs NPT PBE at 330K",
@@ -1292,6 +1293,7 @@ class MolecularDynamics(zntrack.Node):
         for group_name, group in groups.items():
             group_df = group_mae_tables[group_name]
             layout_children.append(html.H3(group["title"]))
+            layout_children.append(html.P(group['benchmark_info']))
             layout_children.append(
                 dash_table_interactive(
                     df=group_df,
