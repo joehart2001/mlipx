@@ -52,7 +52,10 @@ class OrbCalc:
         os.environ["TORCH_DISABLE_MODULE_HIERARCHY_TRACKING"] = "1"
 
         method = getattr(pretrained, self.name)
-        precision = self.kwargs.pop("precision", "float32-high")
+
+        precision = self.kwargs.pop("precision", None) # check kwargs first
+        if precision is None:
+            precision = getattr(self, "precision", "float32-high")
 
         if self.device is None:
             orbff = method(**self.kwargs, precision=precision)
