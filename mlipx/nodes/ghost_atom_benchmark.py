@@ -235,13 +235,17 @@ class GhostAtomBenchmark(zntrack.Node):
             write(Path(structure_save_dir) / "random_H_structures.xyz",random_H_structures)
 
         full_df = pd.concat(df_list, ignore_index=True)
-        
+        numeric_cols = full_df.select_dtypes(include='number').columns
+        full_df[numeric_cols] = full_df[numeric_cols] * 1000  # convert to meV
+
         full_df["Score"] = full_df["test2 mean ΔF"]
         
         if normalise_to_model:
-            norm_value = full_df.loc[full_df["Model"] == normalise_to_model, "Score"].values[0]
-            full_df["Score"] /= norm_value
-        
+            
+            norm_value = 1 + full_df.loc[full_df["Model"] == normalise_to_model, "Score"].values[0]
+            full_df["Score"]  = (full_df["Score"] + 1) / norm_value # prevent division by zero
+            full_df["Score"] = full_df["Score"].clip(upper=10) # cap at 10 to avoid extreme values    
+    
         full_df["Rank"] = full_df["Score"].rank(ascending=True, method="min")
         
         full_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
@@ -293,8 +297,8 @@ class GhostAtomBenchmark(zntrack.Node):
                 title="Ghost Atom Benchmark",
                 tooltip_header={
                     "Model": "Name of the MLIP model",
-                    "test1 max ΔF": "Max ΔF (eV/Å) on solute atoms due to ghost atoms placed far away",
-                    "test2 mean ΔF": "Mean ΔF (eV/Å) on solute atoms from random H-atom placements",
+                    "test1 max ΔF": "Max ΔF (meV/Å) on solute atoms due to ghost atoms placed far away",
+                    "test2 mean ΔF": "Mean ΔF (meV/Å) on solute atoms from random H-atom placements",
                     "test2 std ΔF": "Standard deviation of ΔF for random H-atom placements",
                     "Score": "Same as test2 mean ΔF (lower is better); normalized if specified",
                     "Rank": "Ranking of model by Score (lower is better)"

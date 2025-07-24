@@ -575,6 +575,9 @@ class NEB2(zntrack.Node):
             "_LiFePO4_start_end_c_": "LiFePO4",
             #t1x
         }
+        
+        print("neb dict in neb precompute:")
+        print(node_dict)
 
         # === Group nodes by system group ===
         grouped_nodes = defaultdict(lambda: defaultdict(dict))  # group -> model -> system -> node

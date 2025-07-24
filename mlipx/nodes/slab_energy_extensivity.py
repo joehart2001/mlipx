@@ -150,8 +150,9 @@ class SlabExtensivityBenchmark(zntrack.Node):
         full_df["Score"] = full_df["Delta (meV)"].abs()
 
         if normalise_to_model:
-            norm_value = full_df.loc[full_df["Model"] == normalise_to_model, "Score"].values[0]
-            full_df["Score"] /= norm_value
+            norm_value = 1 + full_df.loc[full_df["Model"] == normalise_to_model, "Score"].values[0]
+            full_df["Score"] = (full_df["Score"] + 1) / norm_value
+            full_df["Score"] = full_df["Score"].clip(upper=10) # cap at 10 to avoid extreme values
 
         full_df["Rank"] = full_df["Score"].rank(ascending=True, method="min")
 

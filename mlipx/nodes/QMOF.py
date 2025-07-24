@@ -150,11 +150,11 @@ class QMOFBenchmark(zntrack.Node):
             results_df = node.get_results[
                 ["qmof_id", f"{model_name} energy (eV/atom)", "ref energy (eV/atom)"]
             ].copy()
-            results_df = results_df.rename(columns={
-                f"{model_name} energy (eV/atom)": "E_model (eV/atom)",
-                "ref energy (eV/atom)": "E_ref (eV/atom)"
-            })
-            results_df["Model"] = model_name
+            # results_df = results_df.rename(columns={
+            #     f"{model_name} energy (eV/atom)": "E_model (eV/atom)",
+            #     "ref energy (eV/atom)": "E_ref (eV/atom)"
+            # })
+            #results_df["Model"] = model_name
             results_dfs.append(results_df)
             
             mae = node.get_mae
@@ -173,8 +173,13 @@ class QMOFBenchmark(zntrack.Node):
         mae_df["Rank"] = mae_df["Score"].rank(ascending=True, method="min")
 
         mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
-        results_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
         
+        results_df = pd.concat(results_dfs, axis=1)
+
+        # Drop duplicate columns (keeping the first occurrence)
+        results_df = results_df.loc[:, ~results_df.columns.duplicated()]
+
+        results_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))
 
 
     @staticmethod
@@ -253,7 +258,7 @@ class QMOFBenchmark(zntrack.Node):
             Input("QMOF-table", "active_cell"),
             State("QMOF-table", "data"),
         )
-        def update_s30l_plot(active_cell, table_data):
+        def update_qmof_plot(active_cell, table_data):
             if not active_cell:
                 raise PreventUpdate
 
@@ -263,14 +268,13 @@ class QMOFBenchmark(zntrack.Node):
 
             if col == "Model":
                 return dash.no_update, {"display": "none"}
-
-            df = pred_df.copy()
-            print(df)
-            #df = df[df["Model"] == clicked_model]
             
-            x = df["E_ref (eV/atom)"]
-            y = df["E_model (eV/atom)"]
-            mae = (df["E_model (eV/atom)"] - df["E_ref (eV/atom)"]).abs().mean()
+            
+            df = pred_df.copy().reset_index(drop=True)  # Ensure unique index
+            
+            x = df["ref energy (eV/atom)"]
+            y = df[f"{clicked_model} energy (eV/atom)"]
+            mae = (y - x).abs().mean()
             mae = mae.round(3)
             
             from mlipx.plotting_utils import generate_density_scatter_figure

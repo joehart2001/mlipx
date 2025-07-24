@@ -1280,18 +1280,22 @@ def full_benchmark_precompute(
     #     models,
     #     all_nodes,
     # )
-    neb_results = get_category_node_dicts_general(
-        nodes,
-        glob,
-        models,
-        all_nodes,
-        node_types=[
-            ("NEB", "NEB2", "_neb"),
-        ]
-    )
-    neb_dict = neb_results["NEB"]
-    print(neb_dict)
-    print(neb_dict.keys())
+    # neb_results = get_category_node_dicts_general(
+    #     nodes,
+    #     glob,
+    #     models,
+    #     all_nodes,
+    #     node_types=[
+    #         ("NEB", "NEB2", "_neb"),
+    #     ]
+    # )
+    # neb_dict = neb_results["NEB"]
+    neb_nodes = [node for node in all_nodes if "NEB2" in node]
+    neb_node_objects = load_node_objects(nodes, glob, models, neb_nodes, split_str="_neb")
+    neb_node_dict = load_nodes_model_neb_system(neb_node_objects, models, split_str_model = "_neb", split_str_system = "NEB2")
+
+    # print(neb_dict)
+    # print(neb_dict.keys())
     
     print("Loading surface benchmark nodes...")
     surface_results = get_category_node_dicts_general(
@@ -1361,7 +1365,7 @@ def full_benchmark_precompute(
         Wiggle150_data=wig150_dict,
         MD_NVT_data=MD_NVT_dict,
         MD_NPT_data=MD_NPT_dict,
-        NEB_data=neb_dict,
+        NEB_data=neb_node_dict,
         OC157_data=OC157_dict,
         S24_data=S24_dict,
         S30L_data=S30L_dict,
@@ -1820,7 +1824,6 @@ def neb_further_apps_precompute(
     #nodes: Annotated[list[str], typer.Argument(help="Path(s) to phonon nodes")],
     #glob: Annotated[bool, typer.Option("--glob", help="Enable glob patterns")] = False,
     models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
-    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
 
     ):
@@ -1841,16 +1844,29 @@ def neb_further_apps_precompute(
         all_nodes = list(json.load(f).keys())
 
     node_objects = load_node_objects(nodes, glob, models, all_nodes, split_str="_neb")
-
     benchmark_node_dict = load_nodes_model_neb_system(node_objects, models, split_str_model = "_neb", split_str_system = "NEB2")
 
-    from mlipx import NEBFutherApplications
-    NEBFutherApplications.benchmark_precompute(
+    from mlipx import NEBFurtherApplications
+    NEBFurtherApplications.benchmark_precompute(
         neb_data=benchmark_node_dict,
         normalise_to_model=normalise_to_model,
     )
 
     
+@app.command()
+def neb_further_apps_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import NEBFurtherApplications
+    NEBFurtherApplications.launch_dashboard(
+        ui=ui,
+    )
     
     
 def get_neb_further_apps_dict(

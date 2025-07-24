@@ -690,7 +690,7 @@ class MolecularDynamics(zntrack.Node):
         for model_name, node in tqdm.tqdm(node_dict_NVT.items(), desc="Computing NVT properties for models"):
             traj = node.traj
             #traj = traj[::10]
-            #traj = traj[1000:]
+            traj = traj[1000:]
             
             print(f"Processing model: {model_name} with {len(traj)} frames")
             velocities = [atoms.get_velocities() for atoms in traj]
@@ -701,7 +701,7 @@ class MolecularDynamics(zntrack.Node):
                 if prop not in NVT_properties_dict:
                     NVT_properties_dict[prop] = {}
                 if prop == 'msd':
-                    time, msd = MolecularDynamics.compute_msd(traj[::50], timestep=1)
+                    time, msd = MolecularDynamics.compute_msd(traj, timestep=1)
                     NVT_properties_dict[prop][model_name] = {
                         "time": time.tolist(),
                         "msd": msd.tolist(),
@@ -709,7 +709,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_oo':
                     # O-O RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj[::100],
+                        traj,
                         i_indices=o_indices,
                         j_indices=o_indices,
                         r_max=6.0,
@@ -723,7 +723,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_oh':
                     # O-H RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj[::100],
+                        traj,
                         i_indices=o_indices,
                         j_indices=h_indices,
                         r_max=6.0,
@@ -737,7 +737,7 @@ class MolecularDynamics(zntrack.Node):
                 elif prop == 'g_r_hh':
                     # H-H RDF
                     r, rdf = MolecularDynamics.compute_rdf_optimized_parallel(
-                        traj[::100],
+                        traj,
                         i_indices=h_indices,
                         j_indices=h_indices,
                         r_max=6.0,
