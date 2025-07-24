@@ -133,7 +133,8 @@ class FullBenchmark(zntrack.Node):
         GMTKN55_data: List[GMTKN55Benchmark] | Dict[str, GMTKN55Benchmark],
         HD_data: List[HomonuclearDiatomics] | Dict[str, HomonuclearDiatomics],
         Wiggle150_data: List[Wiggle150] | Dict[str, Wiggle150],
-        MD_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
+        MD_NVT_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
+        MD_NPT_data: List[MolecularDynamics] | Dict[str, MolecularDynamics],
         NEB_data: List[NEB2] | Dict[str, NEB2],
         OC157_data: List[OC157Benchmark] | Dict[str, OC157Benchmark],
         S24_data: List[S24Benchmark] | Dict[str, S24Benchmark],
@@ -185,19 +186,20 @@ class FullBenchmark(zntrack.Node):
         
         # print(f"Precomputing Water MD Benchmark (4/{n_categories})...")
         # FurtherApplications.benchmark_precompute(
-        #     MD_data=MD_data,
+        #     MD_NVT_data=MD_NVT_data,
+        #     MD_NPT_data=MD_NPT_data,
         #     cache_dir=str(cache_dir / "further_applications_benchmark"),
         #     report=report,
         #     normalise_to_model=normalise_to_model,
         # )
         
-        # print(f"Precomputing NEB Benchmark (5/{n_categories})...")
-        # NEBFurtherApplications.benchmark_precompute(
-        #     neb_data=NEB_data,
-        #     cache_dir=str(cache_dir / "nebs_further_apps"),
-        #     report=report,
-        #     normalise_to_model=normalise_to_model,
-        # )
+        print(f"Precomputing NEB Benchmark (5/{n_categories})...")
+        NEBFurtherApplications.benchmark_precompute(
+            neb_data=NEB_data,
+            cache_dir=str(cache_dir / "nebs_further_apps"),
+            report=report,
+            normalise_to_model=normalise_to_model,
+        )
         
         print(f"Precomputing Surface Benchmark (6/{n_categories})...")
         SurfaceBenchmark.benchmark_precompute(

@@ -640,7 +640,7 @@ class PhononDispersion(zntrack.Node):
                 ref_node_dict,
                 benchmarks,
                 no_plots=no_plots
-            ) for mp_id in tqdm(pred_node_dict.keys(), desc="Processing structures")
+            ) for mp_id in tqdm(list(pred_node_dict.keys())[:5], desc="Processing structures")
         )
 
         # build dictionaries from parallel results

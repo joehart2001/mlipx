@@ -119,7 +119,7 @@ class Elasticity(zntrack.Node):
         start_time = time.perf_counter()
         results = benchmark.run(calc, self.model_name, n_jobs=self.n_jobs,
                                 checkpoint_file=checkpoint_path,
-                                checkpoint_freq=1000,
+                                checkpoint_freq=100,
                                 delete_checkpoint_on_finish=False)
         end_time = time.perf_counter()
         elapsed_time = end_time - start_time

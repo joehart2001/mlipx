@@ -368,9 +368,11 @@ def load_node_objects(
     selected_nodes = []
     if glob:
         for pattern in nodes:
+
             matched = fnmatch.filter(all_nodes, pattern)
             for name in matched:
                 model = name.split(split_str)[0]
+
                 if not models or model in models:
                     selected_nodes.append(name)
                 elif "ref" in name or "reference" in name:
@@ -1148,17 +1150,7 @@ def full_benchmark_precompute(
     normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
     ):
     
-        # add: 
-                # OC157_data: List[OC157Benchmark] | Dict[str, OC157Benchmark],
-                # S24_data: List[S24Benchmark] | Dict[str, S24Benchmark],
-                # S30L_data: List[S30LBenchmark] | Dict[str, S30LBenchmark],
-                # LNCI16_data: List[LNCI16Benchmark] | Dict[str, LNCI16Benchmark],
-                # protein_ligand_data: List[mlipx.ProteinLigandBenchmark] | Dict[str, mlipx.ProteinLigandBenchmark],
-                # ghost_atom_data: List[mlipx.GhostAtomBenchmark] | Dict[str, mlipx.GhostAtomBenchmark],
-                # slab_extensivity_data: List[SlabExtensivityBenchmark] | Dict[str, SlabExtensivityBenchmark],
-                # QMOF_data: List[QMOFBenchmark] | Dict[str, QMOFBenchmark],
-                
-        
+
         
     nodes = [
         "*Elasticity*",
@@ -1191,6 +1183,7 @@ def full_benchmark_precompute(
         all_nodes = list(json.load(f).keys())
         
     # bulk crystal benchmark
+    print("Loading bulk crystal benchmark nodes...")
     phonon_pred_node_dict, phonon_ref_node, elasticity_dict, lattice_const_dict, lattice_const_ref_node_dict = get_bulk_crystal_benchmark_node_dicts(
         nodes,
         glob,
@@ -1200,43 +1193,107 @@ def full_benchmark_precompute(
         split_str_elasticity="_Elasticity",
         split_str_lattice_const="_lattice-constant",
     )
+    
+    
+    print("Loading molecular crystal benchmark nodes...")
     # molecular crystal benchmark
-    X23_dict, ICE_DMC_dict = get_mol_crystal_benchmark_node_dicts(
+    # X23_dict, ICE_DMC_dict = get_mol_crystal_benchmark_node_dicts(
+    #     nodes,
+    #     glob,
+    #     models,
+    #     all_nodes,
+    #     split_str_X23="_X23Benchmark",
+    #     split_str_ICE="_DMCICE13Benchmark",
+    # )
+    
+    mol_crystal_results = get_category_node_dicts_general(
         nodes,
         glob,
         models,
         all_nodes,
-        split_str_X23="_X23Benchmark",
-        split_str_ICE="_DMCICE13Benchmark",
+        node_types=[
+            ("X23", "X23Benchmark", "_X23Benchmark"),
+            ("DMCICE", "DMCICE13Benchmark", "_DMCICE13Benchmark"),
+        ]
     )
+    X23_dict, ICE_DMC_dict = mol_crystal_results["X23"], mol_crystal_results["DMCICE"]
+    
+    
+    # print("Loading molecular benchmark nodes...")
+    # # molecular benchmark
+    # GMTKN55_dict, HD_dict, wig150_dict = get_mol_benchmark_node_dicts(
+    #     nodes,
+    #     glob,
+    #     models,
+    #     all_nodes,
+    #     split_str_GMTKN55="_GMTKN55Benchmark",
+    #     split_str_HD="_homonuclear-diatomics",
+    #     split_str_wiggle150="_Wiggle150",
+    # )
+    print("Loading molecular benchmark nodes...")
     # molecular benchmark
-    GMTKN55_dict, HD_dict, wig150_dict = get_mol_benchmark_node_dicts(
+    molecular_results = get_category_node_dicts_general(
         nodes,
         glob,
         models,
         all_nodes,
-        split_str_GMTKN55="_GMTKN55Benchmark",
-        split_str_HD="_homonuclear-diatomics",
-        split_str_wiggle150="_Wiggle150",
+        node_types=[
+            ("GMTKN55", "GMTKN55Benchmark", "_GMTKN55Benchmark"),
+            ("HomonuclearDiatomics", "HomonuclearDiatomics", "_homonuclear-diatomics"),
+            ("Wiggle150", "Wiggle150", "_Wiggle150"),
+        ]
     )
+    GMTKN55_dict, HD_dict, wig150_dict = molecular_results["GMTKN55"], molecular_results["HomonuclearDiatomics"], molecular_results["Wiggle150"]
+    #GMTKN55_dict, HD_dict = molecular_results["GMTKN55"], molecular_results["HomonuclearDiatomics"]
 
-    MD_NVT_dict, MD_NPT_dict = get_further_apps_benchmark_node_dicts(
+
+
+
+
+    print("Loading MD benchmark nodes...")
+    # MD_NVT_dict, MD_NPT_dict = get_further_apps_benchmark_node_dicts(
+    #     nodes,
+    #     glob,
+    #     models,
+    #     all_nodes,
+    #     split_str_NVT="_H2O-64_NVT_330K",
+    #     split_str_NPT="_H2O-64_NPT_MTK_330K",
+    # )
+    
+    MD_results = get_category_node_dicts_general(
         nodes,
         glob,
         models,
         all_nodes,
-        split_str_NVT="_H2O-64_NVT_330K",
-        split_str_NPT="_H2O-64_NPT_MTK_330K",
+        node_types=[
+            ("MD_NVT", "_H2O-64_NVT_330K", "_H2O-64_NVT_330K"),
+            ("MD_NPT", "_H2O-64_NPT_MTK_330K", "_H2O-64_NPT_MTK_330K"),
+        ]
     )
+    MD_NVT_dict, MD_NPT_dict = MD_results["MD_NVT"], MD_results["MD_NPT"]
     
 
-    
-    neb_dict = get_neb_further_apps_dict(
+    print("Loading NEB benchmark nodes...")
+    # neb_dict = get_neb_further_apps_dict(
+    #     nodes,
+    #     glob,
+    #     models,
+    #     all_nodes,
+    # )
+    neb_results = get_category_node_dicts_general(
         nodes,
         glob,
         models,
         all_nodes,
+        node_types=[
+            ("NEB", "NEB2", "_neb"),
+        ]
     )
+    neb_dict = neb_results["NEB"]
+    print(neb_dict)
+    print(neb_dict.keys())
+    
+    print("Loading surface benchmark nodes...")
     surface_results = get_category_node_dicts_general(
         nodes,
         glob,
@@ -1250,6 +1307,7 @@ def full_benchmark_precompute(
     )
     OC157_dict, S24_dict, S30L_dict = surface_results["OC157"], surface_results["S24"], surface_results["S30L"]
     
+    print("Loading supramolecular benchmark nodes...")
     supramolecular_results = get_category_node_dicts_general(
         nodes,
         glob,
@@ -1274,6 +1332,7 @@ def full_benchmark_precompute(
     )
     GhostAtom_dict, SlabExtensivity_dict = physicality_results["GhostAtom"], physicality_results["SlabExtensivity"]
     
+    print("Loading QMOF benchmark nodes...")
     mof_results = get_category_node_dicts_general(
         nodes,
         glob,
@@ -1300,7 +1359,8 @@ def full_benchmark_precompute(
         GMTKN55_data=GMTKN55_dict,
         HD_data=HD_dict,
         Wiggle150_data=wig150_dict,
-        MD_data=MD_dict,
+        MD_NVT_data=MD_NVT_dict,
+        MD_NPT_data=MD_NPT_dict,
         NEB_data=neb_dict,
         OC157_data=OC157_dict,
         S24_data=S24_dict,

@@ -86,9 +86,18 @@ class NEBFurtherApplications(zntrack.Node):
         
         os.makedirs(cache_dir, exist_ok=True)
 
+        from mlipx.dash_utils import process_data
+
+        # NEB
+        neb_dict = process_data(
+            neb_data,
+            key_extractor=lambda node: node.name.split("_neb")[0],
+            value_extractor=lambda node: node
+        )
+        
         # Run precomputes for all sub-benchmarks
         mlipx.NEB2.benchmark_precompute(
-            node_dict=neb_data,
+            node_dict=neb_dict,
             ui=ui,
             run_interactive=False,
             normalise_to_model=normalise_to_model,
