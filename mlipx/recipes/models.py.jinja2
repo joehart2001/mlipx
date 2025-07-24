@@ -56,13 +56,13 @@ class OrbCalc:
 
         if self.device is None:
             orbff = method(**self.kwargs, precision=precision)
-            calc = ORBCalculator(orbff, **self.kwargs)
+            calc = ORBCalculator(orbff)#, **self.kwargs)
         elif self.device == Device.AUTO:
             orbff = method(device=Device.resolve_auto(), precision=precision, **self.kwargs)
-            calc = ORBCalculator(orbff, device=Device.resolve_auto(), **self.kwargs)
+            calc = ORBCalculator(orbff, device=Device.resolve_auto())#, **self.kwargs)
         else:
             orbff = method(device=self.device, precision=precision, **self.kwargs)
-            calc = ORBCalculator(orbff, device=self.device, **self.kwargs)
+            calc = ORBCalculator(orbff, device=self.device)#, **self.kwargs)
         return calc
 
     @property
