@@ -284,6 +284,7 @@ for _name, _cfg in _registry.items():
         kwargs = _cfg.get("kwargs", {})
         MODELS[_name] = OrbCalc(
             name=kwargs["name"],
+            precision=_cfg.get("precision", "float32-high"),
             device=_cfg.get("device", "cpu"),
         )
     elif _cfg["class_name"] == "SumCalculator":
