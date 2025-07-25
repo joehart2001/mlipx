@@ -1293,7 +1293,7 @@ class MolecularDynamics(zntrack.Node):
         for group_name, group in groups.items():
             group_df = group_mae_tables[group_name]
             layout_children.append(html.H3(group["title"]))
-            layout_children.append(html.P(group['benchmark_info']))
+            #layout_children.append(html.P(group['benchmark_info']))
             layout_children.append(
                 dash_table_interactive(
                     df=group_df,

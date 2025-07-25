@@ -109,7 +109,6 @@ for model_name, model in MODELS.items():
                 phonopy_yaml_dir=str(local_path),
                 n_jobs=n_jobs,
                 check_completed=check_completed,
-                multiprocessing = multiprocessing
         )
         phonon_dict[model_name] = phonon
         phonon_pred_list.append(phonon)
