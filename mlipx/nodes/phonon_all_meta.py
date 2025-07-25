@@ -306,7 +306,7 @@ class PhononAllBatchMeta(zntrack.Node):
         def handle(mp_id):
             return PhononAllBatchMeta.process_mp_id(
                 mp_id, calc_model, nwd, yaml_dir, fmax,
-                q_mesh, q_mesh_thermal, temperatures, check_completed)
+                q_mesh, q_mesh_thermal, temperatures, self.check_completed)
 
         if self.threading:
             with parallel_backend("threading", n_jobs=self.n_jobs):
