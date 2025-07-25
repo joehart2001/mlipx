@@ -99,7 +99,7 @@ class PhononAllBatchMeta(zntrack.Node):
 
 
     @staticmethod
-    def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
+    def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
         try:
             
             
@@ -120,7 +120,7 @@ class PhononAllBatchMeta(zntrack.Node):
             phonon_pred_dos_path = phonon_pred_path / f"{mp_id}_dos.npz"
             thermal_path = phonon_pred_path / f"{mp_id}_thermal_properties.json"
             
-            if self.check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
+            if check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
                 print(f"Skipping {mp_id} as results already exist.")
                 return {
                     "mp_id": mp_id,
@@ -306,7 +306,7 @@ class PhononAllBatchMeta(zntrack.Node):
         def handle(mp_id):
             return PhononAllBatchMeta.process_mp_id(
                 mp_id, calc_model, nwd, yaml_dir, fmax,
-                q_mesh, q_mesh_thermal, temperatures            )
+                q_mesh, q_mesh_thermal, temperatures, check_completed)
 
         if self.threading:
             with parallel_backend("threading", n_jobs=self.n_jobs):
