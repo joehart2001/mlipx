@@ -66,6 +66,9 @@ warnings.filterwarnings("ignore", module="torch.fx.experimental.symbolic_shapes"
 #torch.fx.wrap('atomic_energies_fn')
 
 
+
+
+
 class PhononAllBatchMeta(zntrack.Node):
     """Batch phonon calculations (FC2 + thermal props) for multiple mp-ids."""
 
@@ -93,6 +96,144 @@ class PhononAllBatchMeta(zntrack.Node):
     thermal_properties_paths: pathlib.Path = zntrack.outs_path(zntrack.nwd / "thermal_properties_paths.json")
     get_chemical_formula_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mp_ids_and_formulas.json")
 
+
+
+    @staticmethod
+    def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
+        try:
+            
+            
+            #calc = model.get_calculator()
+            yaml_path = yaml_dir/ f"{mp_id}.yaml"
+            
+            calc = model.get_calculator()
+                    
+            phonons_pred = load_phonopy(str(yaml_path))
+            chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
+            
+            
+            # save paths for later
+            phonon_pred_path = nwd / f"phonon_pred_data/"
+            phonon_pred_path.mkdir(parents=True, exist_ok=True)
+            
+            phonon_pred_band_structure_path = phonon_pred_path / f"{mp_id}_band_structure.npz"
+            phonon_pred_dos_path = phonon_pred_path / f"{mp_id}_dos.npz"
+            thermal_path = phonon_pred_path / f"{mp_id}_thermal_properties.json"
+            
+            if self.check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
+                print(f"Skipping {mp_id} as results already exist.")
+                return {
+                    "mp_id": mp_id,
+                    "phonon_band_path_dict": str(phonon_pred_band_structure_path),
+                    "phonon_dos_dict": str(phonon_pred_dos_path),
+                    "thermal_properties_dict": str(thermal_path),
+                    "formula": chemical_formula,
+                }
+            
+            print(f"\nProcessing {mp_id}...")
+            
+            
+            
+            atoms = phonopy2aseatoms(phonons_pred, primitive=True)
+        
+            atoms.calc = calc
+            #atoms.set_constraint(FixSymmetry(atoms))
+            opt = FIRE(FrechetCellFilter(atoms))
+            opt.run(fmax=fmax, steps=1000)
+
+            # primitive matrix not always available in reference data e.g. mp-30056
+            if "primitive_matrix" in atoms.info.keys():
+                primitive_matrix = atoms.info["primitive_matrix"]
+            else:
+                primitive_matrix = "auto"
+                print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
+
+
+            if phonons_pred.primitive_matrix is not None:
+                P = np.asarray(np.linalg.inv(phonons_pred.primitive_matrix.T), dtype=np.intc)
+                unitcell = make_supercell(atoms, P)
+            else:  # assume prim is the same as unit
+                unitcell = atoms
+                
+                
+            
+            phonons_pred = init_phonopy_from_ref(
+                atoms=unitcell,
+                fc2_supercell=atoms.info["fc2_supercell"],
+                primitive_matrix=primitive_matrix,
+                displacement_dataset=None,
+                displacement_distance=0.01,
+                symprec=1e-5,
+            )
+
+            phonons_pred, fc2, freqs = get_fc2_and_freqs(
+                phonons=phonons_pred,
+                calculator=calc,
+                q_mesh=np.array([q_mesh] * 3),
+                symmetrize_fc2=False
+            )
+            
+            # qpoints = get_commensurate_points(phonons_pred.supercell_matrix)
+            # frequencies = np.stack([phonons_pred.get_frequencies(q) for q in qpoints])
+
+            #phonon_obj_path = nwd / f"phonon_obj/{mp_id}_phonon_obj.yaml"
+            #Path(phonon_obj_path).parent.mkdir(parents=True, exist_ok=True)
+            #phonons_pred.save(filename=str(phonon_obj_path)) #, settings={"force_constants": True})
+            
+            phonons_pred.auto_band_structure()
+            band_structure_pred = phonons_pred.get_band_structure_dict()
+            phonons_pred.auto_total_dos()
+            dos_pred = phonons_pred.get_total_dos_dict()
+            
+
+            
+            with open(phonon_pred_band_structure_path, "wb") as f:
+                pickle.dump(band_structure_pred, f)
+            with open(phonon_pred_dos_path, "wb") as f:
+                pickle.dump(dos_pred, f)
+
+            
+            
+
+                
+            # with open(phonon_pred_path / f"{mp_id}_qpoints.npz", "wb") as f:
+            #     pickle.dump(qpoints, f)
+            # with open(phonon_pred_path / f"{mp_id}_labels.json", "w") as f:
+            #     json.dump(labels, f)
+            # with open(phonon_pred_path / f"{mp_id}_connections.json", "w") as f:
+            #     json.dump(connections, f)
+                                
+            phonons_pred.run_mesh([q_mesh_thermal] * 3)
+            phonons_pred.run_thermal_properties(
+                temperatures=temperatures,
+                #cutoff_frequency=0.05
+            )
+
+            thermal_dict = phonons_pred.get_thermal_properties_dict()
+            thermal_dict_safe = {
+                key: value.tolist() if isinstance(value, np.ndarray) else value
+                for key, value in thermal_dict.items()
+            }
+            with open(thermal_path, "w") as f:
+                json.dump(thermal_dict_safe, f, indent=4)
+
+            return {
+                "mp_id": mp_id,
+                "phonon_band_path_dict": str(phonon_pred_band_structure_path),
+                "phonon_dos_dict": phonon_pred_dos_path,
+                "thermal_properties_dict": str(thermal_path),
+                "formula": chemical_formula,
+                # "phonon_qpoints_dict": str(phonon_pred_path / f"{mp_id}_qpoints.npz"),
+                # "phonon_labels_dict": str(phonon_pred_path / f"{mp_id}_labels.json"),
+                # "phonon_connections_dict": str(phonon_pred_path / f"{mp_id}_connections.json"),
+            }
+        except Exception as e:
+            print(f"Skipping {mp_id} due to error: {e}")
+            with open("error_log.txt", "a") as f:
+                f.write(f"\nError while processing {mp_id}:\n")
+                traceback.print_exc(file=f)
+
+
     def run(self):
         #calc = self.model.get_calculator()
         
@@ -103,235 +244,86 @@ class PhononAllBatchMeta(zntrack.Node):
         q_mesh = self.N_q_mesh
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
+        calc_model = self.model  # Materialize model before parallel loops
         
         
-        
-        def process_mp_id(mp_id: str, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures):
-            try:
-                
-                
-                #calc = model.get_calculator()
-                yaml_path = yaml_dir/ f"{mp_id}.yaml"
-                
-                calc = self.model.get_calculator()
-                      
-                phonons_pred = load_phonopy(str(yaml_path))
-                chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
-                
-                
-                # save paths for later
-                phonon_pred_path = nwd / f"phonon_pred_data/"
-                phonon_pred_path.mkdir(parents=True, exist_ok=True)
-                
-                phonon_pred_band_structure_path = phonon_pred_path / f"{mp_id}_band_structure.npz"
-                phonon_pred_dos_path = phonon_pred_path / f"{mp_id}_dos.npz"
-                thermal_path = phonon_pred_path / f"{mp_id}_thermal_properties.json"
-                
-                if self.check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
-                    print(f"Skipping {mp_id} as results already exist.")
-                    return {
-                        "mp_id": mp_id,
-                        "phonon_band_path_dict": str(phonon_pred_band_structure_path),
-                        "phonon_dos_dict": str(phonon_pred_dos_path),
-                        "thermal_properties_dict": str(thermal_path),
-                        "formula": chemical_formula,
-                    }
-                
-                print(f"\nProcessing {mp_id}...")
-                
-                
-                
-                atoms = phonopy2aseatoms(phonons_pred, primitive=True)
-            
-                atoms.calc = calc
-                #atoms.set_constraint(FixSymmetry(atoms))
-                opt = FIRE(FrechetCellFilter(atoms))
-                opt.run(fmax=fmax, steps=1000)
 
-                # primitive matrix not always available in reference data e.g. mp-30056
-                if "primitive_matrix" in atoms.info.keys():
-                    primitive_matrix = atoms.info["primitive_matrix"]
-                else:
-                    primitive_matrix = "auto"
-                    print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
+        # # Run jobs in parallel
+        # successful_results = []
+        # failed_hard = []
 
-
-                if phonons_pred.primitive_matrix is not None:
-                    P = np.asarray(np.linalg.inv(phonons_pred.primitive_matrix.T), dtype=np.intc)
-                    unitcell = make_supercell(atoms, P)
-                else:  # assume prim is the same as unit
-                    unitcell = atoms
-                    
-                    
+        # try:
+        #     if self.threading:
+        #         parallel_backend_mode = "threading"
+        #         print("Using threading for parallel processing.")
+        #     else:
+        #         parallel_backend_mode = "multiprocessing"
+        #         print("Using multiprocessing for parallel processing.")
                 
-                phonons_pred = init_phonopy_from_ref(
-                    atoms=unitcell,
-                    fc2_supercell=atoms.info["fc2_supercell"],
-                    primitive_matrix=primitive_matrix,
-                    displacement_dataset=None,
-                    displacement_distance=0.01,
-                    symprec=1e-5,
-                )
+        #     with parallel_backend(parallel_backend_mode):
+        #         raw_results = Parallel(n_jobs=self.n_jobs)(
+        #             delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+        #             for mp_id in self.mp_ids
+        #         )
 
-                phonons_pred, fc2, freqs = get_fc2_and_freqs(
-                    phonons=phonons_pred,
-                    calculator=calc,
-                    q_mesh=np.array([q_mesh] * 3),
-                    symmetrize_fc2=False
-                )
-                
-                # qpoints = get_commensurate_points(phonons_pred.supercell_matrix)
-                # frequencies = np.stack([phonons_pred.get_frequencies(q) for q in qpoints])
+        #     # Wrap result with (mp_id, result) so we know which ones succeeded
+        #     successful_results = [(res["mp_id"], res) for res in raw_results if res is not None]
 
-                #phonon_obj_path = nwd / f"phonon_obj/{mp_id}_phonon_obj.yaml"
-                #Path(phonon_obj_path).parent.mkdir(parents=True, exist_ok=True)
-                #phonons_pred.save(filename=str(phonon_obj_path)) #, settings={"force_constants": True})
-                
-                phonons_pred.auto_band_structure()
-                band_structure_pred = phonons_pred.get_band_structure_dict()
-                phonons_pred.auto_total_dos()
-                dos_pred = phonons_pred.get_total_dos_dict()
-                
+        # except Exception as e:
+        #     if "terminated" in str(e).lower():
+        #         print("Detected possible worker termination (e.g. OOM). Retrying serially to identify faulty materials.")
+        #     else:
+        #         raise  # unknown error, re-raise
 
-                
-                with open(phonon_pred_band_structure_path, "wb") as f:
-                    pickle.dump(band_structure_pred, f)
-                with open(phonon_pred_dos_path, "wb") as f:
-                    pickle.dump(dos_pred, f)
+        #     # Get mp-ids that already succeeded
+        #     processed_mp_ids = {mp_id for mp_id, _ in successful_results}
 
-                
-                
+        #     # Retry only unprocessed ones
+        #     for mp_id in self.mp_ids:
+        #         if mp_id in processed_mp_ids:
+        #             continue
+        #         try:
+        #             res = process_mp_id(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
+        #             if res is not None:
+        #                 successful_results.append((res["mp_id"], res))
+        #         except Exception as err:
+        #             print(f"Serial run failed for {mp_id}: {err}")
+        #             traceback.print_exc()
+        #             failed_hard.append(mp_id)
 
-                    
-                # with open(phonon_pred_path / f"{mp_id}_qpoints.npz", "wb") as f:
-                #     pickle.dump(qpoints, f)
-                # with open(phonon_pred_path / f"{mp_id}_labels.json", "w") as f:
-                #     json.dump(labels, f)
-                # with open(phonon_pred_path / f"{mp_id}_connections.json", "w") as f:
-                #     json.dump(connections, f)
-                                  
-                phonons_pred.run_mesh([q_mesh_thermal] * 3)
-                phonons_pred.run_thermal_properties(
-                    temperatures=temperatures,
-                    #cutoff_frequency=0.05
-                )
+        # # Unpack the final result
+        # results = [res for _, res in successful_results]
 
-                thermal_dict = phonons_pred.get_thermal_properties_dict()
-                thermal_dict_safe = {
-                    key: value.tolist() if isinstance(value, np.ndarray) else value
-                    for key, value in thermal_dict.items()
-                }
-                with open(thermal_path, "w") as f:
-                    json.dump(thermal_dict_safe, f, indent=4)
+        # print(f"\nFinished with {len(results)} successful results.")
+        # if failed_hard:
+        #     print(f"{len(failed_hard)} materials failed due to memory or hard crashes.")
+        #     print("Failed mp-ids:", failed_hard)
 
-                return {
-                    "mp_id": mp_id,
-                    "phonon_band_path_dict": str(phonon_pred_band_structure_path),
-                    "phonon_dos_dict": phonon_pred_dos_path,
-                    "thermal_properties_dict": str(thermal_path),
-                    "formula": chemical_formula,
-                    # "phonon_qpoints_dict": str(phonon_pred_path / f"{mp_id}_qpoints.npz"),
-                    # "phonon_labels_dict": str(phonon_pred_path / f"{mp_id}_labels.json"),
-                    # "phonon_connections_dict": str(phonon_pred_path / f"{mp_id}_connections.json"),
-                }
-            except Exception as e:
-                print(f"Skipping {mp_id} due to error: {e}")
-                with open("error_log.txt", "a") as f:
-                    f.write(f"\nError while processing {mp_id}:\n")
-                    traceback.print_exc(file=f)
 
-        # Run jobs in parallel
-        successful_results = []
-        failed_hard = []
 
-        try:
-            if self.threading:
-                parallel_backend_mode = "threading"
-                print("Using threading for parallel processing.")
-            else:
-                parallel_backend_mode = "multiprocessing"
-                print("Using multiprocessing for parallel processing.")
-                
-            with parallel_backend(parallel_backend_mode):
-                raw_results = Parallel(n_jobs=self.n_jobs)(
-                    delayed(process_mp_id)(mp_id, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-                    for mp_id in self.mp_ids
-                )
 
-            # Wrap result with (mp_id, result) so we know which ones succeeded
-            successful_results = [(res["mp_id"], res) for res in raw_results if res is not None]
 
-        except Exception as e:
-            if "terminated" in str(e).lower():
-                print("Detected possible worker termination (e.g. OOM). Retrying serially to identify faulty materials.")
-            else:
-                raise  # unknown error, re-raise
+        def handle(mp_id):
+            return PhononAllBatchMeta.process_mp_id(
+                mp_id, calc_model, nwd, yaml_dir, fmax,
+                q_mesh, q_mesh_thermal, temperatures            )
 
-            # Get mp-ids that already succeeded
-            processed_mp_ids = {mp_id for mp_id, _ in successful_results}
+        if self.threading:
+            with parallel_backend("threading", n_jobs=self.n_jobs):
+                results = Parallel()(delayed(handle)(mp_id) for mp_id in self.mp_ids)
+        else:
+            results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in self.mp_ids)
 
-            # Retry only unprocessed ones
-            for mp_id in self.mp_ids:
-                if mp_id in processed_mp_ids:
-                    continue
-                try:
-                    res = process_mp_id(mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures)
-                    if res is not None:
-                        successful_results.append((res["mp_id"], res))
-                except Exception as err:
-                    print(f"Serial run failed for {mp_id}: {err}")
-                    traceback.print_exc()
-                    failed_hard.append(mp_id)
-
-        # Unpack the final result
-        results = [res for _, res in successful_results]
+        results = [res for res in results if res is not None]
 
         print(f"\nFinished with {len(results)} successful results.")
-        if failed_hard:
-            print(f"{len(failed_hard)} materials failed due to memory or hard crashes.")
-            print("Failed mp-ids:", failed_hard)
-        
-        # from math import ceil
 
-        # def chunks(lst, n):
-        #     """Yield successive n-sized chunks from lst."""
-        #     for i in range(0, len(lst), n):
-        #         yield lst[i:i + n]
-
-        # batch_size = 1000  # or adjust based on your available memory
-        # all_results = []
-
-        # for i, mp_batch in enumerate(chunks(self.mp_ids, batch_size)):
-        #     print(f"\nProcessing batch {i+1}/{ceil(len(self.mp_ids)/batch_size)}...")
-        #     results = Parallel(n_jobs=4)(  
-        #         delayed(process_mp_id)(
-        #             mp_id, self.model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures
-        #         )
-        #         for mp_id in mp_batch
-        #     )
-        #     all_results.extend(results)
-
-
-
-
+        phonon_band_path_dict = {res["mp_id"]: str(res["phonon_band_path_dict"]) for res in results}
+        phonon_dos_path_dict = {res["mp_id"]: str(res["phonon_dos_dict"]) for res in results}
+        thermal_properties_path_dict = {res["mp_id"]: str(res["thermal_properties_dict"]) for res in results}
+        chemical_formula_dict = {res["mp_id"]: res["formula"] for res in results}
 
         
-        phonon_band_path_dict = {
-            res["mp_id"]: str(res["phonon_band_path_dict"])
-            for res in results if res is not None
-        }
-        phonon_dos_path_dict = {
-            res["mp_id"]: str(res["phonon_dos_dict"])
-            for res in results if res is not None
-        }
-        thermal_properties_path_dict = {
-            res["mp_id"]: str(res["thermal_properties_dict"])
-            for res in results if res is not None
-        }
-        chemical_formula_dict = {
-            res["mp_id"]: res["formula"]
-            for res in results if res is not None
-        }
 
         
         # Save paths to JSON files
