@@ -2138,6 +2138,54 @@ def s30l_launch_dashboard(
         )
 
 
+@app.command()
+def protein_ligand_precompute(
+    models: Annotated[list[str], typer.Option("--models", "-m", help="Model names to filter")] = None,
+    normalise_to_model: Annotated[str, Option("--normalise_to_model", help="Model to normalise to")] = None,
+):
+    nodes = [
+        "*ProteinLigandBenchmark*",
+    ]
+    glob = True
+    
+    # Load all node names from zntrack.json
+    fs = dvc.api.DVCFileSystem()
+    with fs.open("zntrack.json", mode="r") as f:
+        all_nodes = list(json.load(f).keys())
+        
+    ProteinLigand_nodes = [node for node in all_nodes if "ProteinLigandBenchmark" in node]
+    
+    ProteinLigand_node_objects = load_node_objects(nodes, glob, models, ProteinLigand_nodes, split_str="_ProteinLigandBenchmark")
+    
+    ProteinLigand_dict = load_nodes_model(ProteinLigand_node_objects, models, split_str="_ProteinLigandBenchmark")
+    
+    from mlipx import ProteinLigandBenchmark
+    ProteinLigandBenchmark.benchmark_precompute(
+        node_dict=ProteinLigand_dict,
+        normalise_to_model=normalise_to_model,
+    )
+
+@app.command()
+def protein_ligand_launch_dashboard(
+    ui: Annotated[str, Option("--ui", help="Select UI mode", show_choices=True)] = None,
+    return_app: Annotated[bool, Option("--return_app", help="Return the app instance")] = False,
+):
+
+    if ui not in {None, "browser"}:
+        typer.echo("Invalid UI mode. Choose from: none or browser.")
+        raise typer.Exit(1)
+    print('\n UI = ', ui)
+    
+    from mlipx import ProteinLigandBenchmark
+    if return_app == True:
+        return ProteinLigandBenchmark.launch_dashboard(
+            ui=ui,
+            return_app=return_app,
+        )
+    else:
+        ProteinLigandBenchmark.launch_dashboard(
+            ui=ui,
+        )
 
 @app.command()
 def supramolecular_precompute(

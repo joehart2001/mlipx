@@ -509,8 +509,8 @@ class ProteinLigandBenchmark(zntrack.Node):
         # New for-loop for PLA15 and PLF547 predictions
         for model_name, node in node_dict.items():
             mae_dict[model_name] = {
-                "PLA15 MAE (kcal)": node.get_mae_PLA15["mae_kcal"],
-                "PLA547 MAE (kcal)": node.get_mae_PLF547["mae_kcal"]
+                "PLA15 MAE (kcal/mol)": node.get_mae_PLA15["mae_kcal"],
+                "PLA547 MAE (kcal/mol)": node.get_mae_PLF547["mae_kcal"]
             }
 
             pla15_pred_df = node.get_pred_PLA15.rename(columns={f"E_int_{model_name}": "E_model (eV)"})
@@ -536,7 +536,7 @@ class ProteinLigandBenchmark(zntrack.Node):
 
 
 
-        mae_df["Score"] = (mae_df["PLA15 MAE (kcal)"] + mae_df["PLA547 MAE (kcal)"]) / 2
+        mae_df["Score"] = (mae_df["PLA15 MAE (kcal/mol)"] + mae_df["PLA547 MAE (kcal/mol)"]) / 2
 
         if normalise_to_model:
             norm_value = mae_df.loc[mae_df["Model"] == normalise_to_model, "Score"].values[0]
@@ -644,11 +644,11 @@ class ProteinLigandBenchmark(zntrack.Node):
             if col == "Model":
                 return dash.no_update, {"display": "none"}, ""
 
-            if col == "PLA15 MAE (kcal)":
+            if col == "PLA15 MAE (kcal/mol)":
                 df = pla15_df
                 structure_path = "assets/PLA15/complex_atoms.xyz"
                 print("PLA15 structure path:", structure_path)
-            elif col == "PLA547 MAE (kcal)":
+            elif col == "PLA547 MAE (kcal/mol)":
                 df = plf547_df
                 structure_path = "assets/PLF547/complex_atoms.xyz"
                 print("PLF547 structure path:", structure_path)
@@ -660,8 +660,8 @@ class ProteinLigandBenchmark(zntrack.Node):
             fig = go.Figure()
             fig.add_trace(
                 go.Scatter(
-                    x=df["E_ref (eV)"],
-                    y=df["E_model (eV)"],
+                    x=df["E_ref (eV)"] / 0.04336414,
+                    y=df["E_model (eV)"] / 0.04336414,
                     mode="markers",
                     marker=dict(size=6, opacity=0.7),
                     customdata=df["identifier"],
@@ -677,8 +677,18 @@ class ProteinLigandBenchmark(zntrack.Node):
                     name=clicked_model
                 )
             )
+            # Draw diagonal line for perfect agreement
+            min_val = min(
+                (df["E_ref (eV)"] / 0.04336414).min(),
+                (df["E_model (eV)"] / 0.04336414).min()
+            )
+            max_val = max(
+                (df["E_ref (eV)"] / 0.04336414).max(),
+                (df["E_model (eV)"] / 0.04336414).max()
+            )
             fig.add_trace(go.Scatter(
-                x=[-10, 10], y=[-10, 10],
+                x=[min_val, max_val],
+                y=[min_val, max_val],
                 mode="lines",
                 line=dict(dash="dash", color="black", width=1),
                 showlegend=False
@@ -688,8 +698,8 @@ class ProteinLigandBenchmark(zntrack.Node):
 
             fig.update_layout(
                 title=f"{clicked_model} vs DFT Interaction Energies",
-                xaxis_title="DFT Energy [eV]",
-                yaxis_title=f"{clicked_model} Energy [eV]",
+                xaxis_title="DFT Energy [kcal/mol]",
+                yaxis_title=f"{clicked_model} Energy [kcal/mol]",
                 annotations=[
                     dict(
                         text=f"N = {len(df)}<br>MAE = {mae:.2f} kcal/mol",

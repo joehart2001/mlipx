@@ -60,6 +60,11 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="spglib")
 import ray
 
 
+import torch
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    print("TF32 is disabled for CUDA operations.")
 
 
 # Batched Ray remote function for processing multiple mp_ids at once
