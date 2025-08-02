@@ -271,6 +271,12 @@ class PhononAllBatchMeta(zntrack.Node):
     def run(self):
         #calc = self.model.get_calculator()
         
+        # Set multiprocessing start method to 'spawn' for CUDA compatibility
+        try:
+            mp.set_start_method('spawn', force=True)
+        except RuntimeError:
+            pass  # Already set
+        
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
         fmax = self.fmax
@@ -363,12 +369,13 @@ class PhononAllBatchMeta(zntrack.Node):
                         delayed(PhononAllBatchMeta.process_mp_id)(*args) for args in batch_args
                     )
             else:
-                # Use multiprocessing with spawn method for CUDA compatibility
-                mp_context = mp.get_context('spawn')
-                with parallel_backend("multiprocessing", n_jobs=max_jobs):
-                    batch_results = Parallel(prefer="processes", mp_context=mp_context)(
-                        delayed(PhononAllBatchMeta._process_mp_id_wrapper)(args) for args in batch_args
-                    )
+                # Use direct multiprocessing for CUDA compatibility
+                try:
+                    with mp.Pool(processes=max_jobs) as pool:
+                        batch_results = pool.map(PhononAllBatchMeta._process_mp_id_wrapper, batch_args)
+                except Exception as e:
+                    print(f"Multiprocessing failed: {e}. Falling back to sequential processing.")
+                    batch_results = [PhononAllBatchMeta._process_mp_id_wrapper(args) for args in batch_args]
                 #results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in self.mp_ids)
             all_results.extend(batch_results)
             
