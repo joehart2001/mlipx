@@ -106,6 +106,11 @@ class PhononAllBatchMeta(zntrack.Node):
 
 
     @staticmethod
+    def _process_mp_id_wrapper(args):
+        """Wrapper function for multiprocessing compatibility."""
+        return PhononAllBatchMeta.process_mp_id(*args)
+
+    @staticmethod
     def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
         try:
             # Monitor memory usage
@@ -337,11 +342,6 @@ class PhononAllBatchMeta(zntrack.Node):
         
         print(f"Using {max_jobs} parallel jobs (original request: {self.n_jobs})")
         
-        def handle(mp_id):
-            return PhononAllBatchMeta.process_mp_id(
-                mp_id, calc_model, nwd, yaml_dir, fmax,
-                q_mesh, q_mesh_thermal, temperatures, self.check_completed)
-
         # Use batch processing to prevent memory buildup
         batch_size = max(1, max_jobs)  # Process in batches
         all_results = []
@@ -350,14 +350,24 @@ class PhononAllBatchMeta(zntrack.Node):
             batch = self.mp_ids[i:i + batch_size]
             print(f"Processing batch {i//batch_size + 1}/{(len(self.mp_ids) + batch_size - 1)//batch_size}")
             
+            # Prepare arguments for each mp_id in the batch
+            batch_args = [
+                (mp_id, calc_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, self.check_completed)
+                for mp_id in batch
+            ]
+            
             if self.threading:
                 with parallel_backend("threading", n_jobs=max_jobs):
-                    batch_results = Parallel()(delayed(handle)(mp_id) for mp_id in batch)
+                    batch_results = Parallel()(
+                        delayed(PhononAllBatchMeta.process_mp_id)(*args) for args in batch_args
+                    )
             else:
-                # Use spawn method to avoid shared memory issues
+                # Use multiprocessing with wrapper function
                 with parallel_backend("multiprocessing", n_jobs=max_jobs):
-                    batch_results = Parallel(prefer="processes")(delayed(handle)(mp_id) for mp_id in batch)
-            
+                    batch_results = Parallel(prefer="processes")(
+                        delayed(PhononAllBatchMeta._process_mp_id_wrapper)(args) for args in batch_args
+                    )
+                #results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in self.mp_ids)
             all_results.extend(batch_results)
             
             # Force garbage collection between batches
