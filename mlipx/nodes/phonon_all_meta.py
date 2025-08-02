@@ -40,6 +40,9 @@ from phonopy import load as load_phonopy
 from joblib import Parallel, delayed
 import traceback
 from joblib import parallel_backend
+import gc
+import psutil
+import sys
 from mlipx import PhononDispersion
 
 from mlipx.phonons_utils import get_fc2_and_freqs, init_phonopy, load_phonopy, get_chemical_formula
@@ -105,12 +108,21 @@ class PhononAllBatchMeta(zntrack.Node):
     @staticmethod
     def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
         try:
+            # Monitor memory usage
+            process = psutil.Process()
+            initial_memory = process.memory_info().rss / 1024 / 1024  # MB
             
             
-            #calc = model.get_calculator()
             yaml_path = yaml_dir/ f"{mp_id}.yaml"
             
+            # Create a fresh calculator instance to avoid shared state issues
             calc = model.get_calculator()
+            
+            # Check if we have enough memory before proceeding
+            available_memory = psutil.virtual_memory().available / 1024 / 1024 / 1024  # GB
+            if available_memory < 2.0:  # Less than 2GB available
+                print(f"Skipping {mp_id} due to low memory: {available_memory:.1f}GB available")
+                return None
                     
             phonons_pred = load_phonopy(str(yaml_path))
             chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
@@ -221,6 +233,14 @@ class PhononAllBatchMeta(zntrack.Node):
             with open(thermal_path, "w") as f:
                 json.dump(thermal_dict_safe, f, indent=4)
 
+            # Explicit cleanup to prevent memory leaks
+            del phonons_pred, band_structure_pred, dos_pred, thermal_dict, thermal_dict_safe
+            del atoms, calc, unitcell, fc2, freqs
+            gc.collect()
+            
+            final_memory = process.memory_info().rss / 1024 / 1024  # MB
+            print(f"Memory usage for {mp_id}: {initial_memory:.1f}MB -> {final_memory:.1f}MB")
+
             return {
                 "mp_id": mp_id,
                 "phonon_band_path_dict": str(phonon_pred_band_structure_path),
@@ -236,6 +256,10 @@ class PhononAllBatchMeta(zntrack.Node):
             with open("error_log.txt", "a") as f:
                 f.write(f"\nError while processing {mp_id}:\n")
                 traceback.print_exc(file=f)
+            
+            # Force cleanup on error
+            gc.collect()
+            return None
 
 
     def run(self):
@@ -307,16 +331,47 @@ class PhononAllBatchMeta(zntrack.Node):
 
 
 
+        # Limit parallel jobs to prevent memory exhaustion
+        max_jobs = min(self.n_jobs if self.n_jobs > 0 else psutil.cpu_count(), 
+                      max(1, psutil.cpu_count() // 2))  # Use at most half the cores
+        
+        print(f"Using {max_jobs} parallel jobs (original request: {self.n_jobs})")
+        
         def handle(mp_id):
             return PhononAllBatchMeta.process_mp_id(
                 mp_id, calc_model, nwd, yaml_dir, fmax,
                 q_mesh, q_mesh_thermal, temperatures, self.check_completed)
 
-        if self.threading:
-            with parallel_backend("threading", n_jobs=self.n_jobs):
-                results = Parallel()(delayed(handle)(mp_id) for mp_id in self.mp_ids)
-        else:
-            results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in self.mp_ids)
+        # Use batch processing to prevent memory buildup
+        batch_size = max(1, max_jobs)  # Process in batches
+        all_results = []
+        
+        for i in range(0, len(self.mp_ids), batch_size):
+            batch = self.mp_ids[i:i + batch_size]
+            print(f"Processing batch {i//batch_size + 1}/{(len(self.mp_ids) + batch_size - 1)//batch_size}")
+            
+            if self.threading:
+                with parallel_backend("threading", n_jobs=max_jobs):
+                    batch_results = Parallel()(delayed(handle)(mp_id) for mp_id in batch)
+            else:
+                # Use spawn method to avoid shared memory issues
+                with parallel_backend("multiprocessing", n_jobs=max_jobs):
+                    batch_results = Parallel(prefer="processes")(delayed(handle)(mp_id) for mp_id in batch)
+            
+            all_results.extend(batch_results)
+            
+            # Force garbage collection between batches
+            gc.collect()
+            
+            # Monitor system memory
+            available_memory = psutil.virtual_memory().available / 1024 / 1024 / 1024  # GB
+            print(f"Available memory after batch: {available_memory:.1f}GB")
+            
+            if available_memory < 1.0:  # Less than 1GB available
+                print("Warning: Low memory detected, forcing cleanup")
+                gc.collect()
+        
+        results = all_results
 
         results = [res for res in results if res is not None]
 
