@@ -47,6 +47,7 @@ from copy import deepcopy
 
 class SlabExtensivityBenchmark(zntrack.Node):
     """ Benchmark comparing: E_slab1
+        size extensivity
     """
 
     model: NodeWithCalculator = zntrack.deps()
@@ -64,7 +65,7 @@ class SlabExtensivityBenchmark(zntrack.Node):
         
         sym1, sym2   = "Al", "Ni"         # element of slab-1 and slab-2
         layers       = 8
-        size_xy      = (4, 4)
+        size_xy      = (6, 6)
         vacuum_z     = 100.0               # Å vacuum on isolated slab
         gap          = 100.0               # Å gap between slabs in combined cell
         

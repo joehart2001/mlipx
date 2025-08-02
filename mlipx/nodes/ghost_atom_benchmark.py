@@ -51,7 +51,7 @@ import random
 from ase.io import read, write
 
 class GhostAtomBenchmark(zntrack.Node):
-    """ Benchmark comparing: E_slab1
+    """ size additivity benchmark
     """
 
     model: NodeWithCalculator = zntrack.deps()
