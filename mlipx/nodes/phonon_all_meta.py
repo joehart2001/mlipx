@@ -43,6 +43,7 @@ from joblib import parallel_backend
 import gc
 import psutil
 import sys
+import multiprocessing as mp
 from mlipx import PhononDispersion
 
 from mlipx.phonons_utils import get_fc2_and_freqs, init_phonopy, load_phonopy, get_chemical_formula
@@ -362,9 +363,10 @@ class PhononAllBatchMeta(zntrack.Node):
                         delayed(PhononAllBatchMeta.process_mp_id)(*args) for args in batch_args
                     )
             else:
-                # Use multiprocessing with wrapper function
+                # Use multiprocessing with spawn method for CUDA compatibility
+                mp_context = mp.get_context('spawn')
                 with parallel_backend("multiprocessing", n_jobs=max_jobs):
-                    batch_results = Parallel(prefer="processes")(
+                    batch_results = Parallel(prefer="processes", mp_context=mp_context)(
                         delayed(PhononAllBatchMeta._process_mp_id_wrapper)(args) for args in batch_args
                     )
                 #results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in self.mp_ids)
