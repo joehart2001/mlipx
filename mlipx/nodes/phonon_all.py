@@ -209,6 +209,7 @@ class PhononAllBatch(zntrack.Node):
         from pathlib import Path
         from joblib import Parallel, delayed, parallel_backend
         import ray
+        from time import perf_counter
 
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
@@ -218,6 +219,7 @@ class PhononAllBatch(zntrack.Node):
         temperatures = self.thermal_properties_temperatures
         calc_model = self.model  # Materialize model before parallel loops
 
+        start_time = perf_counter()
         if self.ray:
             ray.init(ignore_reinit_error=True)
             futures = [
@@ -247,7 +249,9 @@ class PhononAllBatch(zntrack.Node):
 
             results = [res for res in results if res is not None]
 
+        end_time = perf_counter()
         print(f"\nFinished with {len(results)} successful results.")
+        print(f"Total elapsed time: {end_time - start_time:.2f} seconds.")
 
         phonon_band_path_dict = {res["mp_id"]: str(res["phonon_band_path_dict"]) for res in results}
         phonon_dos_path_dict = {res["mp_id"]: str(res["phonon_dos_dict"]) for res in results}
