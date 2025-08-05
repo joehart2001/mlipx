@@ -67,7 +67,7 @@ class S30LBenchmark(zntrack.Node):
                     try:
                         return float(f.read_text().strip())
                     except ValueError:
-                        warnings.warn(f"Invalid charge in {f} – assuming neutral.")
+                        warnings.warn(f"Invalid charge in {f} - assuming neutral.")
             return 0.0
 
         def _read_atoms(folder: Path, ident: str) -> Atoms:

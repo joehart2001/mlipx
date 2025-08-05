@@ -242,6 +242,7 @@ class PhononAllBatch(zntrack.Node):
                 )
 
             if self.threading:
+                # threading can share calc instead of having mutliple instances, prevent OOM
                 with parallel_backend("threading", n_jobs=self.n_jobs):
                     results = Parallel()(delayed(handle)(mp_id) for mp_id in self.mp_ids)
             else:
