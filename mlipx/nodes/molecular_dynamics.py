@@ -941,24 +941,23 @@ class MolecularDynamics(zntrack.Node):
 
             merged = pd.concat(dfs, axis=1)
             merged["Model"] = merged.index
-            # --- begin patch ---
+            
             merged.reset_index(drop=True, inplace=True)
             cols = ["Model"] + [col for col in merged.columns if col != "Model"]
             merged = merged[cols]
-            # --- end patch ---
             
-            group_score = 0
+            
             mae_cols = [col for col in merged.columns if col != "Model"]
             for model_name in model_names:
+                score = 0
                 for col in mae_cols:                    
                     if normalise_to_model is not None:
                         ref = merged.loc[merged["Model"] == normalise_to_model, col].values[0]
-                        group_score += merged.loc[merged["Model"] == model_name, col].values[0] / ref
+                        score += merged.loc[merged["Model"] == model_name, col].values[0] / ref
                     else:
-                        
-                        group_score += merged.loc[merged["Model"] == model_name, col].values[0]
+                        score += merged.loc[merged["Model"] == model_name, col].values[0]
 
-                merged.loc[merged["Model"] == model_name, "Score ↓"] = group_score / len(mae_cols)
+                merged.loc[merged["Model"] == model_name, "Score ↓"] = score / len(mae_cols)
 
 
             merged["Rank"] = merged["Score ↓"].rank(method="min").astype(int)
@@ -1139,7 +1138,9 @@ class MolecularDynamics(zntrack.Node):
                         continue
                     x, y = np.array(ref[x_key]), ref[y_key]
                     if x_key == "time" and y_key in ("vaf",):
-                        x = x / 100  # VACF only
+                        x = x / 100 # VACF
+                    if x_key == "frequency" and y_key in ("vdos",):
+                        x = x / 0.3 # VDOS only, cm-1 to ps-1
 
                     fig.add_trace(go.Scatter(x=x, y=y, name=f"{ref_name} (Ref)", line=dict(dash="dot", color="black")))
 
@@ -1489,7 +1490,7 @@ class MolecularDynamics(zntrack.Node):
         return valid_distances, len(valid_distances), atoms.get_volume()
 
 
-    def compute_rdf_optimized_parallel(atoms_list, i_indices, j_indices, r_max=6.0, bins=100, n_jobs=-1):
+    def compute_rdf_optimized_parallel(atoms_list, i_indices, j_indices, r_max=6.5, bins=100, n_jobs=-1):
         i_indices = np.array(i_indices)
         j_indices = np.array(j_indices)
         

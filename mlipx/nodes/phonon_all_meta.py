@@ -110,7 +110,7 @@ class PhononAllBatchMeta(zntrack.Node):
             #calc = model.get_calculator()
             yaml_path = yaml_dir/ f"{mp_id}.yaml"
             
-            calc = model.get_calculator()
+            
                     
             phonons_pred = load_phonopy(str(yaml_path))
             chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
@@ -136,7 +136,7 @@ class PhononAllBatchMeta(zntrack.Node):
             
             print(f"\nProcessing {mp_id}...")
             
-            
+            calc = model.get_calculator()
             
             atoms = phonopy2aseatoms(phonons_pred, primitive=True)
         
