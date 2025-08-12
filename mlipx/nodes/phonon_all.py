@@ -128,7 +128,7 @@ class PhononAllBatch(zntrack.Node):
         import traceback
         try:
             yaml_path = yaml_dir / f"{mp_id}.yaml"
-            calc = model.get_calculator()
+            
             phonons_pred = load_phonopy(str(yaml_path))
             chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
             phonon_pred_path = nwd / f"phonon_pred_data/"
@@ -147,6 +147,8 @@ class PhononAllBatch(zntrack.Node):
                     "formula": chemical_formula,
                 }
             print(f"\nProcessing {mp_id}...")
+            
+            calc = model.get_calculator()
             displacement_dataset = phonons_pred.dataset
             atoms = phonopy2aseatoms(phonons_pred)
             atoms_sym = atoms.copy()

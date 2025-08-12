@@ -461,7 +461,6 @@ class MolecularDynamics(zntrack.Node):
             zeroline=False,
         )
 
-        # Now we set the first energy to zero for better compareability.
 
         offset = 0
         fig_adjusted = go.Figure()
@@ -532,7 +531,6 @@ class MolecularDynamics(zntrack.Node):
         from mlipx.dash_utils import dash_table_interactive, run_app
         import json
 
-        # Define which properties to compute
         NVT_properties = [
             'g_r_oo',
             'g_r_oh',
@@ -579,7 +577,6 @@ class MolecularDynamics(zntrack.Node):
         }
         
             
-        # Insert VACF reference into NVT_properties_dict["vacf"] following RDF pattern
         NVT_properties_dict["vacf"] = {
             "SPC/E_300K": {
                 "time": np.array(vacf_ref_data["x"]) / 10,
@@ -618,7 +615,7 @@ class MolecularDynamics(zntrack.Node):
                 'rdf': pbe_D3_330K_hh['y']
             }
         }
-        # Merge in exp_300K data for g_r_oo without overwriting existing dict
+
         NVT_properties_dict['g_r_oo']['EXP_300K'] = {
             'r': exp_300K['x'],
             'rdf': exp_300K['y']
@@ -681,8 +678,6 @@ class MolecularDynamics(zntrack.Node):
         }
         
 
-        # print("NVT node dict:", node_dict_NVT)
-        # print("NPT node dict:", node_dict_NPT)
 
         # ----------- predicted data -----------
         
@@ -714,7 +709,7 @@ class MolecularDynamics(zntrack.Node):
                         i_indices=o_indices,
                         j_indices=o_indices,
                         r_max=6.0,
-                        bins=100,
+                        bins=300,
                         n_jobs=1,
                     )
                     NVT_properties_dict[prop][model_name] = {
@@ -728,7 +723,7 @@ class MolecularDynamics(zntrack.Node):
                         i_indices=o_indices,
                         j_indices=h_indices,
                         r_max=6.0,
-                        bins=100,
+                        bins=300,
                         n_jobs=1,
                     )
                     NVT_properties_dict[prop][model_name] = {
@@ -742,7 +737,7 @@ class MolecularDynamics(zntrack.Node):
                         i_indices=h_indices,
                         j_indices=h_indices,
                         r_max=6.0,
-                        bins=100,
+                        bins=300,
                         n_jobs=1,
                     )
                     NVT_properties_dict[prop][model_name] = {
@@ -801,9 +796,6 @@ class MolecularDynamics(zntrack.Node):
                 
                 
         
-
-        # Compute VACF and VDOS MAE tables (dummy placeholders since no ref currently)
-
 
         # --- Helper to compute MAE DataFrame for a property ---
         def compute_mae_table(prop, properties_dict, model_names, normalise_to_model=None):
@@ -1364,7 +1356,7 @@ class MolecularDynamics(zntrack.Node):
             msd_values[lag] = np.mean(squared_displacements)
             counts[lag] = squared_displacements.size
 
-        time_steps = np.arange(max_lag) * timestep / 100  # fs → ps (points every 10 fs)
+        time_steps = np.arange(max_lag) * timestep / 100  # fs -> ps (points every 10 fs)
         return time_steps, msd_values
     
 
@@ -1417,7 +1409,6 @@ class MolecularDynamics(zntrack.Node):
             velocities = np.array(velocities)
             for i in range(3):  # x, y, z components
                 v = velocities[:, j, i]
-                # Proper autocorrelation calculation
                 autocorr = np.correlate(v, v, mode='full')
                 # Take the second half (positive lags) and normalize
                 autocorr = autocorr[len(autocorr)//2:]
@@ -1426,7 +1417,6 @@ class MolecularDynamics(zntrack.Node):
         
         vafs = np.array(vafs)
         
-        # Proper normalization: divide by number of overlapping points
         normalization = np.arange(n_steps, 0, -1)
         vafs = vafs / normalization[np.newaxis, :]
         
@@ -1434,11 +1424,9 @@ class MolecularDynamics(zntrack.Node):
         
         if fft:
             # Calculate power spectral density for VDOS
-            # Apply window function to reduce spectral leakage
             window = np.hanning(n_steps)
             vafs_windowed = vafs * window[np.newaxis, :]
             
-            # Zero-pad for better frequency resolution (optional)
             n_fft = 2 * n_steps
             vafs_fft = np.fft.fft(vafs_windowed, n=n_fft, axis=1)
             
@@ -1447,7 +1435,7 @@ class MolecularDynamics(zntrack.Node):
             
             # Only keep strictly positive frequencies
             freqs = np.fft.fftfreq(n_fft, timestep)
-            mask = freqs > 0  # only keep strictly positive frequencies
+            mask = freqs > 0
             freqs = freqs[mask]
             vafs = vafs[:, mask]
             lags = freqs
@@ -1473,7 +1461,7 @@ class MolecularDynamics(zntrack.Node):
             except Exception as e:
                 print(f"Normalization failed: {e}")
             # Gaussian smoothing for VDOS
-            sigma = 5  # adjust smoothing width as needed
+            sigma = 5
             total_vacf = gaussian_filter1d(total_vacf, sigma)
         else:
             total_vacf = total_vacf / np.max(total_vacf)  # Normalize to max value
@@ -1490,7 +1478,7 @@ class MolecularDynamics(zntrack.Node):
         return valid_distances, len(valid_distances), atoms.get_volume()
 
 
-    def compute_rdf_optimized_parallel(atoms_list, i_indices, j_indices, r_max=6.5, bins=100, n_jobs=-1):
+    def compute_rdf_optimized_parallel(atoms_list, i_indices, j_indices, r_max=6.5, bins=300, n_jobs=-1):
         i_indices = np.array(i_indices)
         j_indices = np.array(j_indices)
         
