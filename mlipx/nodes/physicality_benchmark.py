@@ -77,13 +77,13 @@ class PhysicalityBenchmark(zntrack.Node):
         
         from mlipx.dash_utils import process_data
         # list -> dict or dict -> dict
-        # OC157
+        # ghost atom
         ghost_atom_dict = process_data(
             ghost_atom_data,
             key_extractor=lambda node: node.name.split("_ghost-atom")[0],
             value_extractor=lambda node: node
         )
-        # S24
+        # energy additivity
         slab_dict = process_data(
             slab_extensivity_data,
             key_extractor=lambda node: node.name.split("_slab-extensivity")[0],

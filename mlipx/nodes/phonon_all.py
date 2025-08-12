@@ -219,7 +219,7 @@ class PhononAllBatch(zntrack.Node):
         q_mesh = self.N_q_mesh
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
-        calc_model = self.model  # Materialize model before parallel loops
+        calc_model = self.model
 
         start_time = perf_counter()
         if self.ray:

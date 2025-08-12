@@ -214,7 +214,7 @@ class Wiggle150(zntrack.Node):
                 mae_val = mae_df.loc[mae_df["Method"] == model, "Relative Energy MAE [kcal/mol]"].values[0]
                 mae_df.loc[mae_df["Method"] == model, "Score \u2193"] = mae_val / base_mae
         else:
-            # Apply only to MLIPs
+
             for model in mae_df.loc[mae_df["Type"] == "MLIP", "Method"]:
                 mae_val = mae_df.loc[mae_df["Method"] == model, "Relative Energy MAE [kcal/mol]"].values[0]
                 mae_df.loc[mae_df["Method"] == model, "Score \u2193"] = mae_val
@@ -225,7 +225,6 @@ class Wiggle150(zntrack.Node):
         mlip_mask = mae_df["Type"] == "MLIP"
         mae_df.loc[mlip_mask, "Rank"] = mae_df.loc[mlip_mask, "Score \u2193"].rank(method="min").astype(int)            
         
-        # ------ Save the dataframes to cache ------
         os.makedirs(cache_dir, exist_ok=True)
         rel_energy_df.to_pickle(os.path.join(cache_dir, "rel_energy_df.pkl"))
         mae_df.to_pickle(os.path.join(cache_dir, "mae_df.pkl"))
@@ -310,7 +309,6 @@ class Wiggle150(zntrack.Node):
 
             df_model = rel_energy_df[["structure", "ref", model_name]].dropna()
 
-            # Fit line
             x = df_model["ref"].values
             y = df_model[model_name].values
             coeffs = np.polyfit(x, y, 1)

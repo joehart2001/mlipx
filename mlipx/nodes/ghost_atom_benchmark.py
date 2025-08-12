@@ -131,10 +131,10 @@ class GhostAtomBenchmark(zntrack.Node):
         # ------ setup -------
 
         solute_smiles = "CC(=O)C"    # SMILES (RDKit required)
-        box_L         = 60.0         # Å edge length of cubic cell
+        box_L         = 60.0         # Angstrom, edge length of cubic cell
         ghost_Ne      = 20           # number of ghost atoms for Test 3
-        ghost_dist    = 40.0         # place all Ne ≥ this many Å from solute COM
-        rand_trials   = 30           # Test 6 repetitions
+        ghost_dist    = 40.0         # place all Ne ≥ this many Angstrom from solute COM
+        rand_trials   = 30           
         rand_min_dist = 20.0         # inner shell radius for random H
         rand_max_dist = 50.0         # outer shell radius
         SEED = 42
@@ -174,7 +174,6 @@ class GhostAtomBenchmark(zntrack.Node):
         for i, system_randH in enumerate(randH_structures):
             write(self.random_H_structures, system_randH, append=True)
 
-        # Collect results into DataFrame
         df = pd.DataFrame({
             "Model": [self.model_name],
             "test1 max ΔF": [max_dF_test3],

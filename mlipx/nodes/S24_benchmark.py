@@ -54,7 +54,6 @@ from mlipx.benchmark_download_utils import get_benchmark_data
 
 
 
-# OC157 benchmark node
 class S24Benchmark(zntrack.Node):
     """Benchmark model for s24 dataset.
     

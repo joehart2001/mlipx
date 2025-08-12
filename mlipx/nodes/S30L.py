@@ -316,7 +316,7 @@ class S30LBenchmark(zntrack.Node):
                     y=df["E_model (eV)"],
                     mode="markers",
                     marker=dict(size=6, opacity=0.7),
-                    customdata=df["Index"],  # ← clean value
+                    customdata=df["Index"],
                     text=[
                         f"Index: {i}<br>DFT: {e_ref:.3f} eV<br>{clicked_model}: {e_model:.3f} eV"
                         for i, e_ref, e_model in zip(df["Index"], df["E_ref (eV)"], df["E_model (eV)"])

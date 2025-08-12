@@ -116,9 +116,8 @@ class LNCI16Benchmark(zntrack.Node):
             e_guest = frags["guest"].get_potential_energy()
             return e_complex - e_host - e_guest
 
-        # ------------------------------------------------------------
-        # File I/O functions for LNCI16 format
-        # ------------------------------------------------------------
+
+        
         def read_turbomole_xyz(filepath: Path) -> Atoms:
             """Read Turbomole format xyz file (coordinates in atomic units)"""
             atoms = read(filepath, format='xyz')
@@ -167,9 +166,11 @@ class LNCI16Benchmark(zntrack.Node):
                 "guest": guest_atoms,
             }
 
-        # ------------------------------------------------------------
-        # Benchmarking functions
-        # ------------------------------------------------------------
+
+        
+        
+        
+        
         def benchmark_lnci16(calc: Calculator, model_name: str) -> pd.DataFrame:
             """Benchmark LNCI16 dataset"""
             logging.info(f"Benchmarking LNCI16 with {model_name}...")
@@ -299,14 +300,12 @@ class LNCI16Benchmark(zntrack.Node):
         
         results, complex_atoms_list = benchmark_lnci16(calc, self.model_name)
 
-        # Save the entire results DataFrame to lnci16_results_path as CSV
         results.to_csv(self.lnci16_results_path, index=False)
         
         # Save the complex atoms as an xyz file
         write(self.lnci16_complex_atoms_path, complex_atoms_list)
 
 
-        # Compute MAE from the "error_kcal" column and save as JSON
         mae = results["error_kcal"].abs().mean()
         print(f"MAE for {self.model_name} on LNCI16: {mae} kcal/mol")
         with open(self.lnci16_mae_path, "w") as f:
@@ -442,7 +441,7 @@ class LNCI16Benchmark(zntrack.Node):
         
     @staticmethod
     def register_callbacks(app, results_df):
-        # Import shared WEAS viewer callback utility
+
         from mlipx.dash_utils import weas_viewer_callback
         
         @app.callback(

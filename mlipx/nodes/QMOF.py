@@ -176,7 +176,6 @@ class QMOFBenchmark(zntrack.Node):
         
         results_df = pd.concat(results_dfs, axis=1)
 
-        # Drop duplicate columns (keeping the first occurrence)
         results_df = results_df.loc[:, ~results_df.columns.duplicated()]
 
         results_df.to_pickle(os.path.join(cache_dir, "results_df.pkl"))

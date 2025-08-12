@@ -104,12 +104,6 @@ class SlabExtensivityBenchmark(zntrack.Node):
         # --- put isolated slabs in the same tall cell ---
         slab1_big = slab1.copy();  slab1_big.set_cell(tall_cell, scale_atoms=False)
         slab2_big = slab2.copy();  slab2_big.set_cell(tall_cell, scale_atoms=False)
-
-        # write xyz files (skip silently on read-only FS)
-        # for fn, at in [("slab1.xyz", slab1_big), ("slab2.xyz", slab2_big), ("combined.xyz", combined)]:
-        #     try: write(fn, at, format="extxyz")
-        #     except OSError: pass
-
        
         e1  = energy(calc, slab1_big)
         e2  = energy(calc, slab2_big)

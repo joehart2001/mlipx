@@ -76,9 +76,8 @@ class ProteinLigandBenchmark(zntrack.Node):
         KCAL_TO_EV = 0.04336414
         EV_TO_KCAL = 1.0 / KCAL_TO_EV
 
-        # ------------------------------------------------------------
+
         # PDB processing functions
-        # ------------------------------------------------------------
         def extract_charge_and_selections(pdb_path: Path) -> Tuple[float, float, float, str, str]:
             """Extract charge and selection information from PDB REMARK lines"""
             total_charge = qa = qb = 0.0
@@ -220,7 +219,6 @@ class ProteinLigandBenchmark(zntrack.Node):
                 
                 base_id = pdb_path.stem
                 
-                # Create ASE objects
                 complex_atoms = mda_atoms_to_ase(list(all_atoms), total_charge, base_id)
                 protein_frag = mda_atoms_to_ase(protein_atoms, charge_a, base_id) 
                 ligand = mda_atoms_to_ase(ligand_atoms, charge_b, base_id)
@@ -235,9 +233,7 @@ class ProteinLigandBenchmark(zntrack.Node):
                 logging.warning(f"Error processing {pdb_path}: {e}")
                 return {}
 
-        # ------------------------------------------------------------
         # Reference energy parsing
-        # ------------------------------------------------------------
         def parse_plf547_references(path: Path) -> Dict[str, float]:
             """Parse PLF547 reference interaction energies (kcal/mol -> eV)"""
             ref: Dict[str, float] = {}
@@ -334,9 +330,7 @@ class ProteinLigandBenchmark(zntrack.Node):
                 
             return ref
 
-        # ------------------------------------------------------------
         # PLA15 benchmark (complete active site interactions)
-        # ------------------------------------------------------------
         def benchmark_pla15(calc: Calculator, model_name: str):
             """Benchmark PLA15 dataset - complete active site-ligand interactions"""
             pla15_refs = parse_pla15_references(PLA15_REF_FILE)
@@ -677,7 +671,6 @@ class ProteinLigandBenchmark(zntrack.Node):
                     name=clicked_model
                 )
             )
-            # Draw diagonal line for perfect agreement
             min_val = min(
                 (df["E_ref (eV)"] / 0.04336414).min(),
                 (df["E_model (eV)"] / 0.04336414).min()

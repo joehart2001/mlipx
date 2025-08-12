@@ -392,7 +392,6 @@ class NEB2(zntrack.Node):
 
     @property
     def figures(self) -> dict[str, go.Figure]:
-        # Use Plotly Express to create the scatter plot
         x_values = self.results["data_id"] if "data_id" in self.results else list(range(len(self.results)))
         y_values = self.results["potential_energy"] if "potential_energy" in self.results else [0]*len(x_values)
         system_name = getattr(self, 'name', 'system')
@@ -473,7 +472,6 @@ class NEB2(zntrack.Node):
             zeroline=False,
         )
 
-        # Now adjusted
 
         fig_adjusted = go.Figure()
         offset = 0
@@ -566,7 +564,6 @@ class NEB2(zntrack.Node):
             #print(f"\nProcessing model: {model}")
             #print(f"Systems: {list(system_dict.keys())}")
 
-        # === Define system groups manually ===
         system_groups = {
             "Si_64": "Si",
             "Si_216": "Si",
@@ -589,7 +586,6 @@ class NEB2(zntrack.Node):
                 normalized_system_groups = {k.strip("_"): v for k, v in system_groups.items()}
                 group = normalized_system_groups.get(clean_system, clean_system)
 
-                # Store using clean system name (stripped version)
                 grouped_nodes[group][model][clean_system] = node
 
         # --- Add: all_group_data dict ---
@@ -702,9 +698,7 @@ class NEB2(zntrack.Node):
         #app.server.static_folder = 'assets'
         #app.server.static_url_path = '/assets'
 
-        # Set layout using the static method
         app.layout = NEB2.build_layout(all_group_data)
-        # Register callbacks using the static method
         NEB2.register_callbacks(app, all_group_data)
 
         return run_app(app, ui=ui)
@@ -753,11 +747,9 @@ class NEB2(zntrack.Node):
         from dash import Output, Input, State, exceptions
         import plotly.graph_objects as go
         
-        # Import shared WEAS viewer callback utility
         from mlipx.dash_utils import weas_viewer_callback
         
         for group_name, (mae_df, neb_df, assets_dir) in all_group_data.items():
-            # Prepare custom_col_names mapping for this group
             custom_col_names = {}
             for col in mae_df.columns:
                 if col == "Model":
@@ -806,7 +798,6 @@ class NEB2(zntrack.Node):
                 fig.update_layout(title=f"{model_name}: NEB Energy Path", xaxis_title="Image Index", yaxis_title="Energy (eV)")
                 return fig, {"display": "block"}, active_cell, model_name
 
-            # WEAS viewer callback using shared utility
             @app.callback(
                 Output(f"weas-viewer-{group_name}", "children"),
                 Output(f"weas-viewer-{group_name}", "style"),
