@@ -112,17 +112,18 @@ class FurtherApplications(zntrack.Node):
         group_mae_tables = {}
         for group_name in groups:
             group_mae_tables[group_name] = pd.read_pickle(f"{cache_dir}/molecular_dynamics_cache/mae_df_{group_name}.pkl")
-        # with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
-        #     NVT_properties_dict = pickle.load(f)
-        # with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
-        #     msd_dict = pickle.load(f)
-        # NVT_properties_dict["msd_O"] = msd_dict
-        # # Load NPT property data
-        # with open(f"{cache_dir}/npt_data.pkl", "rb") as f:
-        #     NPT_properties_dict = pickle.load(f)
+
+        # MD stability
+        stability_df = None
+        # Load summary table
+        try:
+            stability_df = pd.read_csv(f"{cache_dir}/molecular_dynamics_cache/survival_summary.csv")
+            print("found stability summary")
+        except FileNotFoundError:
+            stability_df = None
         
 
-        benchmark_score_df = FurtherApplications.benchmark_score(groups=groups, group_mae_tables=group_mae_tables, normalise_to_model=normalise_to_model).round(3)
+        benchmark_score_df = FurtherApplications.benchmark_score(groups=groups, group_mae_tables=group_mae_tables, stability_df=stability_df, normalise_to_model=normalise_to_model).round(3)
         benchmark_score_df = benchmark_score_df.sort_values(by='Avg MAE \u2193', ascending=True).reset_index(drop=True)
         benchmark_score_df['Rank'] = benchmark_score_df['Avg MAE \u2193'].rank(ascending=True)
 
@@ -162,18 +163,39 @@ class FurtherApplications(zntrack.Node):
         with open(f"{cache_dir}/molecular_dynamics_cache/npt_data.pkl", "rb") as f:
             NPT_properties_dict = pickle.load(f)
             
+        # MD stability
+        stability_dict = None
+        stability_df = None
+        # Prefer a pickle if you precomputed one
+        try:
+            with open(f"{cache_dir}/molecular_dynamics_cache/survival_data.json", "rb") as f:
+                stability_dict = json.load(f)
+        except FileNotFoundError:
+            print("No stability data found, using None")
+            stability_dict = None
+
+        # Load summary table
+        try:
+            stability_df = pd.read_csv(f"{cache_dir}/molecular_dynamics_cache/survival_summary.csv")
+        except FileNotFoundError:
+            stability_df = None
+            
+            
         callback_fn = FurtherApplications.callback_fn_from_cache(
             groups=groups,
             group_mae_tables=group_mae_tables,
             NVT_properties_dict=NVT_properties_dict,
             NPT_properties_dict=NPT_properties_dict,
+            stability_dict=stability_dict,
         )
+
 
         app = dash.Dash(__name__)
 
         layout = FurtherApplications.build_layout(
             groups=groups,
             group_mae_tables=group_mae_tables,
+            stability_df=stability_df,
             normalise_to_model=normalise_to_model,
         )
         
@@ -200,6 +222,7 @@ class FurtherApplications(zntrack.Node):
         group_mae_tables,
         NVT_properties_dict,
         NPT_properties_dict,
+        stability_dict=None,
         normalise_to_model=None
     ):
         """
@@ -209,20 +232,6 @@ class FurtherApplications(zntrack.Node):
         import pickle
         import pandas as pd
         def callback_fn(app):
-            # # Load group MAE tables and groups from cache
-            # # Assume cache_dir points to e.g. "app_cache/further_applications_benchmark"
-            # md_cache = f"{cache_dir}/molecular_dynamics_cache"
-            # with open(f"{cache_dir}/groups.pkl", "rb") as f:
-            #     groups = pickle.load(f)
-            # # Load group mae tables
-            # group_mae_tables = {}
-            # for group_name in groups:
-            #     group_mae_tables[group_name] = pd.read_pickle(f"{cache_dir}/mae_df_{group_name}.pkl")
-            # with open(f"{cache_dir}/molecular_dynamics_cache/rdf_data.pkl", "rb") as f:
-            #     properties_dict = pickle.load(f)
-            # with open(f"{cache_dir}/molecular_dynamics_cache/msd_data.pkl", "rb") as f:
-            #     msd_dict = pickle.load(f)
-            # properties_dict["msd_O"] = msd_dict
             
             # Use loaded properties_dict, not the one passed in
             MolecularDynamics.register_callbacks(
@@ -231,6 +240,7 @@ class FurtherApplications(zntrack.Node):
                 group_mae_tables=group_mae_tables,
                 NVT_properties_dict=NVT_properties_dict,
                 NPT_properties_dict=NPT_properties_dict,
+                stability_dict=stability_dict,
             )
         return callback_fn
     
@@ -239,9 +249,14 @@ class FurtherApplications(zntrack.Node):
     
     
     @staticmethod
-    def build_layout(groups, group_mae_tables, normalise_to_model=None):
+    def build_layout(
+        groups, 
+        group_mae_tables,
+        stability_df=None,
+        normalise_to_model=None
+    ):
 
-        score_df = FurtherApplications.benchmark_score(groups, group_mae_tables, normalise_to_model=normalise_to_model).round(3)
+        score_df = FurtherApplications.benchmark_score(groups, group_mae_tables, stability_df, normalise_to_model=normalise_to_model).round(3)
         score_df["Rank"] = score_df["Avg MAE \u2193"].rank(ascending=True).astype(int)
         score_df = score_df.sort_values(by="Avg MAE \u2193", ascending=True).reset_index(drop=True)
 
@@ -250,7 +265,7 @@ class FurtherApplications(zntrack.Node):
             benchmark_title="Water MD",
             benchmark_table_info=f"Scores normalised to: {normalise_to_model}" if normalise_to_model else "",
             apps_or_layouts_list=[
-                MolecularDynamics.build_layout(groups, group_mae_tables)
+                MolecularDynamics.build_layout(groups, group_mae_tables, stability_df=stability_df),
             ],
             id="rdf-benchmark-score-table",
             static_coloured_table=True,
@@ -262,13 +277,14 @@ class FurtherApplications(zntrack.Node):
     
     
     @staticmethod
-    def register_callbacks(app, groups, group_mae_tables, properties_dict):
+    def register_callbacks(app, groups, group_mae_tables, properties_dict, survival_dict=None):
         from mlipx import MolecularDynamics
         MolecularDynamics.register_callbacks(
             app,
             groups=groups,
             group_mae_tables=group_mae_tables,
-            NVT_properties_dict=properties_dict
+            NVT_properties_dict=properties_dict,
+            stability_dict=survival_dict,
         )
         
 
@@ -281,6 +297,7 @@ class FurtherApplications(zntrack.Node):
     def benchmark_score(
         groups,
         group_mae_tables,
+        stability_df,
         normalise_to_model: Optional[str] = None,
         weights: Dict[str, float] = None,
     ):
@@ -306,6 +323,9 @@ class FurtherApplications(zntrack.Node):
                 group_weight = weights.get(group_name, 1.0)
                 weighted_sum += group_weight * score
                 total_weight += group_weight
+                
+            if stability_df is not None and not stability_df.empty:
+                weighted_sum += stability_df.loc[stability_df["Model"] == model, "Score ↓"].values[0]
 
             model_scores["Avg MAE \u2193"] = weighted_sum / total_weight if total_weight > 0 else None
             scores[model] = model_scores

@@ -985,9 +985,11 @@ class MolecularDynamics(zntrack.Node):
         groups, 
         group_mae_tables,
         NVT_properties_dict,
-        NPT_properties_dict
+        NPT_properties_dict,
+        stability_dict,
     ):
         from dash import Input, Output, State, no_update, html, dcc
+        from dash.exceptions import PreventUpdate
         import plotly.graph_objs as go
         import numpy as np
         import re
@@ -1069,12 +1071,12 @@ class MolecularDynamics(zntrack.Node):
                 import re
 
                 if active_cell is None:
-                    raise dash.exceptions.PreventUpdate
+                    raise PreventUpdate
 
                 row_idx = active_cell.get("row")
                 col_id = active_cell.get("column_id")
                 if row_idx is None or col_id is None:
-                    raise dash.exceptions.PreventUpdate
+                    raise PreventUpdate
 
                 model_name = table_data[row_idx]["Model"].strip()
                 ref_name = col_id.strip()
@@ -1188,6 +1190,68 @@ class MolecularDynamics(zntrack.Node):
                 return dcc.Graph(figure=fig), [model_name, ref_name]
             
 
+        # ---------------- Stability table callback ----------------
+        if stability_dict is not None:
+            @app.callback(
+                Output("stability-details", "children"),
+                Input("md-stability-table", "active_cell"),
+                State("md-stability-table", "data"),
+                prevent_initial_call=True,
+            )
+            def update_stability_plot(active_cell, table_data):
+                import plotly.graph_objs as go
+                from dash import html, dcc
+                import numpy as np
+                
+
+                if active_cell is None:
+                    raise PreventUpdate
+                row_idx = active_cell.get("row")
+                if row_idx is None:
+                    raise PreventUpdate
+
+                model_pretty = table_data[row_idx].get("Model")
+                if model_pretty is None:
+                    return html.Div("No model selected")
+
+                entry = stability_dict.get(model_pretty) or stability_dict.get(str(model_pretty))
+                if entry is None:
+                    return html.Div(f"No survival data for {model_pretty}")
+
+                times = np.asarray(entry.get("time", []), dtype=float)
+                surv  = np.asarray(entry.get("survival", []), dtype=float)
+                if times.size == 0 or surv.size == 0:
+                    return html.Div(f"Empty survival series for {model_pretty}")
+
+                duration_ps = float(entry.get("duration_ps", (times[-1] if times.size else 0.0)))
+
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(x=times, y=surv, mode="lines", name=model_pretty))
+
+                # Bottom x-axis (time)
+                fig.update_xaxes(title_text="Time (ps)", range=[0, duration_ps], showgrid=True)
+                # Left y-axis (survival)
+                fig.update_yaxes(title_text="Surviving simulations (%)", range=[85, 100.5], showgrid=True)
+
+                # Top x-axis (temperature), linear 300→3000 K across full duration
+                temps = np.array([300, 600, 1000, 1500, 2000, 2500, 3000], dtype=float)
+                tickvals = (temps - 300.0) / (3000.0 - 300.0) * duration_ps
+
+                fig.update_layout(
+                    title=f"Survival curve — {model_pretty}",
+                    margin=dict(l=60, r=40, t=60, b=60),
+                    xaxis2=dict(
+                        overlaying="x",
+                        side="top",
+                        tickmode="array",
+                        tickvals=tickvals,
+                        ticktext=[str(int(t)) for t in temps],
+                        title="Temperature (K)",
+                    ),
+                )
+
+                return dcc.Graph(figure=fig)
+
     
     @staticmethod
     def benchmark_precompute(
@@ -1224,6 +1288,23 @@ class MolecularDynamics(zntrack.Node):
         with open(f"{cache_dir}/groups.pkl", "wb") as f:
             pickle.dump(groups, f)
             
+        # MD stability
+        stability_df = None
+        # Load summary table
+        try:
+            stability_df = pd.read_csv(f"{cache_dir}/survival_summary.csv")
+        except FileNotFoundError:
+            stability_df = None
+            
+        if stability_df is not None and normalise_to_model:
+            stability_df['Score ↓'] = stability_df['Survival rate (%)'] / stability_df.loc[stability_df['Model'] == normalise_to_model, 'Survival rate (%)'].values[0]
+            stability_df['Score ↓'] = stability_df['Score ↓'].round(3)
+        # Save stability df
+        if stability_df is not None:
+            stability_df.to_csv(f"{cache_dir}/survival_summary.csv", index=False)
+        
+
+
         # Save NPT properties
         with open(f"{cache_dir}/npt_data.pkl", "wb") as f:
             pickle.dump(NPT_properties_dict, f)
@@ -1259,15 +1340,34 @@ class MolecularDynamics(zntrack.Node):
         # Load NPT property data
         with open(f"{cache_dir}/npt_data.pkl", "rb") as f:
             NPT_properties_dict = pickle.load(f)
+            
+        # MD stability
+        stability_dict = None
+        stability_df = None
+        # Prefer a pickle if you precomputed one
+        try:
+            with open(f"{cache_dir}/survival_data.json", "rb") as f:
+                stability_dict = json.load(f)
+        except FileNotFoundError:
+            print("No stability data found, using None")
+            stability_dict = None
+
+        # Load summary table
+        try:
+            stability_df = pd.read_csv(f"{cache_dir}/survival_summary.csv")
+        except FileNotFoundError:
+            stability_df = None
+        
 
         app = dash.Dash(__name__)
-        app.layout = MolecularDynamics.build_layout(groups=groups, group_mae_tables=group_mae_tables)
+        app.layout = MolecularDynamics.build_layout(groups=groups, group_mae_tables=group_mae_tables, stability_df=stability_df)
         MolecularDynamics.register_callbacks(
             app,
             groups=groups,
             group_mae_tables=group_mae_tables,
             NVT_properties_dict=NVT_properties_dict,
-            NPT_properties_dict=NPT_properties_dict
+            NPT_properties_dict=NPT_properties_dict,
+            stability_dict=stability_dict,
         )
         return run_app(app, ui=ui)
     
@@ -1276,7 +1376,7 @@ class MolecularDynamics(zntrack.Node):
     
     
     @staticmethod
-    def build_layout(groups, group_mae_tables):
+    def build_layout(groups, group_mae_tables, stability_df=None):
         from dash import html, dcc
         from mlipx.dash_utils import dash_table_interactive
         layout_children = [
@@ -1297,6 +1397,26 @@ class MolecularDynamics(zntrack.Node):
                         dcc.Store(id=group["last_clicked_id"], data=None),
                     ],
                     tooltip_header=group["tooltip_header"],
+                )
+            )
+
+        if stability_df is not None and not stability_df.empty:
+            layout_children.append(html.H3("MD Stability (Temperature Ramp)"))
+            layout_children.append(
+                dash_table_interactive(
+                    df=stability_df,
+                    id="md-stability-table",
+                    title=None,
+                    extra_components=[
+                        html.Div(id="stability-details"),
+                        dcc.Store(id="stability-last-clicked", data=None),
+                    ],
+                    tooltip_header={
+                        "Model": "Pretty model name",
+                        "survival rate": "% of simulations with no failures",
+                        "score": "Normalized survival score (lower is better)",
+                        "rank": "Rank by score (1 is best)",
+                    },
                 )
             )
             
