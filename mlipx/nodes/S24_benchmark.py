@@ -78,7 +78,7 @@ class S24Benchmark(zntrack.Node):
         atoms_list = read(data, ":")
 
         def compute_absorption_energy(surface_e, mol_surf_e, molecule_e):
-            """Compute adsorption energy given surface, molecule+surface, and molecule energies."""
+
             return mol_surf_e - (surface_e + molecule_e)
 
         ref = {}
