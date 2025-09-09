@@ -677,7 +677,7 @@ class PhononDispersion(zntrack.Node):
 
 
 
-
+    
 
         for model_name in plot_stats_dict:
             PhononDispersion.save_stability_outputs(
@@ -687,6 +687,8 @@ class PhononDispersion(zntrack.Node):
                 save_plots=not no_plots  # new argument to control plot saving
             )
             PhononDispersion.calculate_benchmark_statistics(model_name, model_benchmarks_dict, plot_stats_dict, benchmarks)
+        
+        
         
         # summary statistics and generate plots
         mae_summary_df = PhononDispersion.calculate_summary_statistics(
@@ -1444,6 +1446,9 @@ class PhononDispersion(zntrack.Node):
             
             # plot_stats_dict[model_name][benchmark]['RMSE'].append(rmse)
             # plot_stats_dict[model_name][benchmark]['MAE'].append(mae)
+
+            print(f"N structures for {model_name} - {benchmark}: {len(pred_values)}")
+
             print(f"{model_name} - {benchmark}: RMSE = {rmse:.3f}, MAE = {mae:.5f}")
             plot_stats_dict[model_name][benchmark]['RMSE'] = rmse
             plot_stats_dict[model_name][benchmark]['MAE'] = mae
