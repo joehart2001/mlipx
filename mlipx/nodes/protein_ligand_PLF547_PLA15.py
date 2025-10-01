@@ -160,6 +160,32 @@ class ProteinLigandBenchmark(zntrack.Node):
             atoms.info.update({'charge': int(round(charge)), 'identifier': identifier})
             return atoms
 
+        def _sanitize_atoms_for_write(atoms: Atoms) -> Atoms:
+            """Return a safe-to-write copy of Atoms.
+
+            - Detach calculators to avoid format writers pulling calc state
+            - Drop per-atom arrays that can vary across images or have stale shapes
+            """
+            a = atoms.copy()
+            # Detach calculator to avoid storing calc state and per-atom arrays added by calc
+            a.calc = None
+            # Keep only core arrays that every Atoms must have
+            keep = {"numbers", "positions"}
+            drop_keys = [k for k in list(a.arrays.keys()) if k not in keep]
+            for k in drop_keys:
+                try:
+                    del a.arrays[k]
+                except Exception:
+                    pass
+            # Ensure no inconsistent per-atom array slipped through
+            bad_keys = [k for k, arr in a.arrays.items() if getattr(arr, "shape", (0,))[0] != len(a)]
+            for k in bad_keys:
+                try:
+                    del a.arrays[k]
+                except Exception:
+                    pass
+            return a
+
         def benchmark_plf547(calc: Calculator, model_name: str):
             """Benchmark PLF547 dataset - protein fragment-ligand interactions"""
             plf547_refs = parse_plf547_references(PLF547_REF_FILE)
@@ -195,7 +221,8 @@ class ProteinLigandBenchmark(zntrack.Node):
                         'ligand_atoms': len(fragments['ligand']),
                         'complex': fragments['complex']
                     })
-                    complex_atoms_list.append(fragments['complex'])
+                    # Store a sanitized copy for writing later to avoid shape mismatches
+                    complex_atoms_list.append(_sanitize_atoms_for_write(fragments['complex']))
                 except Exception as e:
                     continue
             df = pd.DataFrame(results)
@@ -377,8 +404,8 @@ class ProteinLigandBenchmark(zntrack.Node):
                     fragments['complex'].info['error_kcal'] = (E_int_model - E_int_ref) * EV_TO_KCAL
                     
                     fragments['complex'].calc = None
-
-                    complex_atoms_list.append(fragments['complex'])
+                    # Append sanitized copy to ensure arrays are consistent for writing
+                    complex_atoms_list.append(_sanitize_atoms_for_write(fragments['complex']))
                 except Exception as e:
                     continue
             df = pd.DataFrame(results)
@@ -401,7 +428,13 @@ class ProteinLigandBenchmark(zntrack.Node):
         with open(self.plf547_mae_path, "w") as f:
             json.dump({"mae_kcal": plf547_mae}, f)
         if plf547_complex_atoms_list:
-            write(self.plf547_complex_atoms_path, plf547_complex_atoms_list)
+            # Write as extended XYZ; sanitized frames can have variable natoms safely
+            try:
+                write(self.plf547_complex_atoms_path, plf547_complex_atoms_list, format="extxyz")
+            except ValueError:
+                # Fallback: append frames incrementally to avoid broadcasting issues
+                for i, atoms in enumerate(plf547_complex_atoms_list):
+                    write(self.plf547_complex_atoms_path, atoms, format="extxyz", append=(i > 0))
 
         # Run PLA15 benchmark
         pla15_df, pla15_complex_atoms_list = benchmark_pla15(calc, model_name)
@@ -417,7 +450,11 @@ class ProteinLigandBenchmark(zntrack.Node):
         with open(self.pla15_mae_path, "w") as f:
             json.dump({"mae_kcal": pla15_mae}, f)
         if pla15_complex_atoms_list:
-            write(self.pla15_complex_atoms_path, pla15_complex_atoms_list)
+            try:
+                write(self.pla15_complex_atoms_path, pla15_complex_atoms_list, format="extxyz")
+            except ValueError:
+                for i, atoms in enumerate(pla15_complex_atoms_list):
+                    write(self.pla15_complex_atoms_path, atoms, format="extxyz", append=(i > 0))
 
 
 
