@@ -366,6 +366,8 @@ class ProteinLigandBenchmark(zntrack.Node):
                         'complex': fragments['complex']
                     })
                     
+                    
+                    
                     fragments['complex'].info['identifier'] = identifier
                     fragments['complex'].info['dataset'] = 'PLA15'
                     fragments['complex'].info['model'] = model_name
@@ -373,6 +375,8 @@ class ProteinLigandBenchmark(zntrack.Node):
                     fragments['complex'].info['E_int_ref'] = E_int_ref
                     fragments['complex'].info['error_eV'] = E_int_model - E_int_ref
                     fragments['complex'].info['error_kcal'] = (E_int_model - E_int_ref) * EV_TO_KCAL
+                    
+                    fragments['complex'].calc = None
 
                     complex_atoms_list.append(fragments['complex'])
                 except Exception as e:
