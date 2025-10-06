@@ -215,11 +215,11 @@ class ProteinLigandBenchmark(zntrack.Node):
             - mae_kcal
             - rmse_kcal
             - r2
-            - pearson_r
+            - pearson_r^2
             """
             def _stats(_df: pd.DataFrame) -> dict:
                 if _df.empty:
-                    return {"n": 0, "mae_kcal": None, "rmse_kcal": None, "r2": None, "pearson_r": None}
+                    return {"n": 0, "mae_kcal": None, "rmse_kcal": None, "r2": None, "pearson_r^2": None}
                 y_true = _df["E_int_ref"].to_numpy()
                 y_pred = _df[f"E_int_{model_name}"].to_numpy()
                 err_ev = (y_pred - y_true)
@@ -237,7 +237,7 @@ class ProteinLigandBenchmark(zntrack.Node):
                     pr = float(r)
                 except Exception:
                     pr = None
-                return {"n": int(len(_df)), "mae_kcal": mae, "rmse_kcal": rmse, "r2": r2, "pearson_r": pr}
+                return {"n": int(len(_df)), "mae_kcal": mae, "rmse_kcal": rmse, "r2": r2, "pearson_r^2": pr**2}
 
             out: dict[str, Any] = {"overall": _stats(df), "categories": {}}
             for code in ("NN", "NC", "CC"):
