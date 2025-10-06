@@ -91,6 +91,15 @@ class HomonuclearDiatomics(zntrack.Node):
         
         (self.model_outs / "mlipx.txt").write_text("Thank you for using MLIPX!")
         #calc = self.model.get_calculator(directory=self.model_outs)
+        # Workaround for PyTorch 2.6+ safe loader when some model checkpoints
+        # require additional globals (e.g., UMA uses builtins.slice in state).
+        try:
+            import torch
+            if hasattr(torch, "serialization") and hasattr(torch.serialization, "add_safe_globals"):
+                torch.serialization.add_safe_globals([slice])
+        except Exception:
+            pass
+
         calc = self.model.get_calculator()
         e_v = {}
 
