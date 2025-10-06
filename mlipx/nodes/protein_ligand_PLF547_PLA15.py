@@ -59,11 +59,15 @@ class ProteinLigandBenchmark(zntrack.Node):
     plf547_ref_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "plf547_ref.csv")
     plf547_pred_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "plf547_pred.csv")
     plf547_mae_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "plf547_mae.json")
+    plf547_stats_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "plf547_stats.json")
+    plf547_full_results_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "plf547_full_results.csv")
     plf547_complex_atoms_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "plf547_complex_atoms.xyz")
 
     pla15_ref_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "pla15_ref.csv")
     pla15_pred_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "pla15_pred.csv")
     pla15_mae_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "pla15_mae.json")
+    pla15_stats_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "pla15_stats.json")
+    pla15_full_results_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "pla15_full_results.csv")
     pla15_complex_atoms_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "pla15_complex_atoms.xyz")
     
     def run(self):
@@ -186,6 +190,62 @@ class ProteinLigandBenchmark(zntrack.Node):
                     pass
             return a
 
+        def _charge_category(q_protein: float | int, q_ligand: float | int) -> tuple[str, str]:
+            """Return short and long category labels based on charges.
+
+            - NN / neutral-neutral: both zero
+            - NC / neutral-charged: one zero, one non-zero
+            - CC / charged-charged: both non-zero
+            """
+            qp = int(round(q_protein or 0))
+            ql = int(round(q_ligand or 0))
+            is_p_neutral = (qp == 0)
+            is_l_neutral = (ql == 0)
+            if is_p_neutral and is_l_neutral:
+                return "NN", "neutral-neutral"
+            if (is_p_neutral and not is_l_neutral) or (not is_p_neutral and is_l_neutral):
+                return "NC", "neutral-charged"
+            return "CC", "charged-charged"
+
+        def _compute_stats(df: pd.DataFrame, model_name: str) -> dict:
+            """Compute overall and per-category stats in kcal/mol and correlations.
+
+            Returns a dict with keys: overall, categories -> {NN, NC, CC} each holding
+            - n: count
+            - mae_kcal
+            - rmse_kcal
+            - r2
+            - pearson_r
+            """
+            def _stats(_df: pd.DataFrame) -> dict:
+                if _df.empty:
+                    return {"n": 0, "mae_kcal": None, "rmse_kcal": None, "r2": None, "pearson_r": None}
+                y_true = _df["E_int_ref"].to_numpy()
+                y_pred = _df[f"E_int_{model_name}"].to_numpy()
+                err_ev = (y_pred - y_true)
+                err_kcal = err_ev * EV_TO_KCAL
+                mae = float(np.mean(np.abs(err_kcal)))
+                rmse = float(np.sqrt(np.mean(err_kcal ** 2)))
+                # R^2
+                ss_res = float(np.sum((y_true - y_pred) ** 2))
+                mean_true = float(np.mean(y_true))
+                ss_tot = float(np.sum((y_true - mean_true) ** 2))
+                r2 = None if ss_tot == 0.0 else float(1.0 - ss_res / ss_tot)
+                # Pearson r
+                try:
+                    r, _ = pearsonr(y_true, y_pred)
+                    pr = float(r)
+                except Exception:
+                    pr = None
+                return {"n": int(len(_df)), "mae_kcal": mae, "rmse_kcal": rmse, "r2": r2, "pearson_r": pr}
+
+            out: dict[str, Any] = {"overall": _stats(df), "categories": {}}
+            for code in ("NN", "NC", "CC"):
+                out["categories"][code] = _stats(df[df["category_code"] == code])
+            # also include human-readable mapping for clarity
+            out["category_labels"] = {"NN": "neutral-neutral", "NC": "neutral-charged", "CC": "charged-charged"}
+            return out
+
         def benchmark_plf547(calc: Calculator, model_name: str):
             """Benchmark PLF547 dataset - protein fragment-ligand interactions"""
             plf547_refs = parse_plf547_references(PLF547_REF_FILE)
@@ -209,6 +269,9 @@ class ProteinLigandBenchmark(zntrack.Node):
                     E_ligand = fragments['ligand'].get_potential_energy()
                     E_int_model = E_complex - E_protein - E_ligand
                     E_int_ref = plf547_refs[identifier]
+                    q_protein = fragments['protein'].info.get('charge', 0)
+                    q_ligand = fragments['ligand'].info.get('charge', 0)
+                    cat_code, cat_label = _charge_category(q_protein, q_ligand)
                     results.append({
                         'identifier': identifier,
                         'dataset': 'PLF547',
@@ -216,6 +279,10 @@ class ProteinLigandBenchmark(zntrack.Node):
                         f'E_int_{model_name}': E_int_model,
                         'error_eV': E_int_model - E_int_ref,
                         'error_kcal': (E_int_model - E_int_ref) * EV_TO_KCAL,
+                        'charge_protein': int(round(q_protein or 0)),
+                        'charge_ligand': int(round(q_ligand or 0)),
+                        'category_code': cat_code,
+                        'category': cat_label,
                         'complex_atoms': len(fragments['complex']),
                         'protein_atoms': len(fragments['protein']),
                         'ligand_atoms': len(fragments['ligand']),
@@ -380,6 +447,9 @@ class ProteinLigandBenchmark(zntrack.Node):
                     E_ligand = fragments['ligand'].get_potential_energy()
                     E_int_model = E_complex - E_protein - E_ligand
                     E_int_ref = pla15_refs[identifier]
+                    q_protein = fragments['protein'].info.get('charge')
+                    q_ligand = fragments['ligand'].info.get('charge')
+                    cat_code, cat_label = _charge_category(q_protein, q_ligand)
                     results.append({
                         'identifier': identifier,
                         'dataset': 'PLA15',
@@ -387,6 +457,10 @@ class ProteinLigandBenchmark(zntrack.Node):
                         f'E_int_{model_name}': E_int_model,
                         'error_eV': E_int_model - E_int_ref,
                         'error_kcal': (E_int_model - E_int_ref) * EV_TO_KCAL,
+                        'charge_protein': int(round(q_protein)),
+                        'charge_ligand': int(round(q_ligand)),
+                        'category_code': cat_code,
+                        'category': cat_label,
                         'complex_atoms': len(fragments['complex']),
                         'protein_atoms': len(fragments['protein']),
                         'ligand_atoms': len(fragments['ligand']),
@@ -427,6 +501,18 @@ class ProteinLigandBenchmark(zntrack.Node):
             plf547_mae = None
         with open(self.plf547_mae_path, "w") as f:
             json.dump({"mae_kcal": plf547_mae}, f)
+        # Save full PLF547 results including category splits and stats
+        if not plf547_df.empty:
+            # full results (keep useful columns only to keep size reasonable)
+            cols_keep = [
+                'identifier', 'dataset', 'E_int_ref', f'E_int_{model_name}', 'error_eV', 'error_kcal',
+                'charge_protein', 'charge_ligand', 'category_code', 'category',
+                'complex_atoms', 'protein_atoms', 'ligand_atoms'
+            ]
+            (plf547_df[cols_keep]).to_csv(self.plf547_full_results_path, index=False)
+            # stats json
+            with open(self.plf547_stats_path, 'w') as f:
+                json.dump(_compute_stats(plf547_df, model_name), f, indent=2)
         if plf547_complex_atoms_list:
             # Write as extended XYZ; sanitized frames can have variable natoms safely
             try:
@@ -449,6 +535,16 @@ class ProteinLigandBenchmark(zntrack.Node):
             pla15_mae = None
         with open(self.pla15_mae_path, "w") as f:
             json.dump({"mae_kcal": pla15_mae}, f)
+        # Save full PLA15 results including category splits and stats
+        if not pla15_df.empty:
+            cols_keep = [
+                'identifier', 'dataset', 'E_int_ref', f'E_int_{model_name}', 'error_eV', 'error_kcal',
+                'charge_protein', 'charge_ligand', 'category_code', 'category',
+                'complex_atoms', 'protein_atoms', 'ligand_atoms'
+            ]
+            (pla15_df[cols_keep]).to_csv(self.pla15_full_results_path, index=False)
+            with open(self.pla15_stats_path, 'w') as f:
+                json.dump(_compute_stats(pla15_df, model_name), f, indent=2)
         if pla15_complex_atoms_list:
             try:
                 write(self.pla15_complex_atoms_path, pla15_complex_atoms_list, format="extxyz")
