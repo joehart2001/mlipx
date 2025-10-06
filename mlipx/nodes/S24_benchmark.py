@@ -2,6 +2,7 @@ import pathlib
 import typing as t
 import json
 
+import ase
 import ase.io
 import numpy as np
 import pandas as pd
@@ -77,9 +78,26 @@ class S24Benchmark(zntrack.Node):
         data = get_benchmark_data("s24.zip") / "s24/s24_data.extxyz"
         atoms_list = read(data, ":")
 
-        def compute_absorption_energy(surface_e, mol_surf_e, molecule_e):
+        def compute_absorption_energy(surface_e, mol_surf_e, molecule_e, adsorbate_count: int = 1) -> float:
+            print("adsorbate_count:", adsorbate_count)
+            return mol_surf_e - (surface_e + adsorbate_count * molecule_e)
 
-            return mol_surf_e - (surface_e + molecule_e)
+        def get_adsorbate_count(surface_atoms: ase.Atoms, mol_surface_atoms: ase.Atoms, molecule_atoms: ase.Atoms) -> int:
+            """Infer how many copies of the molecule are present in the adsorbed structure."""
+            molecule_atom_count = len(molecule_atoms)
+            if molecule_atom_count == 0:
+                return 1
+
+            extra_atoms = len(mol_surface_atoms) - len(surface_atoms)
+            if extra_atoms <= 0:
+                return 1
+
+            adsorbate_count, remainder = divmod(extra_atoms, molecule_atom_count)
+            if remainder:
+                # Fall back to rounding if the structure deviates slightly from an exact multiple.
+                adsorbate_count = max(1, round(extra_atoms / molecule_atom_count))
+
+            return max(1, adsorbate_count)
 
         ref = {}
         pred = {}
@@ -92,14 +110,22 @@ class S24Benchmark(zntrack.Node):
             molecule = atoms_list[i + 2]
             surface_formula = surface.get_chemical_formula()
             molecule_formula = molecule.get_chemical_formula()
-            
-            mol_surface.info["name"] = f"{surface_formula}-{molecule_formula}"
-            
+
+            adsorbate_count = get_adsorbate_count(surface, mol_surface, molecule)
+            system_name = f"{surface_formula}-{molecule_formula}"
+            if adsorbate_count > 1:
+                system_name = f"{surface_formula}-{adsorbate_count}x{molecule_formula}"
+
+            mol_surface.info["name"] = system_name
+            mol_surface.info["adsorbate_count"] = adsorbate_count
+
 
             dft_surface_energy = surface.get_potential_energy()
             dft_mol_surface_energy = mol_surface.get_potential_energy()
             dft_molecule_energy = molecule.get_potential_energy()
-            dft_abs_energy = compute_absorption_energy(dft_surface_energy, dft_mol_surface_energy, dft_molecule_energy)
+            dft_abs_energy = compute_absorption_energy(
+                dft_surface_energy, dft_mol_surface_energy, dft_molecule_energy, adsorbate_count
+            )
 
             surface.calc = deepcopy(calc)
             mol_surface.calc = deepcopy(calc)
@@ -109,10 +135,12 @@ class S24Benchmark(zntrack.Node):
             mol_surface_energy = mol_surface.get_potential_energy()
             molecule_energy = molecule.get_potential_energy()
 
-            calc_abs_energy = compute_absorption_energy(surface_energy, mol_surface_energy, molecule_energy)
+            calc_abs_energy = compute_absorption_energy(
+                surface_energy, mol_surface_energy, molecule_energy, adsorbate_count
+            )
 
-            pred[f"{surface_formula}-{molecule_formula}"] = calc_abs_energy
-            ref[f"{surface_formula}-{molecule_formula}"] = dft_abs_energy
+            pred[system_name] = calc_abs_energy
+            ref[system_name] = dft_abs_energy
             
             mol_surface_list.append(mol_surface)
 
