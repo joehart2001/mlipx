@@ -3,6 +3,7 @@ import pickle
 import functools
 import pathlib
 import typing as t
+from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import ase
 import numpy as np
@@ -72,6 +73,7 @@ class HomonuclearDiatomics(zntrack.Node):
     eq_distance: t.Union[t.Literal["covalent-radiuis"], float] = zntrack.params(
         "covalent-radiuis"
     )
+    n_workers: int = zntrack.params(-1)
 
     frames: list[ase.Atoms] = zntrack.outs()  # TODO: change to h5md out
     results: pd.DataFrame = zntrack.plots()
@@ -123,6 +125,39 @@ class HomonuclearDiatomics(zntrack.Node):
                     if match:
                         already_done_homo.add(match.group(1))
 
+        # Optional parallel compute over homonuclear elements
+        processed_elements: set[str] = set()
+        if self.n_workers and self.n_workers > 1:
+            futures = []
+            with ProcessPoolExecutor(max_workers=self.n_workers) as ex:
+                for element in elements:
+                    # Skip those already completed on disk
+                    if element in already_done_homo:
+                        continue
+                    # Build distances same as serial path
+                    if self.eq_distance == "covalent-radiuis":
+                        rmin = 0.9 * covalent_radii[atomic_numbers[element]]
+                        rvdw = vdw_alvarez.vdw_radii[atomic_numbers[element]] if atomic_numbers[element] < len(vdw_alvarez.vdw_radii) else np.nan
+                        rmax = 3.1 * rvdw if not np.isnan(rvdw) else 6
+                        rstep = 0.01
+                        npts = max(1, int((rmax - rmin) / rstep))
+                        distances = np.linspace(rmin, rmax, npts)
+                    else:
+                        distances = np.linspace(self.min_distance, self.max_distance, self.n_points)
+                    futures.append(ex.submit(_compute_homo_element_task, self.model, element, distances.tolist()))
+                for fut in as_completed(futures):
+                    try:
+                        el, df_local, traj_frames_local, res_pairs = fut.result()
+                        processed_elements.add(el)
+                        e_v[el] = df_local
+                        ase.io.write((self.trajectory_dir_path / f"{el}2.extxyz"), traj_frames_local, append=True)
+                        self.frames.extend(traj_frames_local)
+                        for dist, en in res_pairs:
+                            results_list.append({"element": el, "distance": dist, "energy": en})
+                    except Exception as e:
+                        print(f"Skipping element {element}: {e}")
+                        skipped_elements.append(element)
+
         for element in tqdm(elements, desc="Homonuclear Elements"):
 
             if element in already_done_homo:
@@ -153,6 +188,10 @@ class HomonuclearDiatomics(zntrack.Node):
 
                 continue
             
+            # Skip elements already processed in parallel
+            if element in processed_elements:
+                continue
+
             # otherwise, proceed with calculations    
             traj_frames = []
             try:
@@ -229,6 +268,39 @@ class HomonuclearDiatomics(zntrack.Node):
                         already_done_hetero.add((match.group(1), match.group(2)))
                         already_done_hetero.add((match.group(2), match.group(1)))  # to cover both orderings
                         
+        # Optional parallel compute over heteronuclear pairs
+        processed_pairs: set[tuple[str, str]] = set()
+        if self.het_diatomics and self.n_workers and self.n_workers > 1:
+            futures = []
+            with ProcessPoolExecutor(max_workers=self.n_workers) as ex:
+                for elem1, elem2 in hetero_pairs:
+                    filename = f"{elem1}{elem2}.extxyz"
+                    if completed_traj_dir is not None and (completed_traj_dir / filename).exists():
+                        continue
+                    if (elem1, elem2) in already_done_hetero:
+                        continue
+                    if self.eq_distance == "covalent-radiuis":
+                        rmin = 0.9 * (covalent_radii[atomic_numbers[elem1]] + covalent_radii[atomic_numbers[elem2]]) / 2
+                        rvdw1 = vdw_alvarez.vdw_radii[atomic_numbers[elem1]] if atomic_numbers[elem1] < len(vdw_alvarez.vdw_radii) else np.nan
+                        rvdw2 = vdw_alvarez.vdw_radii[atomic_numbers[elem2]] if atomic_numbers[elem2] < len(vdw_alvarez.vdw_radii) else np.nan
+                        rvdw = (rvdw1 + rvdw2) / 2 if not (np.isnan(rvdw1) or np.isnan(rvdw2)) else 6
+                        rmax = 3.1 * rvdw
+                        rstep = 0.01
+                        npts = max(1, int((rmax - rmin) / rstep))
+                        distances = np.linspace(rmin, rmax, npts)
+                    else:
+                        distances = np.linspace(self.min_distance, self.max_distance, self.n_points)
+                    futures.append(ex.submit(_compute_hetero_pair_task, self.model, elem1, elem2, distances.tolist()))
+                for fut in as_completed(futures):
+                    try:
+                        (el1, el2), df_local, traj_frames_local = fut.result()
+                        processed_pairs.add((el1, el2))
+                        e_v[f"{el1}-{el2}"] = df_local
+                        ase.io.write((self.trajectory_dir_path / f"{el1}{el2}.extxyz"), traj_frames_local, append=True)
+                        self.frames.extend(traj_frames_local)
+                    except Exception:
+                        continue
+
         for elem1, elem2 in tqdm(hetero_pairs, desc="Heteronuclear Pairs"):
             # --- New block: check for completed heteronuclear trajectory ---
             filename = f"{elem1}{elem2}.extxyz"
@@ -254,6 +326,8 @@ class HomonuclearDiatomics(zntrack.Node):
                 print(f"Skipping {elem1}-{elem2} — found in completed_traj_dir.")
                 traj = ase.io.read(completed_traj_dir / f"{elem1}{elem2}.extxyz", index=":")
                 self.frames.extend(freeze_copy_atoms(a) for a in traj)
+                continue
+            if (elem1, elem2) in processed_pairs:
                 continue
             traj_frames = []
             try:
@@ -934,3 +1008,77 @@ class HomonuclearDiatomics(zntrack.Node):
             ),
             #dcc.Graph(id="diatom-element-or-ptable-plot", style={"height": "700px", "width": "100%", "marginTop": "20px"}),
         ], style={"backgroundColor": "white"})
+def _is_uma_omol_calc(calc_obj) -> bool:
+    try:
+        mod = getattr(calc_obj.__class__, "__module__", "").lower()
+        if "fairchem" not in mod:
+            return False
+        task = getattr(calc_obj, "task_name", None)
+        if task is None and hasattr(calc_obj, "predictor"):
+            task = getattr(calc_obj.predictor, "task_name", None)
+        return task == "omol"
+    except Exception:
+        return False
+
+
+def _compute_homo_element_task(model_obj, el: str, distances: list[float]):
+    import numpy as _np
+    import pandas as _pd
+    import ase as _ase
+    from mlipx.utils import freeze_copy_atoms as _freeze
+
+    # Safe loader shim for torch 2.6+
+    try:
+        import torch as _torch
+        if hasattr(_torch, "serialization") and hasattr(_torch.serialization, "add_safe_globals"):
+            _torch.serialization.add_safe_globals([slice])
+    except Exception:
+        pass
+
+    calc_child = model_obj.get_calculator()
+
+    traj_frames_local = []
+    energies_local = []
+    for d in distances:
+        molecule = _ase.Atoms([el, el], positions=[(0, 0, 0), (0, 0, float(d))])
+        molecule.calc = calc_child
+        if _is_uma_omol_calc(calc_child):
+            molecule.info.setdefault("spin", 1)
+        e = molecule.get_potential_energy()
+        _ = molecule.get_forces()
+        traj_frames_local.append(_freeze(molecule))
+        energies_local.append(e)
+    df_local = _pd.DataFrame({el: energies_local}, index=_np.round(_np.array(distances), 6))
+    df_local = df_local[~df_local.index.duplicated(keep="first")]
+    return el, df_local, traj_frames_local, list(zip(distances, energies_local))
+
+
+def _compute_hetero_pair_task(model_obj, el1: str, el2: str, distances: list[float]):
+    import numpy as _np
+    import pandas as _pd
+    import ase as _ase
+    from mlipx.utils import freeze_copy_atoms as _freeze
+
+    # Safe loader shim for torch 2.6+
+    try:
+        import torch as _torch
+        if hasattr(_torch, "serialization") and hasattr(_torch.serialization, "add_safe_globals"):
+            _torch.serialization.add_safe_globals([slice])
+    except Exception:
+        pass
+
+    calc_child = model_obj.get_calculator()
+
+    traj_frames_local = []
+    energies_local = []
+    for d in distances:
+        molecule = _ase.Atoms([el1, el2], positions=[(0, 0, 0), (0, 0, float(d))])
+        molecule.calc = calc_child
+        if _is_uma_omol_calc(calc_child):
+            molecule.info.setdefault("spin", 1)
+        e = molecule.get_potential_energy()
+        traj_frames_local.append(_freeze(molecule))
+        energies_local.append(e)
+    df_local = _pd.DataFrame({f"{el1}-{el2}": energies_local}, index=_np.round(_np.array(distances), 6))
+    df_local = df_local[~df_local.index.duplicated(keep="first")]
+    return (el1, el2), df_local, traj_frames_local
