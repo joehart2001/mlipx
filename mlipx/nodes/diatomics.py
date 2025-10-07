@@ -90,6 +90,10 @@ class HomonuclearDiatomics(zntrack.Node):
         self.model_outs.mkdir(exist_ok=True, parents=True)
         self.trajectory_dir_path.mkdir(exist_ok=True, parents=True)
         completed_traj_dir = self.completed_traj_dir
+        if completed_traj_dir is not None:
+            # Allow users to pass values like "~/path/to/traj" or relative paths
+            completed_traj_dir = Path(completed_traj_dir).expanduser()
+            print(f"Using completed_traj_dir: {completed_traj_dir}")
         
         (self.model_outs / "mlipx.txt").write_text("Thank you for using MLIPX!")
         #calc = self.model.get_calculator(directory=self.model_outs)
