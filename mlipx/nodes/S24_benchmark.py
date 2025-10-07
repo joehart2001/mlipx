@@ -53,7 +53,16 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 from mlipx.benchmark_download_utils import get_benchmark_data
 
 
+try:
+    from torch.serialization import add_safe_globals
+except ImportError:
+    add_safe_globals = None
 
+if add_safe_globals is not None:
+    try:
+        add_safe_globals([slice])
+    except Exception:
+        pass
 
 class S24Benchmark(zntrack.Node):
     """Benchmark model for s24 dataset.
@@ -126,14 +135,17 @@ class S24Benchmark(zntrack.Node):
             dft_abs_energy = compute_absorption_energy(
                 dft_surface_energy, dft_mol_surface_energy, dft_molecule_energy, adsorbate_count
             )
+            
+            surface_copy = surface.copy()
+            surface_copy.calc = calc
+            mol_surface_copy = mol_surface.copy()
+            mol_surface_copy.calc = calc
+            molecule_copy = molecule.copy()
+            molecule_copy.calc = calc
 
-            surface.calc = deepcopy(calc)
-            mol_surface.calc = deepcopy(calc)
-            molecule.calc = deepcopy(calc)
-
-            surface_energy = surface.get_potential_energy()
-            mol_surface_energy = mol_surface.get_potential_energy()
-            molecule_energy = molecule.get_potential_energy()
+            surface_energy = surface_copy.get_potential_energy()
+            mol_surface_energy = mol_surface_copy.get_potential_energy()
+            molecule_energy = molecule_copy.get_potential_energy()
 
             calc_abs_energy = compute_absorption_energy(
                 surface_energy, mol_surface_energy, molecule_energy, adsorbate_count
