@@ -857,7 +857,7 @@ class PhononDispersion(zntrack.Node):
                 "ω_max [THz]": "Maximum phonon frequency across all materials (in THz).",
                 "ω_avg [THz]": "Average phonon frequency over the Brillouin zone (in THz).",
                 "ω_min [THz]": "Minimum phonon frequency across all materials (in THz).",
-                "Avg BZ RMSE [THz]": "Average root mean square error of the phonon dispersion over the Brillouin zone (in THz).",
+                "Avg BZ MAE [THz]": "Average mean absolute error of the phonon dispersion over the Brillouin zone (in THz).",
                 "S [J/mol·K]": "Predicted vibrational entropy at a given temperature (in J/mol·K).",
                 "F [kJ/mol]": "Predicted vibrational Helmholtz free energy (in kJ/mol).",
                 "C_V [J/mol·K]": "Predicted heat capacity at constant volume (in J/mol·K).",
@@ -938,7 +938,7 @@ class PhononDispersion(zntrack.Node):
                 return None, None
             if col == "Stability Classification (F1)":
                 return None, summary_active_cell
-            if col == "Avg BZ RMSE [THz]":
+            if col == "Avg BZ MAE [THz]":
                 band_error_dict = scatter_to_dispersion_map[model_name].get("band_errors", {})
                 all_errors = np.concatenate(list(band_error_dict.values())) if band_error_dict else np.array([])
                 import plotly.express as px
@@ -946,7 +946,7 @@ class PhononDispersion(zntrack.Node):
                     y=all_errors,
                     box=True,
                     points="outliers",
-                    title=f"{model_name} - BZ RMSE Distribution",
+                    title=f"{model_name} - BZ MAE Distribution",
                     labels={"y": "Absolute Error (THz)"}
                 )
                 return html.Div([dcc.Graph(figure=fig)]), summary_active_cell
@@ -1363,7 +1363,7 @@ class PhononDispersion(zntrack.Node):
             if "band_errors" not in scatter_to_dispersion_map[model_name]:
                 scatter_to_dispersion_map[model_name]["band_errors"] = {}
 
-            band_diffs = []
+            band_abs_diffs = []
             for p, r in zip(pred_freqs, ref_freqs):
                 len_p = len(p)
                 len_r = len(r)
@@ -1375,14 +1375,15 @@ class PhononDispersion(zntrack.Node):
                 r_arr = np.array(r[:min_len])
 
                 try:
-                    diff_squared = (p_arr - r_arr) ** 2
-                    band_diffs.append(diff_squared)
+                    abs_diff = np.abs(p_arr - r_arr)
+                    band_abs_diffs.append(abs_diff)
                 except ValueError as e:
                     print(f"Skipping band due to ValueError at {model_name}, {mp_id}: {e}")
                     continue
 
-            if band_diffs:
-                band_errors = np.sqrt(np.mean(np.concatenate(band_diffs)))
+            if band_abs_diffs:
+                #band_errors = np.sqrt(np.mean(np.concatenate(band_diffs))) # RMSE over all bands and k-points
+                band_errors = np.mean(np.concatenate(band_abs_diffs))
                 scatter_to_dispersion_map[model_name]["band_errors"][mp_id] = band_errors.flatten()
             else:
                 print(f"No valid band differences found for {model_name} at {mp_id}. Skipping band error calculation.")
@@ -1790,9 +1791,9 @@ class PhononDispersion(zntrack.Node):
         # Insert the new column after "C_V"
         if "ω_min [THz]" in mae_summary_df.columns:
             insert_idx = mae_summary_df.columns.get_loc("ω_min [THz]") + 1
-            mae_summary_df.insert(insert_idx, "Avg BZ RMSE [THz]", band_maes)
+            mae_summary_df.insert(insert_idx, "Avg BZ MAE [THz]", band_maes)
         else:
-            mae_summary_df["Avg BZ RMSE [THz]"] = band_maes
+            mae_summary_df["Avg BZ MAE [THz]"] = band_maes
         return mae_summary_df
     
     
@@ -1806,32 +1807,31 @@ class PhononDispersion(zntrack.Node):
             print(f"[Warning] No band errors to save for {model_name}")
             return
 
-        data_df = pd.DataFrame({"BZ RMSE [THz]": all_errors})
+        data_df = pd.DataFrame({"BZ MAE [THz]": all_errors})
         data_dir = Path(output_dir) / model_name / "band_errors"
         data_dir.mkdir(parents=True, exist_ok=True)
         
         #per_mp_mae = [(mp_id, np.mean(np.abs(errors))) for mp_id, errors in band_error_dict.items()]
-        per_mp_rmse = [(mp_id, np.sqrt(np.nanmean(np.square(errors)))) for mp_id, errors in band_error_dict.items()]
-        per_mp_df = pd.DataFrame(per_mp_rmse, columns=["mp_id", "BZ_RMSE [THz]"])
-        per_mp_df.to_csv(data_dir / "bz_rmse_distribution.csv", index=False)
+        per_mp_mae = [(mp_id, np.nanmean(np.abs(errors))) for mp_id, errors in band_error_dict.items()]
+        per_mp_df = pd.DataFrame(per_mp_mae, columns=["mp_id", "BZ_MAE [THz]"])
+        per_mp_df.to_csv(data_dir / "bz_mae_distribution.csv", index=False)
 
         fig = px.violin(
             y=all_errors,
             box=True,
             points="outliers",
-            title=f"{model_name} - BZ RMSE Distribution",
-            labels={"y": "BZ RMSE [THz]"},
+            title=f"{model_name} - BZ MAE Distribution",
+            labels={"y": "BZ MAE [THz]"},
         )
         fig.update_layout(
             plot_bgcolor="white",
             paper_bgcolor="white",
             font_color="black"
         )
-        plot_path = data_dir / "bz_rmse_distribution.png"
+        plot_path = data_dir / "bz_mae_distribution.png"
         fig.write_image(plot_path, width=800, height=600)
 
 
 
             
-
 
