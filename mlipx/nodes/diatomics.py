@@ -544,6 +544,7 @@ class HomonuclearDiatomics(zntrack.Node):
 
         for model_name, node in node_dict.items():
             results = node.results.copy()
+            print(results)
             data_columns = [col for col in results.columns if col != "distance"]
             homo_cols = [col for col in data_columns if "-" not in col]
             hetero_cols = [col for col in data_columns if "-" in col]
@@ -563,7 +564,7 @@ class HomonuclearDiatomics(zntrack.Node):
                 diatomics_df=results_dict[model_name],
                 model_name=model_name,
             )
-        print(node_dict)
+
         stats_df = get_homonuclear_diatomic_stats(list(node_dict.keys()))
         stats_df = HomonuclearDiatomics.score_diatomics(stats_df, normalise_to_model=normalise_to_model)
         for model in stats_df["Model"]:
