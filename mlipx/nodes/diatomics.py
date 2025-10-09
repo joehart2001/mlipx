@@ -566,20 +566,14 @@ class HomonuclearDiatomics(zntrack.Node):
 
         stats_df = get_homonuclear_diatomic_stats(list(node_dict.keys()))
         stats_df = HomonuclearDiatomics.score_diatomics(stats_df, normalise_to_model=normalise_to_model)
-        stats_df.insert(
-            1,
-            "Homonuclear pairs analysed",
-            stats_df["Model"].map(
-                lambda model: pair_counts.get(model, {}).get("homonuclear", 0)
-            ),
-        )
-        stats_df.insert(
-            2,
-            "Heteronuclear pairs analysed",
-            stats_df["Model"].map(
-                lambda model: pair_counts.get(model, {}).get("heteronuclear", 0)
-            ),
-        )
+        for model in stats_df["Model"]:
+            counts = pair_counts.get(model, {})
+            homo_count = counts.get("homonuclear", 0)
+            hetero_count = counts.get("heteronuclear", 0)
+            print(
+                f"[{model}] homonuclear pairs analysed: {homo_count}; "
+                f"heteronuclear pairs analysed: {hetero_count}"
+            )
         stats_df["Rank"] = stats_df["Score"].rank(ascending=True, method="min"
                                                   ).fillna(-1).astype(int)
         
