@@ -232,22 +232,63 @@ def get_homonuclear_diatomic_properties(model, node, pbe_ref = False):
 
 
 def get_homonuclear_diatomic_stats(models):
-
-
-
-
     DATA_DIR = Path("benchmark_stats/molecular_benchmark/homonuclear_diatomics/stats/")
 
-    dfs = [
-        pd.read_json(DATA_DIR / f"{model}-homonuclear-diatomics.json")
-        for model in models
-    ]
+    dfs: list[pd.DataFrame] = []
+    for model in models:
+        json_path = DATA_DIR / f"{model}-homonuclear-diatomics.json"
+        if not json_path.exists():
+            warnings.warn(
+                f"Missing homonuclear diatomic stats for model '{model}' at {json_path}. "
+                "Skipping."
+            )
+            continue
+        try:
+            df_model = pd.read_json(json_path)
+        except ValueError as exc:
+            warnings.warn(
+                f"Failed to read homonuclear diatomic stats for model '{model}' "
+                f"from {json_path}: {exc}. Skipping."
+            )
+            continue
+        if df_model.empty or "method" not in df_model.columns:
+            warnings.warn(
+                f"Stats file {json_path} for model '{model}' is empty or missing "
+                "expected columns. Skipping."
+            )
+            continue
+        dfs.append(df_model)
+
+    if not dfs:
+        warnings.warn(
+            "No homonuclear diatomic stats could be loaded. Returning empty table."
+        )
+        return pd.DataFrame(
+            columns=[
+                "Model",
+                "Force flips",
+                "Tortuosity",
+                "Energy minima",
+                "Energy inflections",
+                "Spearman's coeff. (E: repulsion)",
+                "Spearman's coeff. (F: descending)",
+                "Spearman's coeff. (E: attraction)",
+                "Spearman's coeff. (F: ascending)",
+            ]
+        )
+
     df = pd.concat(dfs, ignore_index=True)
 
     table = pd.DataFrame()
 
     for model in models:
         rows = df[df["method"] == model]
+        if rows.empty:
+            warnings.warn(
+                f"No homonuclear diatomic stats rows found for model '{model}'. "
+                "Skipping."
+            )
+            continue
         #metadata = MODELS.get(model, {})
 
         new_row = {
