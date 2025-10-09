@@ -251,10 +251,17 @@ def get_homonuclear_diatomic_stats(models):
                 f"from {json_path}: {exc}. Skipping."
             )
             continue
-        if df_model.empty or "method" not in df_model.columns:
+        if df_model.empty:
+            file_size = json_path.stat().st_size if json_path.exists() else 0
             warnings.warn(
-                f"Stats file {json_path} for model '{model}' is empty or missing "
-                "expected columns. Skipping."
+                f"Stats file {json_path} for model '{model}' is empty "
+                f"(size: {file_size} bytes). Skipping."
+            )
+            continue
+        if "method" not in df_model.columns:
+            warnings.warn(
+                f"Stats file {json_path} for model '{model}' is missing the 'method' "
+                f"column. Available columns: {list(df_model.columns)}. Skipping."
             )
             continue
         dfs.append(df_model)
