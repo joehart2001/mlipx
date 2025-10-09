@@ -49,6 +49,13 @@ warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from mlipx.benchmark_download_utils import get_benchmark_data
 
+import torch
+if torch.cuda.is_available():
+    torch.backends.cuda.matmul.allow_tf32 = False
+    torch.backends.cudnn.allow_tf32 = False
+    print("TF32 is disabled for CUDA operations.")
+
+
 
 
 class Wiggle150(zntrack.Node):
