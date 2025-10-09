@@ -539,10 +539,18 @@ class HomonuclearDiatomics(zntrack.Node):
         ui: str | None = None,
         normalise_to_model: t.Optional[str] = None,
     ):
-        results_dict = {}
+        results_dict: dict[str, pd.DataFrame] = {}
+        pair_counts: dict[str, dict[str, int]] = {}
 
         for model_name, node in node_dict.items():
-            results = node.results
+            results = node.results.copy()
+            data_columns = [col for col in results.columns if col != "distance"]
+            homo_cols = [col for col in data_columns if "-" not in col]
+            hetero_cols = [col for col in data_columns if "-" in col]
+            pair_counts[model_name] = {
+                "homonuclear": len(homo_cols),
+                "heteronuclear": len(hetero_cols),
+            }
             results.index.name = None
             results.reset_index(inplace=True)
             results.rename(columns={"index": "distance"}, inplace=True)
@@ -558,6 +566,20 @@ class HomonuclearDiatomics(zntrack.Node):
 
         stats_df = get_homonuclear_diatomic_stats(list(node_dict.keys()))
         stats_df = HomonuclearDiatomics.score_diatomics(stats_df, normalise_to_model=normalise_to_model)
+        stats_df.insert(
+            1,
+            "Homonuclear pairs analysed",
+            stats_df["Model"].map(
+                lambda model: pair_counts.get(model, {}).get("homonuclear", 0)
+            ),
+        )
+        stats_df.insert(
+            2,
+            "Heteronuclear pairs analysed",
+            stats_df["Model"].map(
+                lambda model: pair_counts.get(model, {}).get("heteronuclear", 0)
+            ),
+        )
         stats_df["Rank"] = stats_df["Score"].rank(ascending=True, method="min"
                                                   ).fillna(-1).astype(int)
         
