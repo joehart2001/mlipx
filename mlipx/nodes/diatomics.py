@@ -563,7 +563,7 @@ class HomonuclearDiatomics(zntrack.Node):
                 diatomics_df=results_dict[model_name],
                 model_name=model_name,
             )
-
+        print(node_dict)
         stats_df = get_homonuclear_diatomic_stats(list(node_dict.keys()))
         stats_df = HomonuclearDiatomics.score_diatomics(stats_df, normalise_to_model=normalise_to_model)
         for model in stats_df["Model"]:
