@@ -325,8 +325,6 @@ for _name, _cfg in _registry.items():
             class_name=_cfg["class_name"],
             device=_cfg.get("device", "cpu"),
             kwargs=_cfg.get("kwargs", {}),
-            default_dtype=_cfg.get("default_dtype", "float32"),
-            d3_kwargs=_cfg.get("d3_kwargs", None),
         )
 
     else:
