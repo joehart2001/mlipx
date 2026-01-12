@@ -159,7 +159,7 @@ ALL_MODELS["fairchem-uma-sm"] = FairChemCalc(
 )
 
 @dataclasses.dataclass(kw_only=True)
-class PetMadCalc(mlipx.GenericASECalc):
+class PetMadCalc(mlipx.GenericASECalculator):
     """Dataclass for PET-MAD calculator."""
 
     def get_calculator(self, **kwargs) -> Calculator:
@@ -181,7 +181,7 @@ class PetMadCalc(mlipx.GenericASECalc):
         else:
             kwargs["dtype"] = self.default_dtype
 
-        return MlipxGenericASECalc.get_calculator(self, **kwargs)
+        return GenericASECalculator.get_calculator(self, **kwargs)
 
 
 @dataclasses.dataclass
