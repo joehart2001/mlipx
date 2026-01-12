@@ -1,6 +1,8 @@
 import dataclasses
 from pathlib import Path
+
 import yaml
+from ase.calculators.calculator import Calculator
 
 import mlipx
 from mlipx.nodes.generic_ase import Device
@@ -162,7 +164,7 @@ ALL_MODELS["fairchem-uma-sm"] = FairChemCalc(
 class PetMadCalc(mlipx.GenericASECalculator):
     """Dataclass for PET-MAD calculator."""
 
-    def get_calculator(self, **kwargs):
+    def get_calculator(self, **kwargs) -> Calculator:
         """
         Prepare and load the calculator.
 
@@ -181,7 +183,7 @@ class PetMadCalc(mlipx.GenericASECalculator):
         else:
             kwargs["dtype"] = self.default_dtype
 
-        return mlipx.GenericASECalculator.get_calculator(self, **kwargs)
+        return super().get_calculator(**kwargs)
 
 
 @dataclasses.dataclass
@@ -318,10 +320,11 @@ for _name, _cfg in _registry.items():
         )
 
     elif _cfg["class_name"] == "PETMADCalculator":
-        kwargs = _cfg.get("kwargs", {})
         MODELS[_name] = PetMadCalc(
-            version=kwargs["version"],
+            module=_cfg["module"],
+            class_name=_cfg["class_name"],
             device=_cfg.get("device", "cpu"),
+            kwargs=_cfg.get("kwargs", {}),
             default_dtype=_cfg.get("default_dtype", "float32"),
             d3_kwargs=_cfg.get("d3_kwargs", None),
         )
