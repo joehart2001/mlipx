@@ -164,6 +164,10 @@ ALL_MODELS["fairchem-uma-sm"] = FairChemCalc(
 class PetMadCalc(mlipx.GenericASECalculator):
     """Dataclass for PET-MAD calculator."""
 
+    default_dtype: str | None = None
+    trained_on_d3: bool = False
+    d3_kwargs: dict = dataclasses.field(default_factory=dict)
+
     def get_calculator(self, **kwargs) -> Calculator:
         """
         Prepare and load the calculator.
@@ -179,8 +183,6 @@ class PetMadCalc(mlipx.GenericASECalculator):
             Loaded ASE Calculator.
         """
         if self.default_dtype is not None:
-            kwargs["dtype"] = self.default_dtype
-        else:
             kwargs["dtype"] = self.default_dtype
 
         return super().get_calculator(**kwargs)
@@ -324,6 +326,7 @@ for _name, _cfg in _registry.items():
             module=_cfg["module"],
             class_name=_cfg["class_name"],
             device=_cfg.get("device", "cpu"),
+            default_dtype=_cfg.get("default_dtype", "float32"),
             kwargs=_cfg.get("kwargs", {}),
         )
 
