@@ -170,7 +170,7 @@ class PetMadCalc(mlipx.GenericASECalculator):
 
     def get_calculator(self, **kwargs) -> Calculator:
         """
-        Prepare and load the calculator.
+        Prepare and load the calculator with file locking to prevent race conditions.
 
         Parameters
         ----------
@@ -182,10 +182,28 @@ class PetMadCalc(mlipx.GenericASECalculator):
         Calculator
             Loaded ASE Calculator.
         """
+        import filelock
+        import tempfile
+        from pathlib import Path
+
         if self.default_dtype is not None:
             kwargs["dtype"] = self.default_dtype
 
-        return super().get_calculator(**kwargs)
+        # Use file locking to prevent race conditions during model loading
+        # This is especially important when running parallel calculations
+        lock_dir = Path(tempfile.gettempdir()) / "pet_mad_locks"
+        lock_dir.mkdir(exist_ok=True)
+        lock_file = lock_dir / f"pet_mad_{self.kwargs.get('version', 'default')}.lock"
+
+        lock = filelock.FileLock(lock_file, timeout=300)  # 5 minute timeout
+        try:
+            with lock:
+                return super().get_calculator(**kwargs)
+        except filelock.Timeout:
+            raise RuntimeError(
+                f"Timeout waiting for PET-MAD model lock. "
+                f"Another process may be stuck loading the model."
+            )
 
 
 @dataclasses.dataclass
