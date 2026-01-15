@@ -159,8 +159,16 @@ class PhononAllBatch(zntrack.Node):
             if "primitive_matrix" in atoms.info.keys():
                 primitive_matrix = atoms.info["primitive_matrix"]
             else:
-                primitive_matrix = "auto"
-                print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
+                # calculate primitive matrix from unitcell and primitive cell
+                unitcell = phonons_pred.unitcell
+                primitive_cell = phonons_pred.primitive
+                primitive_matrix = np.linalg.inv(np.array(unitcell.get_cell())) @ np.array(primitive_cell.get_cell())
+                print("Primitive matrix not found in atoms.info. Calculated primitive matrix: ", primitive_matrix)
+                print("unit cell lattice: ", unitcell.get_cell())
+                print("primitive cell lattice: ", primitive_cell.get_cell())
+                
+                #primitive_matrix = np.eye(3)
+                #print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
             phonons_pred = init_phonopy_from_ref(
                 atoms=atoms_sym,
                 fc2_supercell=atoms.info["fc2_supercell"],
