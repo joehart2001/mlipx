@@ -29,6 +29,9 @@ md_ids = mp_ids[:10]
 {% elif medium %}
 md_ids = mp_ids[:100]
 
+{% elif mp_id %}
+mp_ids = ["{{ mp_id }}"]
+
 {% elif n_phonons and n_phonons_start %}
 mp_ids = mp_ids[{{ n_phonons_start }}:{{ n_phonons }}]
 
@@ -83,7 +86,11 @@ ray = True
 ray = False
 {% endif %}
 
-
+{% if dft_ref_path %}
+dft_ref_path = Path("{{ dft_ref_path }}")
+{% else %}
+dft_ref_path = None
+{% endif %}
 
 
 {% if ref_phonons == True %}
@@ -125,6 +132,7 @@ for model_name, model in MODELS.items():
                 phonopy_yaml_dir=str(local_path),
                 n_jobs=n_jobs,
                 check_completed=check_completed,
+                dft_ref_path=str(dft_ref_path),
         )
         phonon_dict[model_name] = phonon
         phonon_pred_list.append(phonon)
