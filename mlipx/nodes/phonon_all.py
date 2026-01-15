@@ -69,7 +69,7 @@ import ray
 
 # Batched Ray remote function for processing multiple mp_ids at once
 @ray.remote
-def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, threading, n_jobs):
+def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, threading, n_jobs, dft_ref_cache=None):
     from joblib import Parallel, delayed
 
     # Make model accessible without pickling
@@ -79,7 +79,7 @@ def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_
     def handle_mp_id(mp_id):
         try:
             return PhononAllBatch._process_mp_id_static(
-                mp_id, global_model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed
+                mp_id, global_model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, dft_ref_cache
             )
         except Exception as e:
             print(f"Skipping {mp_id} due to error: {e}")
@@ -100,6 +100,7 @@ class PhononAllBatch(zntrack.Node):
     mp_ids: list[str] = zntrack.params()
     model: NodeWithCalculator = zntrack.deps()
     phonopy_yaml_dir: str = zntrack.params()
+    dft_ref_path: str = zntrack.params()
     n_jobs: int = zntrack.params(-1)
     check_completed: bool = zntrack.params(False)
     threading: bool = zntrack.params(False)
@@ -124,11 +125,11 @@ class PhononAllBatch(zntrack.Node):
     get_chemical_formula_path: pathlib.Path = zntrack.outs_path(zntrack.nwd / "mp_ids_and_formulas.json")
     
     @staticmethod
-    def _process_mp_id_static(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
+    def _process_mp_id_static(mp_id: str, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, dft_ref_cache=None):
         import traceback
         try:
             yaml_path = yaml_dir / f"{mp_id}.yaml"
-            
+
             phonons_pred = load_phonopy(str(yaml_path))
             chemical_formula = get_chemical_formula(phonons_pred, empirical=True)
             phonon_pred_path = nwd / f"phonon_pred_data/"
@@ -136,7 +137,7 @@ class PhononAllBatch(zntrack.Node):
             phonon_pred_band_structure_path = phonon_pred_path / f"{mp_id}_band_structure.npz"
             phonon_pred_dos_path = phonon_pred_path / f"{mp_id}_dos.npz"
             thermal_path = phonon_pred_path / f"{mp_id}_thermal_properties.json"
-            
+
             if check_completed and phonon_pred_band_structure_path.exists() and phonon_pred_dos_path.exists() and thermal_path.exists():
                 print(f"Skipping {mp_id} as results already exist.")
                 return {
@@ -147,7 +148,7 @@ class PhononAllBatch(zntrack.Node):
                     "formula": chemical_formula,
                 }
             print(f"\nProcessing {mp_id}...")
-            
+
             calc = model.get_calculator()
             displacement_dataset = phonons_pred.dataset
             atoms = phonopy2aseatoms(phonons_pred)
@@ -166,9 +167,10 @@ class PhononAllBatch(zntrack.Node):
                 print("Primitive matrix not found in atoms.info. Calculated primitive matrix: ", primitive_matrix)
                 print("unit cell lattice: ", unitcell.get_cell())
                 print("primitive cell lattice: ", primitive_cell.get_cell())
-                
-                #primitive_matrix = np.eye(3)
+
+                #primitive_matrix = "auto"
                 #print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
+
             phonons_pred = init_phonopy_from_ref(
                 atoms=atoms_sym,
                 fc2_supercell=atoms.info["fc2_supercell"],
@@ -182,14 +184,54 @@ class PhononAllBatch(zntrack.Node):
                 q_mesh=np.array([q_mesh] * 3),
                 symmetrize_fc2=True
             )
-            phonons_pred.auto_band_structure()
+
+            # Load DFT reference q-points to ensure consistent band structure paths
+            if dft_ref_cache and mp_id in dft_ref_cache:
+                # Use pre-loaded cached data (faster)
+                qpoints = dft_ref_cache[mp_id]["qpoints"]
+                labels = dft_ref_cache[mp_id]["labels"]
+                connections = dft_ref_cache[mp_id]["connections"]
+
+                phonons_pred.run_band_structure(
+                    paths=qpoints,
+                    labels=labels,
+                    path_connections=connections,
+                )
+            else:
+                # Fallback: load from disk
+                dft_ref_base = Path(dft_ref_path)
+                ref_qpoints_path = dft_ref_base / f"{mp_id}_qpoints.npz"
+                ref_labels_path = dft_ref_base / f"{mp_id}_labels.json"
+                ref_connections_path = dft_ref_base / f"{mp_id}_connections.json"
+
+                if ref_qpoints_path.exists() and ref_labels_path.exists() and ref_connections_path.exists():
+                    # Load saved DFT q-points
+                    with open(ref_qpoints_path, "rb") as f:
+                        qpoints = pickle.load(f)
+                    with open(ref_labels_path, "r") as f:
+                        labels = json.load(f)
+                    with open(ref_connections_path, "r") as f:
+                        connections = json.load(f)
+
+                    # Use DFT's q-points to ensure consistent comparison
+                    phonons_pred.run_band_structure(
+                        paths=qpoints,
+                        labels=labels,
+                        path_connections=connections,
+                    )
+                else:
+                    print(f"Warning: DFT reference q-points not found for {mp_id}, using auto_band_structure()")
+                    phonons_pred.auto_band_structure()
+
             band_structure_pred = phonons_pred.get_band_structure_dict()
             phonons_pred.auto_total_dos()
             dos_pred = phonons_pred.get_total_dos_dict()
+            
             with open(phonon_pred_band_structure_path, "wb") as f:
                 pickle.dump(band_structure_pred, f)
             with open(phonon_pred_dos_path, "wb") as f:
                 pickle.dump(dos_pred, f)
+            
             phonons_pred.run_mesh([q_mesh_thermal] * 3)
             phonons_pred.run_thermal_properties(
                 temperatures=temperatures,
@@ -223,20 +265,47 @@ class PhononAllBatch(zntrack.Node):
 
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
+        dft_ref_path = self.dft_ref_path
         fmax = self.fmax
         q_mesh = self.N_q_mesh
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
         calc_model = self.model
 
+        # Pre-load DFT reference data to avoid repeated I/O
+        print("Pre-loading DFT reference data...")
+        dft_ref_cache = {}
+        dft_ref_base = Path(dft_ref_path)
+        for mp_id in self.mp_ids:
+            ref_qpoints_path = dft_ref_base / f"{mp_id}_qpoints.npz"
+            ref_labels_path = dft_ref_base / f"{mp_id}_labels.json"
+            ref_connections_path = dft_ref_base / f"{mp_id}_connections.json"
+
+            if ref_qpoints_path.exists() and ref_labels_path.exists() and ref_connections_path.exists():
+                with open(ref_qpoints_path, "rb") as f:
+                    qpoints = pickle.load(f)
+                with open(ref_labels_path, "r") as f:
+                    labels = json.load(f)
+                with open(ref_connections_path, "r") as f:
+                    connections = json.load(f)
+
+                dft_ref_cache[mp_id] = {
+                    "qpoints": qpoints,
+                    "labels": labels,
+                    "connections": connections
+                }
+        print(f"Loaded DFT reference data for {len(dft_ref_cache)} materials.")
+
         start_time = perf_counter()
         if self.ray:
             ray.init(ignore_reinit_error=True)
+            # Store cache in Ray object store for efficient sharing
+            cache_ref = ray.put(dft_ref_cache)
             futures = [
                 process_mp_ids_batch_ray.remote(
-                    [mp_id], calc_model, nwd, yaml_dir, fmax,
+                    [mp_id], calc_model, nwd, yaml_dir, dft_ref_path, fmax,
                     q_mesh, q_mesh_thermal, temperatures,
-                    self.check_completed, self.threading, self.n_jobs
+                    self.check_completed, self.threading, self.n_jobs, cache_ref
                 )
                 for mp_id in self.mp_ids
             ]
@@ -246,9 +315,9 @@ class PhononAllBatch(zntrack.Node):
         else:
             def handle(mp_id):
                 return self._process_mp_id_static(
-                    mp_id, calc_model, nwd, yaml_dir, fmax,
+                    mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
                     q_mesh, q_mesh_thermal, temperatures,
-                    self.check_completed
+                    self.check_completed, dft_ref_cache
                 )
 
             if self.threading:
@@ -300,7 +369,11 @@ class PhononAllBatch(zntrack.Node):
         with open(self.get_chemical_formula_path, "r") as f:
             return json.load(f)
 
-        
+    @property
+    def plot_auto_band_structure(self):
+        phonons = load_phonopy(self.phonon_obj_path)
+        phonons.auto_band_structure(plot=True)
+        return
 
     @property
     def get_phonon_ref_data(self) -> dict[str, dict[str, t.Any]]:
