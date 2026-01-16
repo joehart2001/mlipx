@@ -67,6 +67,22 @@ import ray
 #     print("TF32 is disabled for CUDA operations.")
 
 
+# For multiprocessing mode: no cache, use on-demand disk loading
+def _process_single_mp_id(mp_id, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
+    """
+    Wrapper for multiprocessing that avoids cache serialization.
+    Uses on-demand disk loading (the fallback path in _process_mp_id_static).
+    """
+    try:
+        # Pass None for cache to trigger on-demand disk loading
+        return PhononAllBatch._process_mp_id_static(
+            mp_id, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, dft_ref_cache=None
+        )
+    except Exception as e:
+        print(f"Skipping {mp_id} due to error: {e}")
+        return None
+
+
 # Batched Ray remote function for processing multiple mp_ids at once
 @ray.remote
 def process_mp_ids_batch_ray(mp_ids, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, threading, n_jobs, dft_ref_cache=None):
@@ -272,29 +288,33 @@ class PhononAllBatch(zntrack.Node):
         temperatures = self.thermal_properties_temperatures
         calc_model = self.model
 
-        # Pre-load DFT reference data to avoid repeated I/O
-        print("Pre-loading DFT reference data...")
+        # Pre-load DFT reference data only when needed (threading or ray modes)
+        # Multiprocessing mode uses on-demand disk loading to avoid serialization overhead
         dft_ref_cache = {}
-        dft_ref_base = Path(dft_ref_path)
-        for mp_id in self.mp_ids:
-            ref_qpoints_path = dft_ref_base / f"{mp_id}_qpoints.npz"
-            ref_labels_path = dft_ref_base / f"{mp_id}_labels.json"
-            ref_connections_path = dft_ref_base / f"{mp_id}_connections.json"
+        if self.ray or self.threading:
+            print("Pre-loading DFT reference data...")
+            dft_ref_base = Path(dft_ref_path)
+            for mp_id in self.mp_ids:
+                ref_qpoints_path = dft_ref_base / f"{mp_id}_qpoints.npz"
+                ref_labels_path = dft_ref_base / f"{mp_id}_labels.json"
+                ref_connections_path = dft_ref_base / f"{mp_id}_connections.json"
 
-            if ref_qpoints_path.exists() and ref_labels_path.exists() and ref_connections_path.exists():
-                with open(ref_qpoints_path, "rb") as f:
-                    qpoints = pickle.load(f)
-                with open(ref_labels_path, "r") as f:
-                    labels = json.load(f)
-                with open(ref_connections_path, "r") as f:
-                    connections = json.load(f)
+                if ref_qpoints_path.exists() and ref_labels_path.exists() and ref_connections_path.exists():
+                    with open(ref_qpoints_path, "rb") as f:
+                        qpoints = pickle.load(f)
+                    with open(ref_labels_path, "r") as f:
+                        labels = json.load(f)
+                    with open(ref_connections_path, "r") as f:
+                        connections = json.load(f)
 
-                dft_ref_cache[mp_id] = {
-                    "qpoints": qpoints,
-                    "labels": labels,
-                    "connections": connections
-                }
-        print(f"Loaded DFT reference data for {len(dft_ref_cache)} materials.")
+                    dft_ref_cache[mp_id] = {
+                        "qpoints": qpoints,
+                        "labels": labels,
+                        "connections": connections
+                    }
+            print(f"Loaded DFT reference data for {len(dft_ref_cache)} materials.")
+        else:
+            print("Multiprocessing mode: using on-demand disk loading (no cache pre-load).")
 
         start_time = perf_counter()
         if self.ray:
@@ -313,19 +333,25 @@ class PhononAllBatch(zntrack.Node):
             ray.shutdown()
             results = [res for sublist in results_nested for res in sublist if res is not None]
         else:
-            def handle(mp_id):
-                return self._process_mp_id_static(
-                    mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
-                    q_mesh, q_mesh_thermal, temperatures,
-                    self.check_completed, dft_ref_cache
-                )
-
             if self.threading:
-                # threading can share calc instead of having mutliple instances, prevent OOM
+                # threading can share calc instead of having multiple instances, prevent OOM
+                # Threading also shares the cache naturally via closure
+                def handle(mp_id):
+                    return self._process_mp_id_static(
+                        mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
+                        q_mesh, q_mesh_thermal, temperatures,
+                        self.check_completed, dft_ref_cache
+                    )
                 with parallel_backend("threading", n_jobs=self.n_jobs):
                     results = Parallel()(delayed(handle)(mp_id) for mp_id in self.mp_ids)
             else:
-                results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in self.mp_ids)
+                # Multiprocessing: use initializer to set cache once per worker, avoiding repeated serialization
+                results = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                    delayed(_process_single_mp_id)(
+                        mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
+                        q_mesh, q_mesh_thermal, temperatures, self.check_completed
+                    ) for mp_id in self.mp_ids
+                )
 
             results = [res for res in results if res is not None]
 
