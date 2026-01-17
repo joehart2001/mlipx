@@ -122,6 +122,10 @@ class PhononAllBatch(zntrack.Node):
     threading: bool = zntrack.params(False)
     ray: bool = zntrack.params(False)
 
+    # Job array support
+    array_chunk_size: int = zntrack.params(None)  # Materials per array job (None = process all)
+    array_task_id: int = zntrack.params(None)     # SLURM_ARRAY_TASK_ID (None = process all)
+
     N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
     #fmax: float = zntrack.params(0.0001)
@@ -288,13 +292,24 @@ class PhononAllBatch(zntrack.Node):
         temperatures = self.thermal_properties_temperatures
         calc_model = self.model
 
+        # Handle job array chunking
+        mp_ids_to_process = self.mp_ids
+        if self.array_chunk_size is not None and self.array_task_id is not None:
+            # Split mp_ids into chunks for job array
+            start_idx = self.array_task_id * self.array_chunk_size
+            end_idx = min(start_idx + self.array_chunk_size, len(self.mp_ids))
+            mp_ids_to_process = self.mp_ids[start_idx:end_idx]
+            print(f"Job array mode: Task {self.array_task_id} processing materials {start_idx} to {end_idx-1} ({len(mp_ids_to_process)} materials)")
+        else:
+            print(f"Processing all {len(mp_ids_to_process)} materials")
+
         # Pre-load DFT reference data only when needed (threading or ray modes)
         # Multiprocessing mode uses on-demand disk loading to avoid serialization overhead
         dft_ref_cache = {}
         if self.ray or self.threading:
             print("Pre-loading DFT reference data...")
             dft_ref_base = Path(dft_ref_path)
-            for mp_id in self.mp_ids:
+            for mp_id in mp_ids_to_process:
                 ref_qpoints_path = dft_ref_base / f"{mp_id}_qpoints.npz"
                 ref_labels_path = dft_ref_base / f"{mp_id}_labels.json"
                 ref_connections_path = dft_ref_base / f"{mp_id}_connections.json"
@@ -327,7 +342,7 @@ class PhononAllBatch(zntrack.Node):
                     q_mesh, q_mesh_thermal, temperatures,
                     self.check_completed, self.threading, self.n_jobs, cache_ref
                 )
-                for mp_id in self.mp_ids
+                for mp_id in mp_ids_to_process
             ]
             results_nested = ray.get(futures)
             ray.shutdown()
@@ -343,14 +358,14 @@ class PhononAllBatch(zntrack.Node):
                         self.check_completed, dft_ref_cache
                     )
                 with parallel_backend("threading", n_jobs=self.n_jobs):
-                    results = Parallel()(delayed(handle)(mp_id) for mp_id in self.mp_ids)
+                    results = Parallel()(delayed(handle)(mp_id) for mp_id in mp_ids_to_process)
             else:
                 # Multiprocessing: use initializer to set cache once per worker, avoiding repeated serialization
                 results = Parallel(n_jobs=self.n_jobs, backend="loky")(
                     delayed(_process_single_mp_id)(
                         mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
                         q_mesh, q_mesh_thermal, temperatures, self.check_completed
-                    ) for mp_id in self.mp_ids
+                    ) for mp_id in mp_ids_to_process
                 )
 
             results = [res for res in results if res is not None]

@@ -92,6 +92,19 @@ dft_ref_path = Path("{{ dft_ref_path }}")
 dft_ref_path = None
 {% endif %}
 
+{% if array_chunk_size %}
+array_chunk_size = {{ array_chunk_size }}
+{% else %}
+array_chunk_size = None
+{% endif %}
+
+{% if array_task_id is not none %}
+import os
+array_task_id = int(os.environ.get("SLURM_ARRAY_TASK_ID", {{ array_task_id }}))
+{% else %}
+array_task_id = None
+{% endif %}
+
 
 {% if ref_phonons == True %}
 
@@ -133,6 +146,10 @@ for model_name, model in MODELS.items():
                 n_jobs=n_jobs,
                 check_completed=check_completed,
                 dft_ref_path=str(dft_ref_path),
+                array_chunk_size=array_chunk_size,
+                array_task_id=array_task_id,
+                threading=threading,
+                ray=ray,
         )
         phonon_dict[model_name] = phonon
         phonon_pred_list.append(phonon)
