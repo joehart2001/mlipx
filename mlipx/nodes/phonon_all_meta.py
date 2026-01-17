@@ -79,10 +79,15 @@ class PhononAllBatchMeta(zntrack.Node):
     mp_ids: list[str] = zntrack.params()
     model: NodeWithCalculator = zntrack.deps()
     phonopy_yaml_dir: str = zntrack.params()
+    dft_ref_path: str = zntrack.params(None)  # Path to DFT reference data
     n_jobs: int = zntrack.params(-1)
     check_completed: bool = zntrack.params(False)
     threading: bool = zntrack.params(False)
-    
+
+    # Job array support
+    array_chunk_size: int = zntrack.params(None)  # Materials per array job (None = process all)
+    array_task_id: int = zntrack.params(None)     # SLURM_ARRAY_TASK_ID (None = process all)
+
     N_q_mesh: int = zntrack.params(6)
     supercell: int = zntrack.params(3)
     #fmax: float = zntrack.params(0.0001)
@@ -103,10 +108,10 @@ class PhononAllBatchMeta(zntrack.Node):
 
 
     @staticmethod
-    def process_mp_id(mp_id: str, model, nwd, yaml_dir, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
+    def process_mp_id(mp_id: str, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, dft_ref_cache=None):
         try:
-            
-            
+
+
             #calc = model.get_calculator()
             yaml_path = yaml_dir/ f"{mp_id}.yaml"
             
@@ -183,8 +188,48 @@ class PhononAllBatchMeta(zntrack.Node):
             #phonon_obj_path = nwd / f"phonon_obj/{mp_id}_phonon_obj.yaml"
             #Path(phonon_obj_path).parent.mkdir(parents=True, exist_ok=True)
             #phonons_pred.save(filename=str(phonon_obj_path)) #, settings={"force_constants": True})
-            
-            phonons_pred.auto_band_structure()
+
+            # Load DFT reference q-points to ensure consistent band structure paths
+            if dft_ref_cache and mp_id in dft_ref_cache:
+                # Use pre-loaded cached data (faster)
+                qpoints = dft_ref_cache[mp_id]["qpoints"]
+                labels = dft_ref_cache[mp_id]["labels"]
+                connections = dft_ref_cache[mp_id]["connections"]
+
+                phonons_pred.run_band_structure(
+                    paths=qpoints,
+                    labels=labels,
+                    path_connections=connections,
+                )
+            elif dft_ref_path:
+                # Fallback: load from disk
+                dft_ref_base = Path(dft_ref_path)
+                ref_qpoints_path = dft_ref_base / f"{mp_id}_qpoints.npz"
+                ref_labels_path = dft_ref_base / f"{mp_id}_labels.json"
+                ref_connections_path = dft_ref_base / f"{mp_id}_connections.json"
+
+                if ref_qpoints_path.exists() and ref_labels_path.exists() and ref_connections_path.exists():
+                    # Load saved DFT q-points
+                    with open(ref_qpoints_path, "rb") as f:
+                        qpoints = pickle.load(f)
+                    with open(ref_labels_path, "r") as f:
+                        labels = json.load(f)
+                    with open(ref_connections_path, "r") as f:
+                        connections = json.load(f)
+
+                    # Use DFT's q-points to ensure consistent comparison
+                    phonons_pred.run_band_structure(
+                        paths=qpoints,
+                        labels=labels,
+                        path_connections=connections,
+                    )
+                else:
+                    print(f"Warning: DFT reference q-points not found for {mp_id}, using auto_band_structure()")
+                    phonons_pred.auto_band_structure()
+            else:
+                # No DFT reference data provided
+                phonons_pred.auto_band_structure()
+
             band_structure_pred = phonons_pred.get_band_structure_dict()
             phonons_pred.auto_total_dos()
             dos_pred = phonons_pred.get_total_dos_dict()
@@ -240,15 +285,54 @@ class PhononAllBatchMeta(zntrack.Node):
 
     def run(self):
         #calc = self.model.get_calculator()
-        
+
         yaml_dir = Path(self.phonopy_yaml_dir)
         nwd = Path(self.nwd)
+        dft_ref_path = self.dft_ref_path
         fmax = self.fmax
-        
+
         q_mesh = self.N_q_mesh
         q_mesh_thermal = 20
         temperatures = self.thermal_properties_temperatures
         calc_model = self.model  # Materialize model before parallel loops
+
+        # Handle job array chunking
+        mp_ids_to_process = self.mp_ids
+        if self.array_chunk_size is not None and self.array_task_id is not None:
+            # Split mp_ids into chunks for job array
+            start_idx = self.array_task_id * self.array_chunk_size
+            end_idx = min(start_idx + self.array_chunk_size, len(self.mp_ids))
+            mp_ids_to_process = self.mp_ids[start_idx:end_idx]
+            print(f"Job array mode: Task {self.array_task_id} processing materials {start_idx} to {end_idx-1} ({len(mp_ids_to_process)} materials)")
+        else:
+            print(f"Processing all {len(mp_ids_to_process)} materials")
+
+        # Pre-load DFT reference data only when threading (multiprocessing uses on-demand loading)
+        dft_ref_cache = {}
+        if self.threading and dft_ref_path:
+            print("Pre-loading DFT reference data...")
+            dft_ref_base = Path(dft_ref_path)
+            for mp_id in mp_ids_to_process:
+                ref_qpoints_path = dft_ref_base / f"{mp_id}_qpoints.npz"
+                ref_labels_path = dft_ref_base / f"{mp_id}_labels.json"
+                ref_connections_path = dft_ref_base / f"{mp_id}_connections.json"
+
+                if ref_qpoints_path.exists() and ref_labels_path.exists() and ref_connections_path.exists():
+                    with open(ref_qpoints_path, "rb") as f:
+                        qpoints = pickle.load(f)
+                    with open(ref_labels_path, "r") as f:
+                        labels = json.load(f)
+                    with open(ref_connections_path, "r") as f:
+                        connections = json.load(f)
+
+                    dft_ref_cache[mp_id] = {
+                        "qpoints": qpoints,
+                        "labels": labels,
+                        "connections": connections
+                    }
+            print(f"Loaded DFT reference data for {len(dft_ref_cache)} materials.")
+        elif not self.threading and dft_ref_path:
+            print("Multiprocessing mode: using on-demand disk loading (no cache pre-load).")
         
         
 
@@ -309,14 +393,14 @@ class PhononAllBatchMeta(zntrack.Node):
 
         def handle(mp_id):
             return PhononAllBatchMeta.process_mp_id(
-                mp_id, calc_model, nwd, yaml_dir, fmax,
-                q_mesh, q_mesh_thermal, temperatures, self.check_completed)
+                mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
+                q_mesh, q_mesh_thermal, temperatures, self.check_completed, dft_ref_cache)
 
         if self.threading:
             with parallel_backend("threading", n_jobs=self.n_jobs):
-                results = Parallel()(delayed(handle)(mp_id) for mp_id in self.mp_ids)
+                results = Parallel()(delayed(handle)(mp_id) for mp_id in mp_ids_to_process)
         else:
-            results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in self.mp_ids)
+            results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in mp_ids_to_process)
 
         results = [res for res in results if res is not None]
 

@@ -127,8 +127,12 @@ for model_name, model in MODELS.items():
                 mp_ids=mp_ids,
                 model=model,
                 phonopy_yaml_dir=str(local_path),
+                dft_ref_path=str(dft_ref_path) if dft_ref_path else None,
                 n_jobs=n_jobs,
                 check_completed=check_completed,
+                array_chunk_size=array_chunk_size,
+                array_task_id=array_task_id,
+                threading=threading,
         )
         phonon_dict[model_name] = phonon
         phonon_pred_list.append(phonon)
