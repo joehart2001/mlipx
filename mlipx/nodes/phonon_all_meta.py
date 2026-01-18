@@ -160,15 +160,16 @@ class PhononAllBatchMeta(zntrack.Node):
             calc = model.get_calculator()
             
             atoms = phonopy2aseatoms(phonons_pred) # primtive = True?
+            atoms_sym = atoms.copy()
         
-            atoms.calc = calc
-            #atoms.set_constraint(FixSymmetry(atoms))
-            opt = FIRE(FrechetCellFilter(atoms))
+            atoms_sym.calc = calc
+            #atoms_sym.set_constraint(FixSymmetry(atoms_sym))
+            opt = FIRE(FrechetCellFilter(atoms_sym))
             opt.run(fmax=fmax, steps=1000)
 
             # primitive matrix not always available in reference data e.g. mp-30056
-            if "primitive_matrix" in atoms.info.keys():
-                primitive_matrix = atoms.info["primitive_matrix"]
+            if "primitive_matrix" in atoms_sym.info.keys():
+                primitive_matrix = atoms_sym.info["primitive_matrix"]
             else:
                 # calculate primitive matrix from unitcell and primitive cell
                 unitcell = phonons_pred.unitcell
@@ -180,8 +181,8 @@ class PhononAllBatchMeta(zntrack.Node):
 
             
             phonons_pred = init_phonopy_from_ref(
-                atoms=unitcell,
-                fc2_supercell=atoms.info["fc2_supercell"],
+                atoms=atoms_sym,
+                fc2_supercell=atoms_sym.info["fc2_supercell"],
                 primitive_matrix=primitive_matrix,
                 displacement_dataset=None,
                 displacement_distance=0.01,
