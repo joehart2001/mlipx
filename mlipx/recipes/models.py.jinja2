@@ -184,6 +184,7 @@ class PetMadCalc(mlipx.GenericASECalculator):
         """
         import filelock
         from pathlib import Path
+        import time
 
         if self.default_dtype is not None:
             kwargs["dtype"] = self.default_dtype
@@ -191,17 +192,37 @@ class PetMadCalc(mlipx.GenericASECalculator):
         # Use file locking to prevent race conditions during model loading
         # Place lock file next to model cache (not in /tmp) so it works across cluster nodes
         # PET-MAD caches models in ~/.cache/pet-mad/ or $XDG_CACHE_HOME/pet-mad/
-        # for e.g. array jobs, we want all processes to share / see the same lock
         import os
         cache_base = Path(os.environ.get('XDG_CACHE_HOME', Path.home() / '.cache'))
         lock_dir = cache_base / "pet_mad"
         lock_dir.mkdir(parents=True, exist_ok=True)
-        lock_file = lock_dir / f"pet_mad_{self.kwargs.get('version', 'default')}.lock"
 
+        version = self.kwargs.get('version', 'default')
+        lock_file = lock_dir / f"pet_mad_{version}.lock"
+        ready_file = lock_dir / f"pet_mad_{version}.ready"
+
+        # Check if model is already loaded and cached (ready file exists)
+        if ready_file.exists():
+            # Model is ready, just load it without exclusive lock
+            # Small delay to avoid thundering herd on file system
+            time.sleep(0.1 + (hash(os.getpid()) % 10) * 0.05)  # 100-600ms staggered
+            return super().get_calculator(**kwargs)
+
+        # Model not ready yet, acquire exclusive lock to load/download
         lock = filelock.FileLock(lock_file, timeout=600)  # 10 minute timeout for cluster environments
         try:
             with lock:
-                return super().get_calculator(**kwargs)
+                # Double-check: another process might have loaded it while we waited
+                if not ready_file.exists():
+                    print(f"First load of PET-MAD {version}, downloading/caching model...")
+                    calc = super().get_calculator(**kwargs)
+                    # Mark model as ready for other processes
+                    ready_file.touch()
+                    print(f"PET-MAD {version} cached and ready.")
+                    return calc
+                else:
+                    # Another process loaded it while we waited
+                    return super().get_calculator(**kwargs)
         except filelock.Timeout:
             raise RuntimeError(
                 f"Timeout waiting for PET-MAD model lock at {lock_file}. "
