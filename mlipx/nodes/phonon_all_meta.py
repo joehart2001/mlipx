@@ -48,6 +48,22 @@ from seekpath import get_path
 import zntrack.node
 from phonopy.phonon.band_structure import get_band_qpoints_by_seekpath
 
+
+# For multiprocessing mode: no cache, use on-demand disk loading
+def _process_single_mp_id_meta(mp_id, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
+    """
+    Wrapper for multiprocessing that avoids cache serialization.
+    Uses on-demand disk loading (the fallback path in process_mp_id).
+    """
+    try:
+        # Pass None for cache to trigger on-demand disk loading
+        return PhononAllBatchMeta.process_mp_id(
+            mp_id, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed, dft_ref_cache=None
+        )
+    except Exception as e:
+        print(f"Skipping {mp_id} due to error: {e}")
+        return None
+
 import os
 import plotly.express as px
 import dash
@@ -143,7 +159,7 @@ class PhononAllBatchMeta(zntrack.Node):
             
             calc = model.get_calculator()
             
-            atoms = phonopy2aseatoms(phonons_pred, primitive=True)
+            atoms = phonopy2aseatoms(phonons_pred) # primtive = True?
         
             atoms.calc = calc
             #atoms.set_constraint(FixSymmetry(atoms))
@@ -154,17 +170,14 @@ class PhononAllBatchMeta(zntrack.Node):
             if "primitive_matrix" in atoms.info.keys():
                 primitive_matrix = atoms.info["primitive_matrix"]
             else:
-                primitive_matrix = "auto"
-                print("Primitive matrix not found in atoms.info. Using 'auto' for primitive matrix.")
+                # calculate primitive matrix from unitcell and primitive cell
+                unitcell = phonons_pred.unitcell
+                primitive_cell = phonons_pred.primitive
+                primitive_matrix = np.linalg.inv(np.array(unitcell.get_cell())) @ np.array(primitive_cell.get_cell())
+                print("Primitive matrix not found in atoms.info. Calculated primitive matrix: ", primitive_matrix)
+                print("unit cell lattice: ", unitcell.get_cell())
+                print("primitive cell lattice: ", primitive_cell.get_cell())
 
-
-            if phonons_pred.primitive_matrix is not None:
-                P = np.asarray(np.linalg.inv(phonons_pred.primitive_matrix.T), dtype=np.intc)
-                unitcell = make_supercell(atoms, P)
-            else:  # assume prim is the same as unit
-                unitcell = atoms
-                
-                
             
             phonons_pred = init_phonopy_from_ref(
                 atoms=unitcell,
@@ -391,16 +404,24 @@ class PhononAllBatchMeta(zntrack.Node):
 
 
 
-        def handle(mp_id):
-            return PhononAllBatchMeta.process_mp_id(
-                mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
-                q_mesh, q_mesh_thermal, temperatures, self.check_completed, dft_ref_cache)
-
         if self.threading:
+            # threading can share calc instead of having multiple instances, prevent OOM
+            # Threading also shares the cache naturally via closure
+            def handle(mp_id):
+                return PhononAllBatchMeta.process_mp_id(
+                    mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
+                    q_mesh, q_mesh_thermal, temperatures, self.check_completed, dft_ref_cache
+                )
             with parallel_backend("threading", n_jobs=self.n_jobs):
                 results = Parallel()(delayed(handle)(mp_id) for mp_id in mp_ids_to_process)
         else:
-            results = Parallel(n_jobs=self.n_jobs)(delayed(handle)(mp_id) for mp_id in mp_ids_to_process)
+            # Multiprocessing: use wrapper to avoid cache serialization
+            results = Parallel(n_jobs=self.n_jobs, backend="loky")(
+                delayed(_process_single_mp_id_meta)(
+                    mp_id, calc_model, nwd, yaml_dir, dft_ref_path, fmax,
+                    q_mesh, q_mesh_thermal, temperatures, self.check_completed
+                ) for mp_id in mp_ids_to_process
+            )
 
         results = [res for res in results if res is not None]
 
