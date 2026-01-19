@@ -204,7 +204,7 @@ class PhononAllBatchMeta(zntrack.Node):
 
                 primitive_matrix_new = PhononAllBatchMeta.primitive_matrix_from_relaxed_atoms(
                     atoms_sym,
-                    symprec=symprec_relaxed,
+                    symprec=1e-5,
                 )
                 print("primitive_matrix_new:\n", primitive_matrix_new)
                 
@@ -325,7 +325,7 @@ class PhononAllBatchMeta(zntrack.Node):
                 traceback.print_exc(file=f)
 
     @staticmethod
-    def primitive_matrix_from_relaxed_atoms(atoms, symprec=1e-3, angle_tolerance=-1.0):
+    def primitive_matrix_from_relaxed_atoms(atoms, symprec=1e-5):
         """
         Build a primitive_matrix consistent with the *current* (relaxed) atoms
         using spglib's primitive_lattice.
@@ -335,7 +335,7 @@ class PhononAllBatchMeta(zntrack.Node):
         numbers = atoms.numbers
 
         cell = (lattice, positions, numbers)
-        dataset = spglib.get_symmetry_dataset(cell, symprec=symprec, angle_tolerance=angle_tolerance)
+        dataset = spglib.get_symmetry_dataset(cell, symprec=symprec)
         if dataset is None:
             raise RuntimeError("spglib.get_symmetry_dataset returned None (try larger symprec).")
 
