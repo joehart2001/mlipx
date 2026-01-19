@@ -207,15 +207,15 @@ class PhononAllBatchMeta(zntrack.Node):
                     symprec=1e-5,
                 )
                 print("primitive_matrix_new:\n", primitive_matrix_new)
-                
-                phonons_pred = init_phonopy(
+
+                phonons_pred = init_phonopy_from_ref(
                     atoms=atoms_sym,
                     fc2_supercell=atoms_sym.info["fc2_supercell"],
+                    primitive_matrix=primitive_matrix_new,
                     displacement_dataset=None,
                     displacement_distance=0.01,
                     symprec=1e-5,
                 )
-            
 
             phonons_pred, fc2, freqs = get_fc2_and_freqs(
                 phonons=phonons_pred,
