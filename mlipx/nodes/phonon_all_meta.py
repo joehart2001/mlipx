@@ -167,6 +167,11 @@ class PhononAllBatchMeta(zntrack.Node):
             opt = FIRE(FrechetCellFilter(atoms_sym))
             opt.run(fmax=fmax, steps=1000)
 
+            # Reset lattice representation
+            # avoids trimmed cell issues for a small number of materials
+            cell_std, _ = atoms_sym.cell.standard_form()
+            atoms_sym.set_cell(cell_std, scale_atoms=True)
+
             # primitive matrix not always available in reference data e.g. mp-30056
             if "primitive_matrix" in atoms_sym.info.keys():
                 primitive_matrix = atoms_sym.info["primitive_matrix"]
