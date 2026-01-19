@@ -169,8 +169,6 @@ class PhononAllBatchMeta(zntrack.Node):
 
 
             
-            # spglib standardised cell, no ideal, is primitive = false
-            #atoms_sym = PhononAllBatchMeta.spglib_standardize_ase(atoms_sym, to_primitive=False, no_idealize=True)
 
             # primitive matrix not always available in reference data e.g. mp-30056
             try:
@@ -201,19 +199,23 @@ class PhononAllBatchMeta(zntrack.Node):
 
                 # Reset lattice representation
                 # avoids trimmed cell issues for a small number of materials
-                cell_std, _ = atoms_sym.cell.standard_form()
-                atoms_sym.set_cell(cell_std, scale_atoms=True)
-                
-                primitive_matrix_new = PhononAllBatchMeta.primitive_matrix_from_relaxed_atoms(
-                    atoms_sym,
-                    symprec=1e-5,
-                )
-                print("primitive_matrix_new:\n", primitive_matrix_new)
+                #cell_std, _ = atoms_sym.cell.standard_form()
+                #atoms_sym.set_cell(cell_std, scale_atoms=True)
+
+                # spglib standardised cell, no ideal, is primitive = false
+                #atoms_sym = PhononAllBatchMeta.spglib_standardize_ase(atoms_sym, to_primitive=False, no_idealize=True)
+
+
+                # primitive_matrix_new = PhononAllBatchMeta.primitive_matrix_from_relaxed_atoms(
+                #     atoms_sym,
+                #     symprec=1e-5,
+                # )
+                # print("primitive_matrix_new:\n", primitive_matrix_new)
 
                 phonons_pred = init_phonopy_from_ref(
                     atoms=atoms_sym,
                     fc2_supercell=atoms_sym.info["fc2_supercell"],
-                    primitive_matrix=primitive_matrix_new,
+                    primitive_matrix=None,
                     displacement_dataset=None,
                     displacement_distance=0.01,
                     symprec=1e-5,
@@ -346,6 +348,40 @@ class PhononAllBatchMeta(zntrack.Node):
         # Phonopy-style primitive_matrix: unitcell -> primitive axes
         prim_mat = np.linalg.inv(lattice) @ prim_lat
         return prim_mat
+
+    import numpy as np
+    import spglib
+    @staticmethod
+    def spglib_standardize_ase(atoms, symprec=1e-3, to_primitive=False, no_idealize=True):
+        """
+        Standardize an ASE Atoms using spglib. Keeps *this* structure but returns
+        a symmetry-consistent conventional (or primitive) representation.
+        """
+        lattice = np.array(atoms.cell, dtype=float)
+        positions = atoms.get_scaled_positions(wrap=True)  # fractional
+        numbers = atoms.numbers
+
+        cell = (lattice, positions, numbers)
+
+        std = spglib.standardize_cell(
+            cell,
+            to_primitive=to_primitive,   # False -> conventional, True -> primitive
+            no_idealize=no_idealize,           # allow slight idealization (often helps mapping)
+            symprec=symprec,
+        )
+
+        if std is None:
+            raise RuntimeError("spglib.standardize_cell returned None (symmetry not found / too strict symprec).")
+
+        lat_std, pos_std, nums_std = std
+
+        atoms_std = atoms.copy()
+        atoms_std.set_cell(lat_std, scale_atoms=False)
+        atoms_std.set_scaled_positions(pos_std)
+        atoms_std.numbers = np.array(nums_std, dtype=int)
+        atoms_std.wrap()
+
+        return atoms_std
 
 
     def run(self):
