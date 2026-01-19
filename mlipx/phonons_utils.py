@@ -168,9 +168,11 @@ def get_fc2_and_freqs(
     phonons.produce_force_constants(show_drift=False)
     
     if symmetrize_fc2:
+        print("Symmetrizing FC2...")
         phonons.symmetrize_force_constants(show_drift=False)
     
     if q_mesh is not None:
+        print(f"Calculating phonon frequencies on q-mesh: {q_mesh}...")
         phonons.run_mesh(q_mesh, **kwargs)
         freqs= phonons.get_mesh_dict()["frequencies"]
     else:
