@@ -47,7 +47,7 @@ from phonopy.structure.atoms import PhonopyAtoms
 from seekpath import get_path
 import zntrack.node
 from phonopy.phonon.band_structure import get_band_qpoints_by_seekpath
-
+import spglib
 
 # For multiprocessing mode: no cache, use on-demand disk loading
 def _process_single_mp_id_meta(mp_id, model, nwd, yaml_dir, dft_ref_path, fmax, q_mesh, q_mesh_thermal, temperatures, check_completed):
@@ -169,8 +169,11 @@ class PhononAllBatchMeta(zntrack.Node):
 
             # Reset lattice representation
             # avoids trimmed cell issues for a small number of materials
-            cell_std, _ = atoms_sym.cell.standard_form()
-            atoms_sym.set_cell(cell_std, scale_atoms=True)
+            #cell_std, _ = atoms_sym.cell.standard_form()
+            #atoms_sym.set_cell(cell_std, scale_atoms=True)
+            
+            # spglib standardised cell, no ideal, is primitive = false
+            atoms_sym = PhononAllBatchMeta.spglib_standardize_ase(atoms_sym, to_primitive=False, no_idealize=True)
 
             # primitive matrix not always available in reference data e.g. mp-30056
             if "primitive_matrix" in atoms_sym.info.keys():
@@ -300,6 +303,39 @@ class PhononAllBatchMeta(zntrack.Node):
             with open("error_log.txt", "a") as f:
                 f.write(f"\nError while processing {mp_id}:\n")
                 traceback.print_exc(file=f)
+
+    @staticmethod
+    def spglib_standardize_ase(atoms, symprec=1e-5, no_idealize=False, to_primitive=False):
+        """
+        Standardize an ASE Atoms using spglib. Keeps *this* structure but returns
+        a symmetry-consistent conventional (or primitive) representation.
+        """
+        lattice = np.array(atoms.cell, dtype=float)
+        positions = atoms.get_scaled_positions(wrap=True)  # fractional
+        numbers = atoms.numbers
+
+        cell = (lattice, positions, numbers)
+
+        std = spglib.standardize_cell(
+            cell,
+            to_primitive=to_primitive,   # False -> conventional, True -> primitive
+            no_idealize=no_idealize,           # allow slight idealization (often helps mapping)
+            #symprec=symprec,
+            #angle_tolerance=angle_tolerance,
+        )
+
+        if std is None:
+            raise RuntimeError("spglib.standardize_cell returned None (symmetry not found / too strict symprec).")
+
+        lat_std, pos_std, nums_std = std
+
+        atoms_std = atoms.copy()
+        atoms_std.set_cell(lat_std, scale_atoms=False)
+        atoms_std.set_scaled_positions(pos_std)
+        atoms_std.numbers = np.array(nums_std, dtype=int)
+        atoms_std.wrap()
+
+        return atoms_std
 
 
     def run(self):
