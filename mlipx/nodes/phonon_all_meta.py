@@ -167,10 +167,7 @@ class PhononAllBatchMeta(zntrack.Node):
             opt = FIRE(FrechetCellFilter(atoms_sym))
             opt.run(fmax=fmax, steps=1000)
 
-            # Reset lattice representation
-            # avoids trimmed cell issues for a small number of materials
-            #cell_std, _ = atoms_sym.cell.standard_form()
-            #atoms_sym.set_cell(cell_std, scale_atoms=True)
+
             
             # spglib standardised cell, no ideal, is primitive = false
             #atoms_sym = PhononAllBatchMeta.spglib_standardize_ase(atoms_sym, to_primitive=False, no_idealize=True)
@@ -202,6 +199,11 @@ class PhononAllBatchMeta(zntrack.Node):
                 print(f"Warning: Failed to initialize phonopy with primitive matrix for {mp_id} as symmetry was broken during relaxation. error: {e2}")
                 print("Generating new primitive cell")
 
+                # Reset lattice representation
+                # avoids trimmed cell issues for a small number of materials
+                cell_std, _ = atoms_sym.cell.standard_form()
+                atoms_sym.set_cell(cell_std, scale_atoms=True)
+                
                 primitive_matrix_new = PhononAllBatchMeta.primitive_matrix_from_relaxed_atoms(
                     atoms_sym,
                     symprec=1e-5,
