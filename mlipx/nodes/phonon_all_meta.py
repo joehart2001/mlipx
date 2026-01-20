@@ -193,7 +193,7 @@ class PhononAllBatchMeta(zntrack.Node):
                     symprec=1e-5,
                 )
             # except error: Remapping of atoms by TrimmedCell failed.
-            except RuntimeError as e2:
+            except Exception as e2:
                 print(f"Warning: Failed to initialize phonopy with primitive matrix for {mp_id} as symmetry was broken during relaxation. error: {e2}")
                 print("Generating new primitive cell")
 
